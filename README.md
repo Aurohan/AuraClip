@@ -1,128 +1,43 @@
-<p align="left">
-  <img src="docs/images/logo.png" width="32" vertical-align="middle" />
-  <b>Making fragmented information flow effortlessly.</b>
-</p>
-
----
-
 <div align="center">
-  <img src="docs/images/logo.png" alt="TieZ Hero Logo" width="300" />
+  <img src="src-tauri/icons/icon.png" width="120" alt="AuraClip 图标">
 
-  ### **STAY FAST. STAY SYNCED.**
+  # AuraClip · 极光剪贴板
 
-  | STARS | VERSION | LICENSE | PLATFORM |
-  | :--- | :--- | :--- | :--- |
-  | [![Stars](https://img.shields.io/github/stars/jimuzhe/tiez-clipboard?label=STARS&style=for-the-badge&color=4CAF50)](https://github.com/jimuzhe/tiez-clipboard/stargazers) | [![Version](https://img.shields.io/github/v/release/jimuzhe/tiez-clipboard?label=VERSION&style=for-the-badge&color=2196F3)](https://github.com/jimuzhe/tiez-clipboard/releases) | [![License](https://img.shields.io/badge/LICENSE-GPL--3.0-FF9800?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0) | [![Platform](https://img.shields.io/badge/PLATFORM-macOS-f44336?style=for-the-badge)](https://github.com/jimuzhe/tiez-clipboard/releases) |
+  一款用于 Windows 的剪贴板管理与常用短语工具。
 
-  [English](./README.md) | [简体中文](./README.zh-CN.md)
+  **剪贴板历史 · 常用短语 · 标签管理 · 快速粘贴**
 </div>
 
 ---
 
-<div align="center">
+## 功能
 
-## Theme Gallery
+- **剪贴板历史**：收集并管理文本、图片、文件和路径等内容，支持搜索、分类和置顶。
+- **常用短语**：保存经常使用的文本，通过标签筛选、排序和置顶，方便快速查找。
+- **快速粘贴**：点击剪贴板记录或常用短语后，复制内容、关闭窗口并粘贴到之前的应用。
+- **标签管理**：分别管理剪贴板记录和常用短语的分类标签。
+- **可选同步**：支持配置 WebDAV 同步、局域网互传和 MQTT 短信通知，具体功能取决于设备和服务端配置。
+- **桌面体验**：基于 Tauri 的 Windows 桌面应用，提供全局快捷键和窗口外观设置。
 
-Eight built-in themes; four of them:
+## 使用与开发
 
-  <table>
-    <tr>
-      <td align="center"><b>Frosted</b><br><img src="docs/images/毛玻璃.png" width="220" /></td>
-      <td align="center"><b>Paper</b><br><img src="docs/images/书.png" width="220" /></td>
-      <td align="center"><b>Sticky</b><br><img src="docs/images/便利贴.png" width="220" /></td>
-      <td align="center"><b>Retro</b><br><img src="docs/images/3d.png" width="220" /></td>
-    </tr>
-  </table>
-</div>
+本仓库维护的是 AuraClip 的源码；当前没有在 GitHub Releases 提供安装包。Windows 开发和构建需要 Node.js、pnpm、Rust stable MSVC、Visual Studio C++ Build Tools 和 WebView2。
 
----
+```powershell
+git clone https://github.com/Aurohan/AuraClip.git
+cd AuraClip
+pnpm install
+pnpm tauri:dev
+```
 
-## Why TieZ?
+构建应用：
 
-| Performance | Practicality | Privacy | Sync |
-| :--- | :--- | :--- | :--- |
-| **Instant Access**<br>Native listeners and Rust core ensure absolute speed. | **Power Workflows**<br>Rich text, tags, and AI-assisted actions. | **Local & Private**<br>Local-first storage with smart masking for sensitive data in previews. | **Cloud Fluent**<br>Seamless WebDAV and MQTT cross-device sync. |
+```powershell
+pnpm tauri:build
+```
 
----
+应用的数据和配置独立于源码。清理或迁移前请先备份；开启同步后，数据的保护方式取决于所用服务及配置。
 
-## Key Features
+## 项目来源与许可
 
-### Core Experience
-- **Native Efficiency**: Built with Tauri 2 and Rust for minimum memory footprint.
-- **Smart Capture**: Automatically collects text, rich text (HTML), images, and file paths.
-- **Modern UI**: Supports Mica/Acrylic effects and Dark/Light modes with **4 elegant theme styles**.
-- **Edge Docking**: Automatically hides at the screen edge to stay out of your way.
-
-### Management & Enhancements
-- **Tag System**: Organize your history with custom multi-color tags.
-- **Emoji Library**: Comprehensive built-in emoji management for quick access.
-- **Advanced Settings**: Granular control over cleanup rules and app behavior.
-- **Privacy Masking**: Auto-masks sensitive info like IDs and phone numbers in previews.
-
-### Networking & Transport
-- **WebDAV Sync**: Your data, your cloud. Complete cross-device history.
-- **LAN File Transfer**: Seamlessly move items between devices on the same network.
-- **Verifcation Code Sync**: Instant transfer of OTP codes to your active device.
-- **MQTT Connectivity**: Optimized for real-time synchronization between devices.
-
-### Productivity Tools
-- **External Collaboration**: Open items in external editors with auto-sync back.
-- **Global Search**: Find anything by content, source app, or date.
-- **Sequential Paste**: Optimized workflow for high-frequency copy-paste tasks.
-
----
-
-## Installation
-
-### Platform Support
-| Platform | Requirement | Output |
-| :--- | :--- | :--- |
-| **macOS** | macOS 10.15+ <br>(Apple Silicon / Intel) | `.dmg` / `.app` |
-
-[**Download the Latest Release →**](https://github.com/jimuzhe/tiez-clipboard/releases)
-
----
-
-## Star History
-
-<div align="center">
-  <a href="https://star-history.com/#jimuzhe/tiez-clipboard&Date">
-    <img src="https://api.star-history.com/svg?repos=jimuzhe/tiez-clipboard&type=Date" alt="Star History Chart" width="800" />
-  </a>
-</div>
-
----
-
-## Community & Support
-
-If TieZ makes your life easier, consider supporting the journey.
-
-<div align="center">
-  <table style="border: none;">
-    <tr>
-      <td align="center" style="border: none;">
-        <p><strong>WeChat</strong></p>
-        <img src="docs/images/wx.jpeg" alt="WeChat" width="180" height="180" />
-      </td>
-      <td align="center" style="border: none;">
-        <p><strong>Alipay</strong></p>
-        <img src="docs/images/zfb.jpeg" alt="Alipay" width="180" height="180" />
-      </td>
-      <td align="center" style="border: none;">
-        <p><strong>QQ Group</strong></p>
-        <img src="docs/images/qq.jpeg" alt="QQ Group" width="180" height="180" />
-      </td>
-    </tr>
-  </table>
-  <br>
-  <p>Your support keeps the project active and the developer caffeinated!</p>
-  <a href="https://tiez.name666.top/zh/sponsors.html"><strong>View Sponsor List</strong></a>
-</div>
-
----
-
-<div align="center">
-  Built with technical precision for every efficient developer.
-  <br>
-  <b>Please consider leaving a Star if you find this project useful.</b>
-</div>
+AuraClip 基于 [TieZ Clipboard](https://github.com/jimuzhe/tiez-clipboard) 二次开发，感谢原项目及其贡献者。项目遵循 [GPL-3.0 许可证](LICENSE)。
