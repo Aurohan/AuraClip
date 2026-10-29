@@ -1,0 +1,42 @@
+.aurora-phrase-card {
+  backdrop-filter: var(--shell-backdrop-filter, blur(12px));
+}
+.aurora-phrase-actions .btn-icon {
+  border-radius: var(--radius-md);
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  transition: background-color var(--duration-base), opacity var(--duration-base);
+}
+.aurora-phrase-actions .btn-icon:hover,
+.aurora-phrase-actions .btn-icon:focus-visible {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  opacity: 1 !important; /* design-ok: overrides existing inline opacity */
+}
+@media (hover: hover) {
+  .aurora-phrase-card:not(:hover):not(:focus-within) .aurora-phrase-actions .btn-icon {
+    opacity: 0 !important; /* design-ok: overrides existing inline opacity */
+    pointer-events: none;
+  }
+}
+.aurora-phrase-actions .btn-icon[title="删除"]:not(:hover) {
+  color: var(--text-secondary) !important; /* design-ok: overrides existing inline color */
+}
+.aurora-add-tag {
+  appearance: none;
+  border: 1px dashed color-mix(in srgb, var(--accent-color) 30%, transparent);
+  color: var(--text-secondary);
+  background: transparent;
+  border-radius: var(--radius-md);
+  padding: 2px 8px;
+  font-size: var(--layout-meta-font-size);
+  cursor: pointer;
+}
+.aurora-add-tag:hover, .aurora-add-tag:focus-visible {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+.history-item:not(.compact) {
+  transition: background-color var(--duration-base), border-color var(--duration-base), box-shadow var(--duration-base);
+}
+.history-item .item-actions .btn-icon { border-radius: var(--radius-md); }
