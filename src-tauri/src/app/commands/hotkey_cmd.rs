@@ -135,6 +135,12 @@ pub fn sync_registered_hotkeys(app_handle: &AppHandle) -> AppResult<()> {
         register(&main_hotkey);
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        register("Alt+V");
+        register("Alt+C");
+    }
+
     // Only bind sequential paste while the mode is enabled (#125).
     // Do not keep Alt+V registered for stale queue items after the mode is turned off.
     if sequential_mode {

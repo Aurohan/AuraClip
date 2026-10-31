@@ -3,7 +3,9 @@
 //!
 //! Uses `PlaySoundW` (no rodio/cpal) to keep the Windows binary small.
 
-pub(crate) static COPY_SOUND: &[u8] = include_bytes!("../../resources/sounds/copy.wav");
+// The old click_002 copy cue is only 11 ms and is often swallowed by Windows
+// audio startup latency. Reuse the longer CC0 drop cue for audible feedback.
+pub(crate) static COPY_SOUND: &[u8] = include_bytes!("../../resources/sounds/paste.wav");
 pub(crate) static PASTE_SOUND: &[u8] = include_bytes!("../../resources/sounds/paste.wav");
 
 #[cfg(target_os = "windows")]

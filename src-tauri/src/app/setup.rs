@@ -2121,6 +2121,28 @@ pub fn handle_global_shortcut(
     let settings = app.state::<SettingsState>();
 
     if state == ShortcutState::Pressed {
+        #[cfg(target_os = "windows")]
+        {
+            let phrases = "Alt+C".parse::<Shortcut>().ok();
+            let clipboard = "Alt+V".parse::<Shortcut>().ok();
+            if phrases.as_ref() == Some(shortcut) || clipboard.as_ref() == Some(shortcut) {
+                let tab = if phrases.as_ref() == Some(shortcut) { "phrases" } else { "clipboard" };
+                if crate::app::light_mode::needs_rebuild(app) {
+                    crate::app::light_mode::rebuild_then(app, move |app| {
+                        if !crate::app::window_manager::is_main_window_shown(app) {
+                            toggle_window(app);
+                        }
+                        let _ = app.emit("open-main-tab", tab);
+                    });
+                } else {
+                    if tab == "clipboard" || !crate::app::window_manager::is_main_window_shown(app) {
+                        toggle_window(app);
+                    }
+                    let _ = app.emit("open-main-tab", tab);
+                }
+                return;
+            }
+        }
         if let Ok(main_s) = {
             let val = settings.main_hotkey.lock().unwrap().clone();
             val.replace("Win", "Super").parse::<Shortcut>()

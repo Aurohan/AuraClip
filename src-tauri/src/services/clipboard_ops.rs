@@ -510,6 +510,10 @@ async fn copy_to_clipboard_inner(
     )
     .await?;
 
+    // AuraClip's clipboard listener intentionally ignores our own writes, so
+    // play the copy feedback here after the system clipboard accepted the data.
+    crate::services::ui_sound::play_ui_sound(&app_handle, "copy");
+
     if paste_blocked {
         // Emits the event that opens the permission prompt; the error tells the
         // frontend not to treat this as a completed paste.

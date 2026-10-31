@@ -902,10 +902,19 @@ const App = () => {
       onShown();
       setTypeFilter(null);
     };
+    const unlistenMainTab = listen<string>("open-main-tab", ({ payload }) => {
+      if (payload !== "clipboard" && payload !== "phrases") return;
+      setShowSettings(false);
+      setShowTagManager(false);
+      setShowEmojiPanel(false);
+      setChatMode(false);
+      setMainTab(payload);
+    });
     const unlistenClipboardShown = listen("clipboard-shown", onClipboardShown);
     const unlistenShow = getCurrentWindow().listen("tauri://show", onShown);
     return () => {
       unlistenForceHide.then((off) => off());
+      unlistenMainTab.then((off) => off());
       unlistenClipboardShown.then((off) => off());
       unlistenShow.then((off) => off()).catch(() => {});
     };
