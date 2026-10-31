@@ -1,6 +1,6 @@
 # Design system
 
-The rules every stylesheet in `src/styles` follows. `npm run lint:styles`
+The rules every stylesheet in `src/styles` follows. `pnpm lint:styles`
 checks them (see [Checks](#checks)).
 
 ## Where things go
@@ -9,9 +9,9 @@ checks them (see [Checks](#checks)).
 |---|---|
 | `base.css` | Every token with its default (light) value, the default dark values, resets. |
 | `themes/*.css` | Token overrides per theme and mode. A theme may also style a few components for its signature look (receipt edges, terminal prompts) — keep those short and use tokens there too. Colors appear only as token values, never inside those component rules. |
-| `themes/_native.css` | Rules shared by Mica, Acrylic and macOS. The leading underscore loads it before their own files. |
+| `themes/_native.css` | Rules shared by Mica and Acrylic. The leading underscore loads it before their own files. |
 | `components/*.css` | How components look, written only in tokens. No colors, no theme names. |
-| `platform-*.css` | What the operating system dictates (fonts, window corners, scrollbars). |
+| `platform-windows.css` | What Windows dictates (fonts, window corners, scrollbars). |
 
 A component never names a theme (`.theme-paper .x`). If a theme needs a
 component to look different, prefer a component token (`--card-radius`,
@@ -106,15 +106,12 @@ rule's header to cover the whole rule. Current ones: the transparent window
 resets of the compact preview and pin sticker windows (they must beat any
 theme, including installed packages) and `prefers-reduced-motion`.
 
-The app supports macOS 10.13, whose WebKit has no cascade layers (`@layer`),
-so precedence is managed with selectors, not layers.
-
 ## Checks
 
 ```bash
-npm run lint:styles             # fails if any file breaks more rules than before
-npm run lint:styles -- --report # every violation, with file and line
-npm run lint:styles -- --update # after fixing some, lower the baseline
+pnpm lint:styles                # fails if any file breaks more rules than before
+pnpm lint:styles --report       # every violation, with file and line
+pnpm lint:styles --update       # after fixing some, lower the baseline
 ```
 
 Rules checked: `no-raw-color`, `no-important`, `no-theme-in-component`,

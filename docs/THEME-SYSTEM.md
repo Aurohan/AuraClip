@@ -441,7 +441,7 @@ Before merging a theme change, verify:
 - header, buttons, inputs, list cards, settings panels, modals, and tags all follow the theme
 - hover, active, selected, and focus states remain readable
 - light and dark variants remain readable
-- `npm run build` passes
+- `pnpm build` passes
 
 ## Current Architecture Outcome
 
@@ -459,9 +459,6 @@ That is the foundation for adding future themes without rewriting multiple unrel
 
 The main shared UI layer has been normalized, but a few feature-local styles still carry direct visual assumptions and should be migrated into the same token contract in a follow-up pass:
 
-- `src/styles/components/Announcement.css`
 - `src/styles/components/compact-mode.css`
-- `src/styles/components/emoji.css`
-- `src/styles/components/file-transfer.css`
 
 These files are now the exception, not the base theme system.

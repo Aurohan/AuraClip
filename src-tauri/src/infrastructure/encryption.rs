@@ -20,18 +20,8 @@ pub const LEGACY_PLAIN_PREFIX: &str = "plain:";
 /// Legacy per-value Windows DPAPI format used before the shared AES key format.
 pub const LEGACY_DPAPI_PREFIX: &str = "dpapi:";
 
-#[cfg(all(target_os = "macos", not(debug_assertions)))]
-const KEYCHAIN_SERVICE: &str = "com.tiez.clipboard";
-#[cfg(all(target_os = "macos", not(debug_assertions)))]
-const KEYCHAIN_ACCOUNT: &str = "master-key-v1";
 #[cfg(target_os = "windows")]
 const DPAPI_KEY_FILE: &str = "master.key.dpapi";
-/// Dev / non-OS-keystore fallback (0600 file under app data dir).
-#[cfg(any(
-    not(any(target_os = "macos", target_os = "windows")),
-    all(target_os = "macos", debug_assertions)
-))]
-const FALLBACK_KEY_FILE: &str = "master.key";
 const NONCE_LEN: usize = 12;
 const KEY_LEN: usize = 32;
 
@@ -86,15 +76,7 @@ pub fn init(data_dir: &Path) {
         return;
     }
 
-    #[cfg(all(target_os = "macos", not(debug_assertions)))]
-    {
-        // Prewarm off the main thread: SecurityAgent UI needs a free run loop.
-        std::thread::spawn(|| {
-            let _ = get_master_key();
-        });
-    }
 
-    #[cfg(not(all(target_os = "macos", not(debug_assertions))))]
     {
         let _ = get_master_key();
     }
@@ -127,42 +109,7 @@ fn data_dir() -> Option<&'static PathBuf> {
 fn load_or_create_master_key() -> Result<[u8; KEY_LEN], String> {
     // Debug macOS: never touch Keychain. Dev binaries re-sign every rebuild, so
     // Keychain prompts loop / deadlock the main thread during Tauri setup.
-    #[cfg(all(target_os = "macos", debug_assertions))]
-    {
-        eprintln!(
-            ">>> [ENCRYPTION] debug build: using local master.key (Keychain disabled)"
-        );
-        return load_or_create_file_key(FALLBACK_KEY_FILE);
-    }
 
-    #[cfg(all(target_os = "macos", not(debug_assertions)))]
-    {
-        match load_key_from_keychain() {
-            Ok(key) => return Ok(key),
-            // Only create a fresh key when the item truly does not exist.
-            // Access-denied / user-cancel must NOT overwrite the existing key,
-            // otherwise previously encrypted data becomes undecryptable.
-            Err(KeychainLoadError::NotFound) => {
-                if cfg!(feature = "portable") {
-                    return Err("existing master key not found".into());
-                }
-                // The key stays in the Keychain of the Mac that made it, so
-                // a data folder moved to a new Mac brings values nothing here
-                // can open. Refusing a new key left every password save
-                // failing; as on Windows, start one and the lost values are
-                // re-entered. The old ones stay stored, untouched.
-                if ensure_no_orphaned_ciphertext().is_err() {
-                    eprintln!(
-                        ">>> [ENCRYPTION] encrypted data from another Mac; starting a new master key"
-                    );
-                }
-                let key = generate_key();
-                store_key_in_keychain(&key)?;
-                return Ok(key);
-            }
-            Err(KeychainLoadError::Other(msg)) => return Err(msg),
-        }
-    }
 
     #[cfg(target_os = "windows")]
     {
@@ -198,10 +145,6 @@ fn load_or_create_master_key() -> Result<[u8; KEY_LEN], String> {
         return Ok(key);
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        load_or_create_file_key(FALLBACK_KEY_FILE)
-    }
 }
 
 fn ensure_no_orphaned_ciphertext() -> Result<(), String> {
@@ -223,38 +166,6 @@ fn ensure_no_orphaned_ciphertext() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(any(
-    not(any(target_os = "macos", target_os = "windows")),
-    all(target_os = "macos", debug_assertions)
-))]
-fn load_or_create_file_key(filename: &str) -> Result<[u8; KEY_LEN], String> {
-    let dir = data_dir().ok_or_else(|| "encryption data dir not set".to_string())?;
-    let path = dir.join(filename);
-    if path.exists() {
-        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        if bytes.len() != KEY_LEN {
-            return Err("invalid fallback key length".into());
-        }
-        let mut key = [0u8; KEY_LEN];
-        key.copy_from_slice(&bytes);
-        return Ok(key);
-    }
-    if cfg!(feature = "portable") {
-        return Err("existing master key not found".into());
-    }
-    ensure_no_orphaned_ciphertext()?;
-    let key = generate_key();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    std::fs::write(&path, key).map_err(|e| e.to_string())?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-    }
-    Ok(key)
-}
 
 fn generate_key() -> [u8; KEY_LEN] {
     let mut key = [0u8; KEY_LEN];
@@ -262,42 +173,8 @@ fn generate_key() -> [u8; KEY_LEN] {
     key
 }
 
-#[cfg(all(target_os = "macos", not(debug_assertions)))]
-enum KeychainLoadError {
-    NotFound,
-    Other(String),
-}
 
-#[cfg(all(target_os = "macos", not(debug_assertions)))]
-fn load_key_from_keychain() -> Result<[u8; KEY_LEN], KeychainLoadError> {
-    use security_framework::passwords::get_generic_password;
 
-    // errSecItemNotFound = -25300
-    const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
-
-    let bytes = get_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).map_err(|e| {
-        if e.code() == ERR_SEC_ITEM_NOT_FOUND {
-            KeychainLoadError::NotFound
-        } else {
-            KeychainLoadError::Other(format!("keychain get: {e}"))
-        }
-    })?;
-    if bytes.len() != KEY_LEN {
-        return Err(KeychainLoadError::Other(
-            "invalid keychain key length".into(),
-        ));
-    }
-    let mut key = [0u8; KEY_LEN];
-    key.copy_from_slice(&bytes);
-    Ok(key)
-}
-
-#[cfg(all(target_os = "macos", not(debug_assertions)))]
-fn store_key_in_keychain(key: &[u8; KEY_LEN]) -> Result<(), String> {
-    use security_framework::passwords::set_generic_password;
-    set_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, key)
-        .map_err(|e| format!("keychain set: {e}"))
-}
 
 #[cfg(target_os = "windows")]
 fn store_key_dpapi(path: &Path, key: &[u8; KEY_LEN]) -> Result<(), String> {
@@ -311,7 +188,7 @@ fn store_key_dpapi(path: &Path, key: &[u8; KEY_LEN]) -> Result<(), String> {
 /// Renames a key file nothing here can open (never deletes it: it is the only
 /// way back to what it encrypted, should the old Windows account return) and
 /// returns where it went.
-#[cfg(any(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 fn keep_unreadable_key_file(path: &Path) -> Result<std::path::PathBuf, String> {
     let name = path
         .file_name()
@@ -491,11 +368,6 @@ fn decrypt_value_inner(cipher: &str) -> Option<String> {
             let plain = dpapi_unprotect(&protected).ok()?;
             return String::from_utf8(plain).ok();
         }
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = payload;
-            return None;
-        }
     }
 
     if !cipher.starts_with(ENCRYPT_PREFIX) {
@@ -548,12 +420,6 @@ fn backup_before_migration(conn: &rusqlite::Connection) -> Result<(), String> {
     let backup = format!("{path}.pre-encryption-v1.bak");
     if std::path::Path::new(&backup).exists() { return Ok(()); }
     conn.execute("VACUUM main INTO ?1", [&backup]).map_err(|e| format!("encryption backup failed: {e}"))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&backup, std::fs::Permissions::from_mode(0o600))
-            .map_err(|e| format!("cannot restrict backup permissions: {e}"))?;
-    }
     Ok(())
 }
 
@@ -846,7 +712,7 @@ mod tests {
         assert_eq!(decrypt_value(&legacy).as_deref(), Some("old-secret"));
     }
 
-    #[cfg(all(target_os = "windows", not(feature = "portable")))]
+    #[cfg(not(feature = "portable"))]
     #[test]
     fn modern_ciphertext_can_unwrap_a_legacy_dpapi_value() {
         let test_data_dir = std::env::temp_dir().join(format!(

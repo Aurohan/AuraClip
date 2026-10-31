@@ -1,5 +1,4 @@
 mod ditto;
-mod maccy;
 
 use crate::domain::models::ClipboardEntry;
 use crate::infrastructure::repository::clipboard_repo::{
@@ -94,7 +93,6 @@ pub fn discover_clipboard_import_sources() -> Vec<DiscoveredImportSource> {
     let mut seen = std::collections::HashSet::new();
     let importers: Vec<Box<dyn ClipboardImporter>> = vec![
         Box::new(ditto::DittoImporter),
-        Box::new(maccy::MaccyImporter),
     ];
     let mut discovered = Vec::new();
     for path in default_import_source_paths()
@@ -154,23 +152,7 @@ fn default_import_source_paths() -> Vec<std::path::PathBuf> {
     candidates
 }
 
-#[cfg(target_os = "macos")]
-fn default_import_source_paths() -> Vec<std::path::PathBuf> {
-    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
-        return Vec::new();
-    };
-    vec![
-        home.join(
-            "Library/Containers/org.p0deje.Maccy/Data/Library/Application Support/Maccy/Storage.sqlite",
-        ),
-        home.join("Library/Application Support/Maccy/Storage.sqlite"),
-    ]
-}
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn default_import_source_paths() -> Vec<std::path::PathBuf> {
-    Vec::new()
-}
 
 fn add_warning(report: &mut ImportReport, warning: String) {
     if report.warnings.len() < MAX_REPORT_WARNINGS && !report.warnings.contains(&warning) {
@@ -255,7 +237,6 @@ where
 
     let importers: Vec<Box<dyn ClipboardImporter>> = vec![
         Box::new(ditto::DittoImporter),
-        Box::new(maccy::MaccyImporter),
     ];
     let mut selected = None;
     let mut probe_errors = Vec::new();
@@ -272,7 +253,7 @@ where
 
     let importer = selected.ok_or_else(|| {
         if probe_errors.is_empty() {
-            "无法识别该剪贴板数据库。目前支持 Ditto 数据库/导出文件和 Maccy Storage.sqlite。"
+            "无法识别该剪贴板数据库。目前支持 Ditto 数据库/导出文件。"
                 .to_string()
         } else {
             format!("无法读取剪贴板数据库：{}", probe_errors.join("；"))
@@ -533,124 +514,6 @@ mod tests {
             )
         );
 
-        drop(destination);
-        std::fs::remove_dir_all(&test_root).expect("remove test directory");
-    }
-
-    #[test]
-    fn imports_a_maccy_database_with_distinct_creation_and_sort_times() {
-        let test_root =
-            std::env::temp_dir().join(format!("tiez-maccy-import-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&test_root).expect("create test directory");
-        let source_path = test_root.join("Storage.sqlite");
-        let source = rusqlite::Connection::open(&source_path).expect("create source database");
-        source
-            .execute_batch(
-                "CREATE TABLE ZHISTORYITEM (
-                    Z_PK INTEGER PRIMARY KEY,
-                    ZFIRSTCOPIEDAT REAL,
-                    ZLASTCOPIEDAT REAL,
-                    ZNUMBEROFCOPIES INTEGER,
-                    ZPIN TEXT,
-                    ZTITLE TEXT,
-                    ZAPPLICATION TEXT
-                );
-                CREATE TABLE ZHISTORYITEMCONTENT (
-                    Z_PK INTEGER PRIMARY KEY,
-                    ZITEM INTEGER,
-                    ZTYPE TEXT,
-                    ZVALUE BLOB
-                );
-                INSERT INTO ZHISTORYITEM VALUES (
-                    1, 721692800.0, 721692900.0, 4, 'b',
-                    'Hello from Maccy', 'com.apple.TextEdit'
-                );
-                INSERT INTO ZHISTORYITEM VALUES (
-                    2, 721693000.0, 721693000.0, 1, NULL,
-                    'https://maccy.app', 'com.apple.Safari'
-                );",
-            )
-            .expect("create Maccy schema");
-        source
-            .execute(
-                "INSERT INTO ZHISTORYITEMCONTENT VALUES (1, 1, 'public.utf8-plain-text', ?1)",
-                [b"Hello from Maccy".as_slice()],
-            )
-            .expect("insert plain representation");
-        source
-            .execute(
-                "INSERT INTO ZHISTORYITEMCONTENT VALUES (2, 1, 'public.html', ?1)",
-                [b"<strong>Hello from Maccy</strong>".as_slice()],
-            )
-            .expect("insert html representation");
-        source
-            .execute(
-                "INSERT INTO ZHISTORYITEMCONTENT VALUES (3, 1, 'public.rtf', ?1)",
-                [br"{\rtf1\ansi Hello from Maccy}".as_slice()],
-            )
-            .expect("insert rtf representation");
-        source
-            .execute(
-                "INSERT INTO ZHISTORYITEMCONTENT VALUES (4, 2, 'public.utf8-plain-text', ?1)",
-                [b"https://maccy.app".as_slice()],
-            )
-            .expect("insert url");
-        drop(source);
-
-        let destination_path = test_root.join("clipboard.db");
-        let destination = crate::database::init_db(&destination_path.to_string_lossy())
-            .expect("create TieZ database");
-        let destination = Arc::new(Mutex::new(destination));
-
-        let report = import_clipboard_data(destination.clone(), &test_root, &source_path)
-            .expect("import Maccy database");
-        assert_eq!(report.source, "Maccy");
-        assert_eq!(report.scanned, 2);
-        assert_eq!(report.imported, 2);
-        assert_eq!(report.unsupported, 0);
-        assert_eq!(report.failed, 0);
-
-        let repo = SqliteClipboardRepository::new(destination.clone());
-        let history = repo.get_history(10, 0, None).expect("read imported items");
-        let rich = history
-            .iter()
-            .find(|entry| entry.content == "Hello from Maccy")
-            .expect("find rich Maccy item");
-        assert_eq!(rich.content_type, "rich_text");
-        assert_eq!(rich.source_app, "com.apple.TextEdit");
-        assert_eq!(rich.created_at, 1_700_000_000_000);
-        assert_eq!(rich.sort_at, 1_700_000_100_000);
-        assert_eq!(rich.timestamp, rich.sort_at);
-        assert_eq!(rich.last_used_at, 0);
-        assert_eq!(rich.use_count, 4);
-        assert!(rich.is_pinned);
-        let (_, named_formats) = crate::services::clipboard::split_rich_html_and_named_formats(
-            rich.html_content.as_deref().expect("stored rich html"),
-        );
-        assert!(named_formats
-            .iter()
-            .any(|format| format.name == "Rich Text Format"));
-
-        let item_hotkey: (String, i64) = destination
-            .lock()
-            .expect("lock destination")
-            .query_row(
-                "SELECT item_hotkey, item_hotkey_global
-                 FROM clipboard_history WHERE id = ?1",
-                [rich.id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .expect("read Maccy pin");
-        assert_eq!(item_hotkey, ("B".to_string(), 0));
-
-        let url = history
-            .iter()
-            .find(|entry| entry.content == "https://maccy.app")
-            .expect("find url item");
-        assert_eq!(url.content_type, "url");
-        assert_eq!(url.source_app, "com.apple.Safari");
-
-        drop(repo);
         drop(destination);
         std::fs::remove_dir_all(&test_root).expect("remove test directory");
     }

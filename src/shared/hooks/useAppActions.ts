@@ -4,7 +4,6 @@ import { invoke } from "@tauri-apps/api/core";
 interface UseAppActionsOptions {
   t: (key: string) => string;
   mqttEnabled: boolean;
-  cloudSyncEnabled: boolean;
   openConfirm: (opts: { title: string; message: string; danger?: boolean; onConfirm: () => void }) => void;
   closeConfirm: () => void;
   pushToast: (msg: string, duration?: number) => number;
@@ -16,7 +15,6 @@ const MQTT_RESTART_DEBOUNCE_MS = 1200;
 export const useAppActions = ({
   t,
   mqttEnabled,
-  cloudSyncEnabled,
   openConfirm,
   closeConfirm,
   pushToast,
@@ -93,40 +91,5 @@ export const useAppActions = ({
     });
   }, [closeConfirm, openConfirm, pushToast, t]);
 
-  const saveCloudSync = useCallback(
-    async (key: string, value: string) => {
-      try {
-        if (key === "cloud_sync_enabled" && value === "false") {
-          await invoke("stop_cloud_sync_client");
-        }
-        await invoke("save_setting", { key, value });
-        const cloudKeys = [
-          "cloud_sync_enabled",
-          "cloud_sync_auto",
-          "cloud_sync_provider",
-          "cloud_sync_server",
-          "cloud_sync_api_key",
-          "cloud_sync_interval_sec",
-          "cloud_sync_snapshot_interval_min",
-          "cloud_sync_webdav_url",
-          "cloud_sync_webdav_username",
-          "cloud_sync_webdav_password",
-          "cloud_sync_webdav_base_path",
-          "cloud_sync_content_prefs"
-        ];
-        if (key === "cloud_sync_enabled") {
-          if (value !== "false") {
-            await invoke("restart_cloud_sync_client");
-          }
-        } else if (cloudKeys.includes(key) && cloudSyncEnabled) {
-          await invoke("restart_cloud_sync_client");
-        }
-      } catch (err) {
-        console.error("Cloud sync setting save failed", err);
-      }
-    },
-    [cloudSyncEnabled]
-  );
-
-  return { saveMqtt, saveCloudSync, clearHistory, handleResetSettings };
+  return { saveMqtt, clearHistory, handleResetSettings };
 };

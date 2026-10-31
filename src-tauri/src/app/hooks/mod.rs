@@ -36,7 +36,7 @@ pub fn remember_main_hwnd(window: &tauri::WebviewWindow) {
     }
 }
 
-#[cfg(any(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 fn is_recording_clear_key(vk: u32) -> bool {
     matches!(vk, 0x08 | 0x2E)
 }
@@ -229,34 +229,7 @@ pub unsafe extern "system" fn keyboard_proc(
             return LRESULT(1);
         }
 
-        // 3. Global Paste Sound Trigger (Ctrl+V)
-        {
-            let ctrl_down = (GetAsyncKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
-            let alt_down = (GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000) != 0;
-            let shift_down = (GetAsyncKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0;
-            let win_down = (GetAsyncKeyState(VK_LWIN.0 as i32) as u16 & 0x8000 != 0)
-                || (GetAsyncKeyState(VK_RWIN.0 as i32) as u16 & 0x8000 != 0);
-
-            // Injected keystrokes are skipped: TieZ's own synthetic Ctrl+V already
-            // schedules this sound (clipboard_ops::schedule_paste_sound).
-            let injected = kbd_struct.flags.0 & 0x10 != 0; // LLKHF_INJECTED
-            if vk == 0x56 && ctrl_down && !alt_down && !shift_down && !win_down && !injected {
-                if is_down {
-                    if let Some(handle) = GLOBAL_APP_HANDLE.get() {
-                        let settings = handle.state::<SettingsState>();
-                        if settings.sound_enabled.load(Ordering::Relaxed) {
-                            // Played natively, not by the WebView, so it keeps
-                            // working while light mode has destroyed the UI.
-                            std::thread::spawn(move || {
-                                crate::services::ui_sound::play_ui_sound(handle, "paste");
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. Quick Paste by Modifier+Number
+        // 3. Quick Paste by Modifier+Number
         {
             let ctrl_down = (GetAsyncKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
             let alt_down = (GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000) != 0;
@@ -323,7 +296,7 @@ pub unsafe extern "system" fn keyboard_proc(
             }
         }
 
-        // 5. Global Navigation Keys (Up/Down, Enter, Delete, Esc)
+        // 4. Global Navigation Keys (Up/Down, Enter, Delete, Esc)
         if NAVIGATION_ENABLED.load(Ordering::SeqCst) && !IS_RECORDING.load(Ordering::SeqCst) {
             if IS_HIDDEN.load(Ordering::Relaxed) {
                 return CallNextHookEx(None, n_code, w_param, l_param);
@@ -494,18 +467,9 @@ pub unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: 
     CallNextHookEx(None, n_code, w_param, l_param)
 }
 
-#[derive(Debug, Clone, Copy)]
-struct HookHotkey {
-    vk: u32,
-    ctrl: bool,
-    shift: bool,
-    alt: bool,
-    win: bool,
-}
-
-/// The name a recorded key is saved under: one the shortcut parser
-/// (global-hotkey) and parse_hotkey_for_hook both read. "Plus" for the =/+ key
-/// and "Key_96" for the number pad were neither, so those keys couldn't be set.
+/// The name a recorded key is saved under, in the form the shortcut parser
+/// (global-hotkey) reads. "Plus" for the =/+ key and "Key_96" for the number
+/// pad weren't, so those keys couldn't be set.
 pub(crate) fn recorded_key_name(vk: u32) -> String {
     match vk {
         0x20 => "Space".to_string(),
@@ -545,82 +509,6 @@ pub(crate) fn recorded_key_name(vk: u32) -> String {
     }
 }
 
-pub fn parse_hotkey_for_hook(hotkey: &str) -> Option<HookHotkey> {
-    let parts: Vec<&str> = hotkey.split('+').collect();
-    let mut vk = 0u32;
-    let mut ctrl = false;
-    let mut shift = false;
-    let mut alt = false;
-    let mut win = false;
-
-    for part in parts {
-        let part_upper = part.trim().to_uppercase();
-        match part_upper.as_str() {
-            "CTRL" | "CONTROL" => ctrl = true,
-            "SHIFT" => shift = true,
-            "ALT" | "MENU" => alt = true,
-            "SUPER" | "WIN" | "COMMAND" | "META" => win = true,
-            "SPACE" => vk = 0x20,
-            "ENTER" | "RETURN" => vk = 0x0D,
-            "TAB" => vk = 0x09,
-            "BACKSPACE" => vk = 0x08,
-            "DELETE" => vk = 0x2E,
-            "INSERT" => vk = 0x2D,
-            "PAGEUP" => vk = 0x21,
-            "PAGEDOWN" => vk = 0x22,
-            "END" => vk = 0x23,
-            "HOME" => vk = 0x24,
-            "LEFT" => vk = 0x25,
-            "UP" => vk = 0x26,
-            "RIGHT" => vk = 0x27,
-            "DOWN" => vk = 0x28,
-            "PLUS" | "=" => vk = 0xBB,
-            "COMMA" | "," => vk = 0xBC,
-            "MINUS" | "-" => vk = 0xBD,
-            "PERIOD" | "." => vk = 0xBE,
-            "/" | "SLASH" => vk = 0xBF,
-            "`" | "TILDE" | "GRAVE" => vk = 0xC0,
-            ";" | "SEMICOLON" => vk = 0xBA,
-            "[" | "LBRACKET" => vk = 0xDB,
-            "\\" | "BACKSLASH" => vk = 0xDC,
-            "]" | "RBRACKET" => vk = 0xDD,
-            "'" | "QUOTE" => vk = 0xDE,
-            "NUMPADMULTIPLY" => vk = 0x6A,
-            "NUMPADADD" => vk = 0x6B,
-            "NUMPADSUBTRACT" => vk = 0x6D,
-            "NUMPADDECIMAL" => vk = 0x6E,
-            "NUMPADDIVIDE" => vk = 0x6F,
-            key if key.len() == 7 && key.starts_with("NUMPAD") && key.as_bytes()[6].is_ascii_digit() => {
-                vk = 0x60 + u32::from(key.as_bytes()[6] - b'0');
-            }
-            key if key.starts_with('F') && key.len() > 1 => {
-                if let Ok(num) = key[1..].parse::<u32>() {
-                    if (1..=24).contains(&num) {
-                        vk = 0x6F + num;
-                    }
-                }
-            }
-            key => {
-                if key.len() == 1 {
-                    vk = key.chars().next().unwrap() as u32;
-                }
-            }
-        }
-    }
-
-    if vk != 0 {
-        Some(HookHotkey {
-            vk,
-            ctrl,
-            shift,
-            alt,
-            win,
-        })
-    } else {
-        None
-    }
-}
-
 pub fn is_win_v_hotkey(hotkey: &str) -> bool {
     let parts: Vec<String> = hotkey
         .split('+')
@@ -655,7 +543,6 @@ mod tests {
         for vk in [0xBB, 0xBD, 0x60, 0x69, 0x6A, 0x6B, 0x6D, 0x6E, 0x6F, 0x41, 0x70, 0xDC] {
             let hotkey = format!("Ctrl+{}", super::recorded_key_name(vk));
             assert!(hotkey.parse::<Shortcut>().is_ok(), "{hotkey}");
-            assert_eq!(super::parse_hotkey_for_hook(&hotkey).map(|h| h.vk), Some(vk), "{hotkey}");
         }
     }
 

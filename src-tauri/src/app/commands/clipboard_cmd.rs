@@ -83,7 +83,6 @@ pub fn toggle_clipboard_pin(
     pin_result.map_err(AppError::from)?;
 
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(())
 }
 
@@ -109,7 +108,6 @@ pub fn update_tags(
             session_items.retain(|entry| entry.id != id && entry.id != new_id);
             drop(session_items);
             let _ = app_handle.emit("clipboard-changed", ());
-            crate::services::cloud_sync::request_cloud_sync(app_handle);
             return Ok(new_id);
         }
         return Err(AppError::Validation("Item not found".to_string()));
@@ -145,7 +143,6 @@ pub fn update_tags(
         };
         queue.0.enqueue(EncryptionJob { id, action });
     }
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(id)
 }
 
@@ -172,7 +169,6 @@ pub fn update_entry_note(
         .update_entry_note(id, &cleaned)
         .map_err(AppError::from)?;
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(())
 }
 
@@ -212,7 +208,6 @@ pub async fn add_manual_item(
     let data_dir = app_data_dir.0.lock().unwrap().clone();
     let new_id = state.repo.save(&entry, Some(&data_dir))?;
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(new_id)
 }
 
@@ -239,6 +234,5 @@ pub async fn update_item_content(
         .update_entry_content(id, &new_content, &preview)
         .map_err(AppError::from)?;
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(())
 }

@@ -6,11 +6,6 @@ pub fn perform_migration_v028(default_app_dir: &PathBuf) {
 
     if let Some(parent) = default_app_dir.parent() {
         old_app_dirs_to_check.push(parent.join("贴汁"));
-        #[cfg(target_os = "macos")]
-        {
-        old_app_dirs_to_check.push(parent.join("tie-z"));
-        old_app_dirs_to_check.push(parent.join("com.tiez.app"));
-        }
     }
 
     #[cfg(target_os = "windows")]
@@ -147,8 +142,6 @@ pub fn cleanup_old_install_registry() -> Option<PathBuf> {
         install_location
     }
 
-    #[cfg(not(target_os = "windows"))]
-    None
 }
 
 pub fn cleanup_old_start_menu() {
@@ -190,11 +183,6 @@ pub fn enable_autostart_manually(app_name: &str, exe_path: &str) -> std::io::Res
         return key.set_value(app_name, &exe_path);
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (app_name, exe_path);
-        Ok(())
-    }
 }
 
 pub fn cleanup_old_install_folder(custom_path: Option<PathBuf>) {
@@ -230,6 +218,4 @@ pub fn cleanup_old_install_folder(custom_path: Option<PathBuf>) {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
-    let _ = custom_path;
 }

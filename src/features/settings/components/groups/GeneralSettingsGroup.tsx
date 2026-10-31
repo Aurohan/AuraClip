@@ -1,8 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { isMacPlatform, isWindowsPlatform } from "../../../../shared/lib/platform";
-import MacAccessibilityPermission from "./MacAccessibilityPermission";
 import { SettingRange, SettingSwitch } from "../SettingControls";
 
 interface LabelWithHintProps {
@@ -24,23 +22,17 @@ interface GeneralSettingsGroupProps {
     setSilentStart: (val: boolean) => void;
     hideTrayIcon: boolean;
     setHideTrayIcon: (val: boolean) => void;
-    hideDockIcon: boolean;
-    setHideDockIcon: (val: boolean) => void;
     edgeDocking: boolean;
     setEdgeDocking: (val: boolean) => void;
     followMouse: boolean;
     setFollowMouse: (val: boolean) => void;
     soundEnabled: boolean;
     setSoundEnabled: (val: boolean) => void;
-    pasteSoundEnabled: boolean;
-    setPasteSoundEnabled: (val: boolean) => void;
     searchBoxPinned: boolean;
     setSearchBoxPinned: (val: boolean) => void;
     setShowSearchBox: (val: boolean) => void;
     scrollTopButtonEnabled: boolean;
     setScrollTopButtonEnabled: (val: boolean) => void;
-    emojiPanelEnabled: boolean;
-    setEmojiPanelEnabled: (val: boolean) => void;
     tagManagerEnabled: boolean;
     setTagManagerEnabled: (val: boolean) => void;
     arrowKeySelection: boolean;
@@ -70,7 +62,7 @@ const applyToggle = (
         });
 };
 
-const playPreview = (kind: "copy" | "paste") => {
+const playPreview = (kind: "copy") => {
     invoke("play_preview_sound", { kind }).catch(console.error);
 };
 
@@ -87,23 +79,17 @@ const GeneralSettingsGroup = ({
     setSilentStart,
     hideTrayIcon,
     setHideTrayIcon,
-    hideDockIcon,
-    setHideDockIcon,
     edgeDocking,
     setEdgeDocking,
     followMouse,
     setFollowMouse,
     soundEnabled,
     setSoundEnabled,
-    pasteSoundEnabled,
-    setPasteSoundEnabled,
     searchBoxPinned,
     setSearchBoxPinned,
     setShowSearchBox,
     scrollTopButtonEnabled,
     setScrollTopButtonEnabled,
-    emojiPanelEnabled,
-    setEmojiPanelEnabled,
     tagManagerEnabled,
     setTagManagerEnabled,
     arrowKeySelection,
@@ -138,23 +124,21 @@ const GeneralSettingsGroup = ({
                     />
                 </div>
 
-                {isWindowsPlatform() && (
-                    <div className={`setting-item is-child${autoStart ? '' : ' is-disabled'}`}>
-                        <LabelWithHint
-                            label={t('elevated_autostart')}
-                            hint={t('elevated_autostart_hint')}
-                            hintKey="elevated_autostart"
-                        />
-                        <SettingSwitch
-                            checked={elevatedAutostart}
-                            disabled={!autoStart}
-                            onChange={(e) => {
-                                const enabled = e.target.checked;
-                                applyToggle(enabled, setElevatedAutostart, "toggle_elevated_autostart", { enabled });
-                            }}
-                        />
-                    </div>
-                )}
+                <div className={`setting-item is-child${autoStart ? '' : ' is-disabled'}`}>
+                    <LabelWithHint
+                        label={t('elevated_autostart')}
+                        hint={t('elevated_autostart_hint')}
+                        hintKey="elevated_autostart"
+                    />
+                    <SettingSwitch
+                        checked={elevatedAutostart}
+                        disabled={!autoStart}
+                        onChange={(e) => {
+                            const enabled = e.target.checked;
+                            applyToggle(enabled, setElevatedAutostart, "toggle_elevated_autostart", { enabled });
+                        }}
+                    />
+                </div>
 
                 <div className="setting-item">
                     <LabelWithHint
@@ -171,26 +155,24 @@ const GeneralSettingsGroup = ({
                     />
                 </div>
 
-                {isWindowsPlatform() && (
-                    <div className="setting-item">
-                        <LabelWithHint
-                            label={t('restart_as_admin')}
-                            hint={t('restart_as_admin_hint')}
-                            hintKey="restart_as_admin"
-                        />
-                        <button
-                            type="button"
-                            className="settings-action-button"
-                            onClick={() => {
-                                invoke("restart_as_admin").catch((error) => {
-                                    console.error("Failed to restart as administrator:", error);
-                                });
-                            }}
-                        >
-                            {t('restart')}
-                        </button>
-                    </div>
-                )}
+                <div className="setting-item">
+                    <LabelWithHint
+                        label={t('restart_as_admin')}
+                        hint={t('restart_as_admin_hint')}
+                        hintKey="restart_as_admin"
+                    />
+                    <button
+                        type="button"
+                        className="settings-action-button"
+                        onClick={() => {
+                            invoke("restart_as_admin").catch((error) => {
+                                console.error("Failed to restart as administrator:", error);
+                            });
+                        }}
+                    >
+                        {t('restart')}
+                    </button>
+                </div>
 
                 <h4 className="settings-section-title">{t('settings_section_window')}</h4>
                 <div className="setting-item">
@@ -207,23 +189,6 @@ const GeneralSettingsGroup = ({
                         }}
                     />
                 </div>
-
-                {isMacPlatform() && (
-                    <div className="setting-item">
-                        <LabelWithHint
-                            label={t('hide_dock_icon')}
-                            hint={t('hide_dock_icon_hint')}
-                            hintKey="hide_dock_icon"
-                        />
-                        <SettingSwitch
-                            checked={hideDockIcon}
-                            onChange={(e) => {
-                                const val = e.target.checked;
-                                applyToggle(val, setHideDockIcon, "set_dock_visible", { visible: !val });
-                            }}
-                        />
-                    </div>
-                )}
 
                 <div className="setting-item">
                     <LabelWithHint
@@ -255,10 +220,6 @@ const GeneralSettingsGroup = ({
                     />
                 </div>
 
-                {isMacPlatform() && (
-                    <MacAccessibilityPermission t={t} LabelWithHint={LabelWithHint} />
-                )}
-
                 <h4 className="settings-section-title">{t('settings_section_sound')}</h4>
                 <div className="setting-item">
                     <LabelWithHint label={t('sound_effects')} hint={t('sound_effects_hint')} hintKey="sound_effects" />
@@ -268,19 +229,6 @@ const GeneralSettingsGroup = ({
                             const enabled = e.target.checked;
                             applyToggle(enabled, setSoundEnabled, "set_sound_enabled", { enabled }, () => {
                                 if (enabled) playPreview("copy");
-                            });
-                        }}
-                    />
-                </div>
-                <div className={`setting-item is-child${soundEnabled ? '' : ' is-disabled'}`}>
-                    <LabelWithHint label={t('paste_sound')} hint={t('paste_sound_hint')} hintKey="paste_sound" />
-                    <SettingSwitch
-                        checked={pasteSoundEnabled}
-                        disabled={!soundEnabled}
-                        onChange={(e) => {
-                            const enabled = e.target.checked;
-                            applyToggle(enabled, setPasteSoundEnabled, "set_paste_sound_enabled", { enabled }, () => {
-                                if (enabled && soundEnabled) playPreview("paste");
                             });
                         }}
                     />
@@ -332,21 +280,6 @@ const GeneralSettingsGroup = ({
                             const enabled = e.target.checked;
                             setScrollTopButtonEnabled(enabled);
                             saveAppSetting('show_scroll_top_button', String(enabled));
-                        }}
-                    />
-                </div>
-                <div className="setting-item">
-                    <LabelWithHint
-                        label={t('emoji_panel_enabled')}
-                        hint={t('emoji_panel_enabled_hint')}
-                        hintKey="emoji_panel_enabled"
-                    />
-                    <SettingSwitch
-                        checked={emojiPanelEnabled}
-                        onChange={(e) => {
-                            const enabled = e.target.checked;
-                            setEmojiPanelEnabled(enabled);
-                            saveAppSetting('emoji_panel_enabled', String(enabled));
                         }}
                     />
                 </div>

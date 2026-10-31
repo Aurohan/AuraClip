@@ -3,41 +3,48 @@
 
   # AuraClip · 极光剪贴板
 
-  一款用于 Windows 的剪贴板管理与常用短语工具。
-
-  **剪贴板历史 · 常用短语 · 标签管理 · 快速粘贴**
+  Windows 剪贴板历史与常用短语工具，可接收手机短信验证码。
 </div>
 
 ---
 
 ## 功能
 
-- **剪贴板历史**：收集并管理文本、图片、文件和路径等内容，支持搜索、分类和置顶。
-- **常用短语**：保存经常使用的文本，通过标签筛选、排序和置顶，方便快速查找。
-- **快速粘贴**：点击剪贴板记录或常用短语后，复制内容、关闭窗口并粘贴到之前的应用。
-- **标签管理**：分别管理剪贴板记录和常用短语的分类标签。
-- **可选同步**：支持配置 WebDAV 同步、局域网互传和 MQTT 短信通知，具体功能取决于设备和服务端配置。
-- **桌面体验**：基于 Tauri 的 Windows 桌面应用，提供全局快捷键和窗口外观设置。
+- **剪贴板历史**：记录文本、图片、文件和路径，支持搜索、类型筛选、置顶和标签。
+- **常用短语**：独立保存常用文本，支持标签、置顶和排序；清空剪贴板历史不会影响短语。
+- **快速粘贴**：点击记录或短语后复制、关闭窗口并粘贴回之前的应用；支持顺序粘贴和纯文本粘贴。
+- **隐私**：数据库中的敏感内容本地加密；手机号、邮箱、密钥等可在列表中模糊显示。
+- **短信验证码同步**：手机端 SmsForwarder 通过 TLS 发到自建 Mosquitto，AuraClip 订阅后写入剪贴板并弹出通知。
+- **复制提示音**：复制时播放短提示音，可调音量或关闭；粘贴静音。
+- **迁移**：可从 Ditto 导入历史；可用密码导出、导入文本历史。
 
-## 使用与开发
+## 默认快捷键
 
-本仓库维护的是 AuraClip 的源码；当前没有在 GitHub Releases 提供安装包。Windows 开发和构建需要 Node.js、pnpm、Rust stable MSVC、Visual Studio C++ Build Tools 和 WebView2。
+| 快捷键 | 作用 |
+|---|---|
+| `Alt+V` | 打开剪贴板 / 隐藏窗口 |
+| `Alt+C` | 打开常用短语 |
+| `Alt+Shift+S` | 顺序粘贴下一条（开启顺序粘贴后） |
+| `Alt+Shift+V` | 纯文本粘贴 |
+| `Alt+F` | 搜索 |
+
+所有快捷键都可在设置里修改。
+
+## 开发与构建
+
+只支持 Windows 10/11 x64。需要 Node.js 24+、pnpm、Rust stable MSVC、Visual Studio 2022 C++ Build Tools 和 WebView2。
 
 ```powershell
-git clone https://github.com/Aurohan/AuraClip.git
-cd AuraClip
 pnpm install
-pnpm tauri:dev
+pnpm tauri:dev      # 开发
+pnpm preflight      # lint、单测、类型检查、构建、Rust 测试
+pnpm run deploy     # 发布构建并安装到 D:\!SOFTWARE\AuraClip
 ```
 
-构建应用：
+用 Cargo 直接构建发布版时必须加 `--features tauri/custom-protocol`，否则程序会去请求开发服务器 `localhost:1420`。
 
-```powershell
-pnpm tauri:build
-```
+用户数据位于 `%APPDATA%\com.auradesk.auraclip\`，与源码分开。维护说明见 [AGENTS.md](AGENTS.md)。
 
-应用的数据和配置独立于源码。清理或迁移前请先备份；开启同步后，数据的保护方式取决于所用服务及配置。
+## 来源与许可
 
-## 项目来源与许可
-
-AuraClip 基于 [TieZ Clipboard](https://github.com/jimuzhe/tiez-clipboard) 二次开发，感谢原项目及其贡献者。项目遵循 [GPL-3.0 许可证](LICENSE)。
+AuraClip 基于 [TieZ Clipboard](https://github.com/jimuzhe/tiez-clipboard) 二次开发，感谢原项目及其贡献者。本项目遵循 [GPL-3.0 许可证](LICENSE)。

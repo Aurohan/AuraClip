@@ -3,8 +3,6 @@ use crate::database::{
     calc_image_hash_from_bytes, is_text_type, save_image_bytes_to_file_with_extension, DbState,
 };
 use crate::domain::models::ClipboardEntry;
-#[cfg(target_os = "macos")]
-use crate::infrastructure::macos_api::window::get_active_app_snapshot;
 #[cfg(target_os = "windows")]
 use crate::infrastructure::windows_api::window_tracker::get_clipboard_source_app_info;
 use crate::services::clipboard::utils::*;
@@ -36,21 +34,13 @@ pub struct PipelineContext {
 
 impl PipelineContext {
     pub fn new(app_handle: AppHandle, data: ClipboardData) -> Self {
-        #[cfg(target_os = "macos")]
-        let active_app = get_active_app_snapshot();
         #[cfg(target_os = "windows")]
         let active_app = {
             let info = get_clipboard_source_app_info();
             (info.app_name, info.process_path)
         };
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        let active_app = ("Unknown".to_string(), None);
 
-        #[cfg(target_os = "macos")]
-        let (source_app, source_app_path) = (active_app.app_name, active_app.process_path);
         #[cfg(target_os = "windows")]
-        let (source_app, source_app_path) = active_app;
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let (source_app, source_app_path) = active_app;
 
         let timestamp = SystemTime::now()
@@ -632,10 +622,6 @@ impl PipelineStage for DistributionStage {
         let _ = ctx
             .app_handle
             .emit("clipboard-updated", truncate_entry_for_ui(entry.clone()));
-
-        if settings.persistent.load(Ordering::Relaxed) && entry.id > 0 {
-            crate::services::cloud_sync::request_cloud_sync(ctx.app_handle.clone());
-        }
 
         if entry.is_external && entry.id != 0 {
             if let Some(path) =

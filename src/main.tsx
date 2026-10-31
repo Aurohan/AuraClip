@@ -5,7 +5,6 @@ import "./index.css";
 import "./styles/components/index.css";
 import "./styles/themes/load";
 import "./styles/platform-windows.css";
-import "./styles/platform-macos.css";
 import "./styles/components/pin-sticker.css";
 import { installBrowserAcceleratorBlocker } from "./shared/lib/blockBrowserAccelerators";
 import ErrorBoundary from "./shared/components/ErrorBoundary";
@@ -24,21 +23,14 @@ const RootComponent = isCompactPreview
   : isPinSticker
     ? lazy(() => import("./features/clipboard/components/PinStickerWindow"))
     : App;
-const isMacPlatform =
-  /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent) || /Mac/i.test(navigator.platform);
 
 if (isPinSticker) {
   document.documentElement.classList.add("window-pin-sticker");
   document.body.classList.add("window-pin-sticker");
 }
 
-if (isMacPlatform) {
-  document.documentElement.classList.add("platform-macos");
-  document.body.classList.add("platform-macos");
-} else {
-  document.documentElement.classList.add("platform-windows");
-  document.body.classList.add("platform-windows");
-}
+document.documentElement.classList.add("platform-windows");
+document.body.classList.add("platform-windows");
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 root.render(

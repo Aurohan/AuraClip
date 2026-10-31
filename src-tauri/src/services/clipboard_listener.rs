@@ -17,7 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 /// Run captures on a worker thread. The returned closure marks the clipboard
 /// as changed: the worker captures as soon as it is free, and changes seen
 /// while it is busy collapse into one capture of the latest value.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 fn spawn_capture_worker(
     callback: Arc<dyn Fn() + Send + Sync + 'static>,
 ) -> Arc<dyn Fn() + Send + Sync + 'static> {
@@ -54,22 +54,6 @@ pub fn listen_clipboard(callback: Arc<dyn Fn() + Send + Sync + 'static>) {
     // the worker is busy is captured as soon as it is free. Not debounced:
     // a later clipboard value can't be rebuilt from a dropped event, and the
     // monitor drops genuine duplicate events by payload hash.
-    #[cfg(target_os = "macos")]
-    {
-        let notify = spawn_capture_worker(callback);
-        std::thread::spawn(move || {
-            let mut last = crate::infrastructure::macos_api::clipboard::change_count();
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(80));
-                let current = crate::infrastructure::macos_api::clipboard::change_count();
-                if current != last {
-                    last = current;
-                    notify();
-                }
-            }
-        });
-        return;
-    }
 
     // Windows: WM_CLIPBOARDUPDATE only signals the worker. The capture (with
     // its settle sleeps, up to ~1.4 s for some sources) used to run inside the
@@ -148,11 +132,6 @@ pub fn listen_clipboard(callback: Arc<dyn Fn() + Send + Sync + 'static>) {
         return;
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        let _ = callback;
-        eprintln!(">>> [CLIPBOARD] listener unsupported on this platform");
-    }
 }
 
 #[cfg(target_os = "windows")]

@@ -1,6 +1,6 @@
 use crate::domain::models::ClipboardEntry;
 use crate::services::encryption_queue::EncryptionQueue;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
@@ -21,16 +21,11 @@ pub struct SettingsState {
     pub cleanup_rules: Mutex<String>,
     pub app_cleanup_policies: Mutex<String>,
     pub sequential_mode: AtomicBool,
-    pub sequential_paste_hotkey: Mutex<String>,
-    /// Pastes as plain text: the latest item, or the selected one while the
-    /// window is open (#148). Empty: off.
-    pub plain_paste_hotkey: Mutex<String>,
-    pub search_hotkey: Mutex<String>,
+    /// Current hotkey per action id (see `hotkey_cmd::HOTKEY_ACTIONS`). Empty: off.
+    pub hotkeys: Mutex<HashMap<&'static str, String>>,
     pub quick_paste_modifier: Mutex<String>,
     pub sound_enabled: AtomicBool,
-    pub paste_sound_enabled: AtomicBool,
     pub hide_tray_icon: AtomicBool,
-    pub hide_dock_icon: AtomicBool,
     pub edge_docking: AtomicBool,
     pub follow_mouse: AtomicBool,
     pub arrow_key_selection: AtomicBool,
@@ -38,7 +33,6 @@ pub struct SettingsState {
     pub light_mode_enabled: AtomicBool,
     /// Idle minutes before entering light mode (min 1).
     pub light_mode_idle_minutes: AtomicU64,
-    pub main_hotkey: Mutex<String>,
     pub monitors: Mutex<Vec<tauri::Monitor>>,
     pub sound_volume: Mutex<f64>,
 }
@@ -64,20 +58,15 @@ impl SettingsState {
             cleanup_rules,
             app_cleanup_policies,
             sequential_mode,
-            sequential_paste_hotkey,
-            plain_paste_hotkey,
-            search_hotkey,
+            hotkeys,
             quick_paste_modifier,
             sound_enabled,
-            paste_sound_enabled,
             hide_tray_icon,
-            hide_dock_icon,
             edge_docking,
             follow_mouse,
             arrow_key_selection,
             light_mode_enabled,
             light_mode_idle_minutes,
-            main_hotkey,
             monitors: _,
             sound_volume,
         } = fresh;
@@ -97,20 +86,15 @@ impl SettingsState {
         *self.cleanup_rules.lock().unwrap() = cleanup_rules.into_inner().unwrap();
         *self.app_cleanup_policies.lock().unwrap() = app_cleanup_policies.into_inner().unwrap();
         self.sequential_mode.store(sequential_mode.into_inner(), Ordering::Relaxed);
-        *self.sequential_paste_hotkey.lock().unwrap() = sequential_paste_hotkey.into_inner().unwrap();
-        *self.plain_paste_hotkey.lock().unwrap() = plain_paste_hotkey.into_inner().unwrap();
-        *self.search_hotkey.lock().unwrap() = search_hotkey.into_inner().unwrap();
+        *self.hotkeys.lock().unwrap() = hotkeys.into_inner().unwrap();
         *self.quick_paste_modifier.lock().unwrap() = quick_paste_modifier.into_inner().unwrap();
         self.sound_enabled.store(sound_enabled.into_inner(), Ordering::Relaxed);
-        self.paste_sound_enabled.store(paste_sound_enabled.into_inner(), Ordering::Relaxed);
         self.hide_tray_icon.store(hide_tray_icon.into_inner(), Ordering::Relaxed);
-        self.hide_dock_icon.store(hide_dock_icon.into_inner(), Ordering::Relaxed);
         self.edge_docking.store(edge_docking.into_inner(), Ordering::Relaxed);
         self.follow_mouse.store(follow_mouse.into_inner(), Ordering::Relaxed);
         self.arrow_key_selection.store(arrow_key_selection.into_inner(), Ordering::Relaxed);
         self.light_mode_enabled.store(light_mode_enabled.into_inner(), Ordering::Relaxed);
         self.light_mode_idle_minutes.store(light_mode_idle_minutes.into_inner(), Ordering::Relaxed);
-        *self.main_hotkey.lock().unwrap() = main_hotkey.into_inner().unwrap();
         *self.sound_volume.lock().unwrap() = sound_volume.into_inner().unwrap();
     }
 }
@@ -158,6 +142,6 @@ mod tests {
 
         assert!(!running.delete_after_paste.load(Ordering::Relaxed));
         assert_eq!(*running.cleanup_rules.lock().unwrap(), *defaults.cleanup_rules.lock().unwrap());
-        assert_eq!(*running.main_hotkey.lock().unwrap(), *defaults.main_hotkey.lock().unwrap());
+        assert_eq!(*running.hotkeys.lock().unwrap(), *defaults.hotkeys.lock().unwrap());
     }
 }

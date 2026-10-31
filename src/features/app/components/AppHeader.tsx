@@ -5,12 +5,10 @@ import {
   ArrowUpDown,
   Check,
   ChevronLeft,
-  MessageSquare,
   Pin,
   PinOff,
   Search,
   Settings as SettingsIcon,
-  Smile,
   Tag,
   Trash2,
   X
@@ -18,7 +16,6 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getTagColor } from "../../../shared/lib/utils";
-import { isMacPlatform } from "../../../shared/lib/platform";
 import { TYPE_FILTERS } from "../../../shared/lib/typeFilters";
 import type { ClipboardSortMode } from "../types";
 
@@ -29,11 +26,6 @@ interface AppHeaderProps {
   showTagManager: boolean;
   setShowTagManager: (val: boolean) => void;
   tagManagerEnabled: boolean;
-  showEmojiPanel: boolean;
-  setShowEmojiPanel: (val: boolean) => void;
-  emojiPanelEnabled: boolean;
-  chatMode: boolean;
-  fileServerEnabled: boolean;
   isWindowPinned: boolean;
   setIsWindowPinned: (val: boolean) => void;
   clearHistory: () => void;
@@ -59,7 +51,6 @@ interface AppHeaderProps {
   clipboardSortMode: ClipboardSortMode;
   onClipboardSortModeChange: (val: ClipboardSortMode) => void;
   onBack: () => void;
-  onToggleChat: () => void;
 }
 
 const AppHeader = ({
@@ -69,11 +60,6 @@ const AppHeader = ({
   showTagManager,
   setShowTagManager,
   tagManagerEnabled,
-  showEmojiPanel,
-  setShowEmojiPanel,
-  emojiPanelEnabled,
-  chatMode,
-  fileServerEnabled,
   isWindowPinned,
   setIsWindowPinned,
   clearHistory,
@@ -98,8 +84,7 @@ const AppHeader = ({
   setMainTab,
   clipboardSortMode,
   onClipboardSortModeChange,
-  onBack,
-  onToggleChat
+  onBack
 }: AppHeaderProps) => {
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
@@ -118,7 +103,6 @@ const AppHeader = ({
   };
 
   const searchVisible = showSearchBox || search.trim().length > 0;
-  const isMac = isMacPlatform();
   const sortOptions: Array<{ value: ClipboardSortMode; label: string }> = [
     { value: "activity", label: t("clipboard_sort_activity") },
     { value: "created", label: mainTab === "phrases" ? "最近创建" : t("clipboard_sort_created") },
@@ -167,13 +151,11 @@ const AppHeader = ({
     else if (box.right > rowBox.right) row.scrollLeft += box.right - rowBox.right;
   }, [typeFilter]);
 
-  const headerTitle = showEmojiPanel
-    ? t('emoji_panel')
-    : showTagManager && tagManagerEnabled
-      ? (mainTab === "phrases" ? "短语标签管理" : t('tag_manager'))
-      : showSettings
-        ? (chatMode ? t('file_transfer') : settingsTitle)
-        : t('app_name');
+  const headerTitle = showTagManager && tagManagerEnabled
+    ? (mainTab === "phrases" ? "短语标签管理" : t('tag_manager'))
+    : showSettings
+      ? settingsTitle
+      : t('app_name');
 
   const hideWindow = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -204,22 +186,12 @@ const AppHeader = ({
     >
       <div className="header-top">
         <div className="header-leading">
-          {isMac && (
-            <div className="mac-traffic-lights">
-              <button
-                className="traffic-light red"
-                title={t('hide')}
-                aria-label={t('hide')}
-                onClick={hideWindow}
-              />
-            </div>
-          )}
-          {(showSettings || showTagManager || showEmojiPanel) && (
+          {(showSettings || showTagManager) && (
             <button className="btn-icon header-back-btn" onClick={onBack} aria-label={t("back")} title={t("back")}>
               <ChevronLeft size={16} />
             </button>
           )}
-          {showSettings || showTagManager || showEmojiPanel ? (
+          {showSettings || showTagManager ? (
             <span className="header-title page-header-title is-page-title">{headerTitle}</span>
           ) : (
             <>
@@ -311,7 +283,7 @@ const AppHeader = ({
             {isWindowPinned ? <PinOff size={16} /> : <Pin size={16} />}
           </button>
 
-          {!showSettings && !showTagManager && !showEmojiPanel && (
+          {!showSettings && !showTagManager && (
             <>
               {mainTab !== "phrases" && (
                 <button className="btn-icon" title={t('clear_history')} aria-label={t('clear_history')} onClick={clearHistory}>
@@ -323,41 +295,24 @@ const AppHeader = ({
                   <Tag size={16} />
                 </button>
               )}
-              {emojiPanelEnabled && (
-                <button className="btn-icon" title={t('emoji_panel')} aria-label={t('emoji_panel')} onClick={() => setShowEmojiPanel(true)}>
-                  <Smile size={16} />
-                </button>
-              )}
               <button className="btn-icon" title={t('settings')} aria-label={t('settings')} onClick={() => setShowSettings(true)}>
                 <SettingsIcon size={16} />
               </button>
             </>
           )}
-          {fileServerEnabled && (
-            <button
-              className={`btn-icon header-chat-btn ${chatMode && showSettings ? 'active' : ''}`}
-              title={t('file_transfer')}
-              aria-label={t('file_transfer')}
-              onClick={onToggleChat}
-            >
-              <MessageSquare size={16} />
-            </button>
-          )}
 
-          {!isMac && (
-            <button
-              className="btn-icon windows-close-btn"
-              title={t('hide')}
-              aria-label={t('hide')}
-              onClick={hideWindow}
-            >
-              <X size={16} strokeWidth={2.2} />
-            </button>
-          )}
+          <button
+            className="btn-icon windows-close-btn"
+            title={t('hide')}
+            aria-label={t('hide')}
+            onClick={hideWindow}
+          >
+            <X size={16} strokeWidth={2.2} />
+          </button>
         </div>
       </div>
 
-      {!showSettings && !showTagManager && !showEmojiPanel && (
+      {!showSettings && !showTagManager && (
         <div
           className={`search-reveal${searchVisible ? " is-open" : ""}`}
           aria-hidden={!searchVisible}

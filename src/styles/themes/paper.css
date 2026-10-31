@@ -2,82 +2,6 @@
 /* Component adjustments for this theme, kept ahead of the theme's own rules
    (they used to sit in the component stylesheets). */
 
-/* ---- From components/Announcement.css ---- */
-
-.theme-paper .announcement-ticker {
-    background: var(--bg-toolbar);
-    border-bottom: 2px solid var(--text-primary);
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.theme-paper .ticker-icon,
-.theme-paper .ticker-count,
-.theme-paper .ticker-fixed-close {
-    border-color: var(--text-primary);
-    border-width: 2px;
-    background: transparent;
-}
-
-.theme-paper .ticker-tag {
-    border-radius: 0;
-    border: 1px solid currentColor;
-    background: transparent;
-    color: inherit;
-    box-shadow: none;
-}
-
-.theme-paper .ticker-tag.info { color: var(--status-info);
-}
-
-.theme-paper .ticker-tag.warning { color: color-mix(in srgb, var(--status-warning) 70%, var(--text-primary));
-}
-
-.theme-paper .ticker-tag.update { color: color-mix(in srgb, var(--status-success) 70%, var(--text-primary));
-}
-
-@media (prefers-color-scheme: dark) {
-  .theme-paper:not(.light-mode) .ticker-icon,
-  .theme-paper:not(.light-mode) .ticker-count,
-  .theme-paper:not(.light-mode) .ticker-fixed-close {
-          border-color: var(--line-soft);
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .theme-paper:not(.light-mode) .announcement-ticker {
-          border-bottom-color: var(--line-strong);
-  }
-}
-
-.dark-mode .theme-paper .ticker-icon,
-.dark-mode .theme-paper .ticker-count,
-.dark-mode .theme-paper .ticker-fixed-close {
-    border-color: var(--line-soft);
-}
-
-.dark-mode .theme-paper .announcement-ticker {
-    border-bottom-color: var(--line-strong);
-}
-
-/* ---- From components/ai.css ---- */
-
-.theme-paper .ai-action-btn {
-  border: 1px solid var(--border-dark);
-  border-radius: var(--radius-2xs);
-  font-family: var(--font-serif, serif);
-}
-
-/* ---- From components/file-transfer.css ---- */
-
-.theme-paper .wt-chat-view {
-  --im-canvas: var(--bg-window);
-  --im-canvas-shade: color-mix(in srgb, var(--bg-window) 88%, transparent);
-  --im-incoming: var(--bg-element);
-  --im-bubble-border: var(--line-soft);
-}
-
 :root.theme-paper,
 body.theme-paper {
   /* Ruled-paper cards keep the same padding in compact mode. */
@@ -152,8 +76,6 @@ body.theme-paper {
   --compact-card-radius: 0;
   --compact-media-radius: 0;
   --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  --card-hover-shadow: 0 3px 10px rgba(139, 90, 43, 0.08);
-  --card-hover-transform: none;
   --card-active-transform: none;
   --card-active-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
   --card-selected-background: #fbf1c7;
@@ -190,8 +112,6 @@ body.theme-paper {
   --menu-background: #fffdf7;
   --popover-backdrop-filter: none;
 
-  --scrollbar-size: 10px;
-  --scrollbar-radius: 0px;
   --scrollbar-thumb-color: #d5c4a1;
 
   --content-font-family: var(--font-main);

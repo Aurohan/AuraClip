@@ -14,10 +14,6 @@ body.platform-windows {
 html.platform-windows {
   --font-main: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI Variable Text", "Segoe UI", sans-serif;
   /* Match macOS overlay thumb: thin, rounded, no classic Win32 chrome. */
-  --scrollbar-size: 8px;
-  --scrollbar-size-thin: 5px;
-  --scrollbar-radius: 999px;
-  --scrollbar-thumb-border: 2px solid transparent;
   --scrollbar-overlay-width: 0px;
 }
 

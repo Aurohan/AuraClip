@@ -1,9 +1,8 @@
 use crate::database::DbState;
 use crate::global_state::{LAST_APP_SET_HASH, LAST_APP_SET_TIMESTAMP};
 use crate::infrastructure::repository::settings_repo::SettingsRepository;
-use crate::services::sync_notifications::{self, NoticeReceiver, PublishRoute};
 use crate::{error, info};
-use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS, Transport};
+use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, NetworkOptions, QoS, Transport};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -40,25 +39,81 @@ const MAX_MQTT_PACKET: usize = 1024 * 1024;
 static MQTT_TASK_ACTIVE: AtomicBool = AtomicBool::new(false);
 static MQTT_GENERATION: AtomicU64 = AtomicU64::new(0);
 
-struct NoticePublisher {
-    client: AsyncClient,
-    topic: String,
-    generation: u64,
-}
-
-fn notice_publisher() -> &'static Mutex<Option<NoticePublisher>> {
-    static PUBLISHER: OnceLock<Mutex<Option<NoticePublisher>>> = OnceLock::new();
-    PUBLISHER.get_or_init(|| Mutex::new(None))
-}
+/// Unix ms of the last packet received from the broker (PingResp included).
+static MQTT_LAST_INBOUND_MS: AtomicU64 = AtomicU64::new(0);
+const KEEP_ALIVE: Duration = Duration::from_secs(30);
+/// rumqttc's 5 s default was too short for the TLS handshake to the broker
+/// ("Network timeout" / "tls handshake eof" in the logs).
+const CONNECT_TIMEOUT_SECS: u64 = 15;
+/// A redelivered (dup) QoS 1 message whose text was applied this recently is
+/// the same message again, not a new one.
+const DUP_WINDOW_MS: u64 = 10 * 60 * 1000;
 
 fn restart_signal() -> &'static tokio::sync::Notify {
     static SIGNAL: OnceLock<tokio::sync::Notify> = OnceLock::new();
     SIGNAL.get_or_init(tokio::sync::Notify::new)
 }
 
-fn clear_notice_publisher() {
-    if let Ok(mut publisher) = notice_publisher().lock() {
-        *publisher = None;
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// A connection that still hears from the broker (a PingResp arrives at least
+/// every keep-alive) survived the network change; restarting it only opens a
+/// window where messages are missed.
+fn connection_is_healthy(connected: bool, last_inbound_ms: u64, now_ms: u64) -> bool {
+    let window = KEEP_ALIVE.as_millis() as u64 * 3 / 2;
+    connected && last_inbound_ms > 0 && now_ms.saturating_sub(last_inbound_ms) <= window
+}
+
+/// Session options shared by every connection. `clean_session(false)` keeps
+/// the broker session across reconnects, so QoS 1 messages published while
+/// this computer is briefly offline are queued and delivered afterwards.
+fn apply_session_options(options: &mut MqttOptions) {
+    options.set_keep_alive(KEEP_ALIVE);
+    options.set_clean_session(false);
+    options.set_max_packet_size(MAX_MQTT_PACKET, MAX_MQTT_PACKET);
+}
+
+fn network_options() -> NetworkOptions {
+    let mut options = NetworkOptions::new();
+    options.set_connection_timeout(CONNECT_TIMEOUT_SECS);
+    options
+}
+
+/// Only messages under the configured topic are clipboard text. A persistent
+/// session can still hold a subscription from a topic used before.
+fn is_own_topic(topic: &str, root: &str) -> bool {
+    let root = root.trim().trim_end_matches('/');
+    topic == root || topic.strip_prefix(root).is_some_and(|rest| rest.starts_with('/'))
+}
+
+/// Texts applied recently, to drop broker redeliveries of the same message.
+#[derive(Default)]
+struct RecentPayloads {
+    seen: std::collections::VecDeque<(u64, u64)>,
+}
+
+impl RecentPayloads {
+    /// Returns false for a dup redelivery of a payload applied within the
+    /// window. Fresh (non-dup) messages always pass, even with the same text.
+    fn accept(&mut self, payload: &[u8], dup: bool, now_ms: u64) -> bool {
+        let mut hasher = DefaultHasher::new();
+        payload.hash(&mut hasher);
+        let hash = hasher.finish();
+        self.seen
+            .retain(|(_, at)| now_ms.saturating_sub(*at) <= DUP_WINDOW_MS);
+        if dup && self.seen.iter().any(|(seen, _)| *seen == hash) {
+            return false;
+        }
+        self.seen.push_back((hash, now_ms));
+        while self.seen.len() > 64 {
+            self.seen.pop_front();
+        }
+        true
     }
 }
 
@@ -83,37 +138,25 @@ async fn wait_or_restart(delay: Duration, generation: u64) {
     }
 }
 
-pub fn publish_webdav_changed(scope: &str, device_id: &str) {
-    let Ok(payload) = sync_notifications::encode_notice(scope, device_id) else {
-        return;
-    };
-    let Ok(publisher) = notice_publisher().lock() else {
-        return;
-    };
-    if let Some(publisher) = publisher.as_ref() {
-        if MQTT_CONNECTED.load(Ordering::Relaxed)
-            && publisher.generation == MQTT_GENERATION.load(Ordering::Relaxed)
-            && publisher
-                .client
-                .try_publish(&publisher.topic, QoS::AtLeastOnce, false, payload)
-                .is_err()
-        {
-            info!(">>> [SYNC] MQTT update hint not queued; WebDAV polling will retry");
-        }
-    }
-}
-
 pub fn recover_mqtt_connection(app: AppHandle) {
-    if get_mqtt_config(&app).is_some() {
-        restart_mqtt_client(app);
+    if get_mqtt_config(&app).is_none() {
+        return;
     }
+    if connection_is_healthy(
+        MQTT_CONNECTED.load(Ordering::Relaxed),
+        MQTT_LAST_INBOUND_MS.load(Ordering::Relaxed),
+        now_ms(),
+    ) {
+        info!(">>> [MQTT] Connection healthy after network change; not restarting");
+        return;
+    }
+    restart_mqtt_client(app);
 }
 
 struct MqttTaskGuard;
 
 impl Drop for MqttTaskGuard {
     fn drop(&mut self) {
-        clear_notice_publisher();
         MQTT_CONNECTED.store(false, Ordering::Relaxed);
         MQTT_TASK_ACTIVE.store(false, Ordering::Relaxed);
     }
@@ -134,7 +177,6 @@ pub fn restart_mqtt_client(app: AppHandle) {
     MQTT_CONNECTED.store(false, Ordering::Relaxed);
     MQTT_RECONNECT_ATTEMPTS.store(0, Ordering::Relaxed);
     MQTT_GENERATION.fetch_add(1, Ordering::Relaxed);
-    clear_notice_publisher();
     restart_signal().notify_one();
 
     // 如果之前达到最大重连次数导致任务退出，重新启动任务
@@ -296,11 +338,10 @@ pub fn start_mqtt_client(app: AppHandle) {
 
     tauri::async_runtime::spawn(async move {
         let _guard = MqttTaskGuard;
-        let mut notice_receiver = NoticeReceiver::default();
+        let mut recent_payloads = RecentPayloads::default();
         // Loop forever if enabled, using exponential backoff inside.
 
         loop {
-            clear_notice_publisher();
             MQTT_CONNECTED.store(false, Ordering::Relaxed);
             let generation = MQTT_GENERATION.load(Ordering::Relaxed);
             let config = get_mqtt_config(&app);
@@ -456,22 +497,22 @@ pub fn start_mqtt_client(app: AppHandle) {
                     mqttoptions.set_transport(Transport::ws());
                 }
 
-                mqttoptions.set_keep_alive(Duration::from_secs(30));
+                apply_session_options(&mut mqttoptions);
 
                 if let Some(u) = cfg.username.clone() {
                     let p = cfg.password.clone().unwrap_or_default();
                     mqttoptions.set_credentials(u, p);
                 }
 
-                // Initialize client
-                mqttoptions.set_max_packet_size(MAX_MQTT_PACKET, MAX_MQTT_PACKET);
                 let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
+                eventloop.set_network_options(network_options());
 
                 let mut connected = false;
                 let connecting = tokio::time::timeout(Duration::from_secs(30), async {
                     loop {
                         match eventloop.poll().await {
                             Ok(Event::Incoming(Incoming::ConnAck(_))) => {
+                                MQTT_LAST_INBOUND_MS.store(now_ms(), Ordering::Relaxed);
                                 info!(">>> [MQTT] Connection Established.");
                                 MQTT_CONNECTED.store(true, Ordering::Relaxed);
                                 // Attempts are reset only once a connection has
@@ -525,17 +566,6 @@ pub fn start_mqtt_client(app: AppHandle) {
                 }
                 info!(">>> [MQTT] Subscribed to {}", sub_topic);
 
-                let notice_topic = sync_notifications::notification_topic(&cfg.topic);
-                if client.try_subscribe(&notice_topic, QoS::AtLeastOnce).is_err() {
-                    info!(">>> [SYNC] Update hint subscription not queued; using WebDAV polling");
-                }
-                if let Ok(mut publisher) = notice_publisher().lock() {
-                    *publisher = Some(NoticePublisher {
-                        client: client.clone(), topic: notice_topic.clone(), generation,
-                    });
-                }
-                // Catch changes published while this computer was disconnected.
-                crate::services::cloud_sync::request_cloud_sync(app.clone());
                 let connected_at = Instant::now();
 
                 loop {
@@ -556,19 +586,16 @@ pub fn start_mqtt_client(app: AppHandle) {
                     };
                     match poll_result {
                         Ok(event_result) => match event_result {
-                            Ok(Event::Incoming(notification)) => match notification {
+                            Ok(Event::Incoming(notification)) => {
+                                MQTT_LAST_INBOUND_MS.store(now_ms(), Ordering::Relaxed);
+                                match notification {
                                 Incoming::Publish(publish) => {
-                                    match sync_notifications::route_publish(&publish.topic, &notice_topic) {
-                                        PublishRoute::Ignore => continue,
-                                        PublishRoute::SyncNotice => {
-                                            if let Some((scope, device_id)) = crate::services::cloud_sync::notification_identity(&app) {
-                                                if notice_receiver.accept(&publish.payload, publish.retain, &scope, &device_id) {
-                                                    crate::services::cloud_sync::request_cloud_sync(app.clone());
-                                                }
-                                            }
-                                            continue;
-                                        }
-                                        PublishRoute::Clipboard => {},
+                                    if !is_own_topic(&publish.topic, &cfg.topic) {
+                                        continue;
+                                    }
+                                    if !recent_payloads.accept(&publish.payload, publish.dup, now_ms()) {
+                                        info!(">>> [MQTT] Dropped a redelivered duplicate message");
+                                        continue;
                                     }
                                     // The broker redelivers a retained message on every
                                     // (re)connect; apply each one once.
@@ -576,15 +603,6 @@ pub fn start_mqtt_client(app: AppHandle) {
                                         continue;
                                     }
                                     if let Ok(payload_str) = std::str::from_utf8(&publish.payload) {
-                                        let opened;
-                                        let payload_str = match open_e2e_payload(&app, payload_str) {
-                                            Some(E2eOpened::Plain) => payload_str,
-                                            Some(E2eOpened::Decrypted(text)) => {
-                                                opened = text;
-                                                opened.as_str()
-                                            }
-                                            None => continue,
-                                        };
                                         let payload_trimmed = payload_str.trim();
                                         let final_content = if let Ok(json_val) =
                                             serde_json::from_str::<serde_json::Value>(
@@ -616,14 +634,15 @@ pub fn start_mqtt_client(app: AppHandle) {
                                 }
                                 Incoming::SubAck(ack) => {
                                     if ack.return_codes.iter().any(|code| matches!(code, rumqttc::SubscribeReasonCode::Failure)) {
-                                        info!(">>> [MQTT] A subscription was refused; WebDAV polling remains available");
+                                        error!(">>> [MQTT] Subscription refused by the broker; check the account ACL");
                                     }
                                 }
                                 Incoming::ConnAck(_) => {
                                     let _ = app.emit("mqtt-status", "connected");
                                 }
                                 _ => {}
-                            },
+                                }
+                            }
                             Ok(Event::Outgoing(_)) => {}
                             Err(e) => {
                                 error!(">>> [MQTT] Event loop error: {:?}", e);
@@ -745,75 +764,75 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn webdav_hint_is_published_as_non_retained_metadata_on_a_real_mqtt_connection() {
+    async fn connect_keeps_the_broker_session_and_the_30s_keep_alive() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let (release_broker, wait_for_ack) = tokio::sync::oneshot::channel();
         let broker = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            assert_eq!(read_packet(&mut stream).await.0 >> 4, 1); // CONNECT
-            stream.write_all(&[0x20, 2, 0, 0]).await.unwrap(); // CONNACK
             let (header, body) = read_packet(&mut stream).await;
-            assert_eq!(header, 0x32); // QoS 1, not retained, not a duplicate
-            let topic_len = u16::from_be_bytes([body[0], body[1]]) as usize;
-            let topic = String::from_utf8(body[2..2 + topic_len].to_vec()).unwrap();
-            let id_offset = 2 + topic_len;
-            let payload = body[id_offset + 2..].to_vec();
-            stream
-                .write_all(&[0x40, 2, body[id_offset], body[id_offset + 1]])
-                .await
-                .unwrap();
-            // Keep the socket open until the client consumes PUBACK. Closing it
-            // here would test an abrupt disconnect instead of successful delivery.
-            wait_for_ack.await.unwrap();
-            (topic, payload)
+            assert_eq!(header >> 4, 1); // CONNECT
+            stream.write_all(&[0x20, 2, 0, 0]).await.unwrap(); // CONNACK
+            body
         });
 
-        let options = MqttOptions::new(default_client_id("device-a"), "127.0.0.1", port);
-        let (client, mut eventloop) = AsyncClient::new(options, 10);
-        let topic = sync_notifications::notification_topic("tiez/shared");
-        let scope =
-            sync_notifications::webdav_scope("https://example.test/dav", "user", "tiez-sync")
-                .unwrap();
-        let result = tokio::time::timeout(Duration::from_secs(5), async {
-            assert!(matches!(
-                eventloop.poll().await.unwrap(),
-                Event::Incoming(Incoming::ConnAck(_))
-            ));
-            let _cleanup = MqttTaskGuard;
-            MQTT_CONNECTED.store(true, Ordering::Relaxed);
-            *notice_publisher().lock().unwrap() = Some(NoticePublisher {
-                client,
-                topic: topic.clone(),
-                generation: MQTT_GENERATION.load(Ordering::Relaxed),
-            });
-            publish_webdav_changed(&scope, "device-a");
-            loop {
-                if matches!(
-                    eventloop.poll().await.unwrap(),
-                    Event::Incoming(Incoming::PubAck(_))
-                ) {
-                    break;
-                }
-            }
-            release_broker.send(()).unwrap();
-            broker.await.unwrap()
-        })
-        .await
-        .unwrap();
-        assert_eq!(result.0, topic);
-        assert_eq!(
-            sync_notifications::route_publish(&result.0, &topic),
-            PublishRoute::SyncNotice
-        );
-        let notice: serde_json::Value = serde_json::from_slice(&result.1).unwrap();
-        assert_eq!(notice["scope"], scope);
-        assert_eq!(notice["device_id"], "device-a");
-        assert_eq!(notice.as_object().unwrap().len(), 5);
-        let mut receiver = NoticeReceiver::default();
-        assert!(receiver.accept(&result.1, false, &scope, "device-b"));
-        assert!(!receiver.accept(&result.1, false, &scope, "device-b"));
+        let mut options = MqttOptions::new(default_client_id("device-a"), "127.0.0.1", port);
+        apply_session_options(&mut options);
+        let (_client, mut eventloop) = AsyncClient::new(options, 10);
+        eventloop.set_network_options(network_options());
+        let event = tokio::time::timeout(Duration::from_secs(5), eventloop.poll())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(event, Event::Incoming(Incoming::ConnAck(_))));
+
+        let body = broker.await.unwrap();
+        // Variable header: protocol name "MQTT" (2 + 4 bytes), level, flags, keep-alive.
+        assert_eq!(&body[..7], &[0, 4, b'M', b'Q', b'T', b'T', 4]);
+        assert_eq!(body[7] & 0x02, 0, "clean session must be off");
+        assert_eq!(u16::from_be_bytes([body[8], body[9]]), 30);
     }
+
+    #[test]
+    fn connect_timeout_allows_a_slow_tls_handshake() {
+        assert_eq!(network_options().connection_timeout(), 15);
+    }
+
+    #[test]
+    fn a_connection_that_still_hears_the_broker_is_not_restarted() {
+        let now = 1_000_000;
+        assert!(connection_is_healthy(true, now - 10_000, now));
+        assert!(connection_is_healthy(true, now - 45_000, now));
+        // Silent past 1.5x keep-alive (e.g. after sleep): restart.
+        assert!(!connection_is_healthy(true, now - 46_000, now));
+        assert!(!connection_is_healthy(false, now - 1_000, now));
+        assert!(!connection_is_healthy(true, 0, now));
+    }
+
+    #[test]
+    fn only_the_configured_topic_tree_is_clipboard_text() {
+        let root = "tiez/tiez_abc";
+        assert!(is_own_topic("tiez/tiez_abc", root));
+        assert!(is_own_topic("tiez/tiez_abc/sms", root));
+        assert!(is_own_topic("tiez/tiez_abc/sms", "tiez/tiez_abc/"));
+        assert!(!is_own_topic("tiez/tiez_abcdef", root));
+        assert!(!is_own_topic("tiez/tiez_old/sms", root));
+    }
+
+    #[test]
+    fn redelivered_duplicates_are_dropped_but_repeated_texts_pass() {
+        let mut recent = RecentPayloads::default();
+        let now = 5_000_000;
+        assert!(recent.accept(b"code 123456", false, now));
+        // The phone sending the same text again is a new message.
+        assert!(recent.accept(b"code 123456", false, now + 1_000));
+        // The broker resending it after a reconnect (dup flag) is not.
+        assert!(!recent.accept(b"code 123456", true, now + 2_000));
+        // A dup of something never applied still gets through once.
+        assert!(recent.accept(b"code 654321", true, now + 3_000));
+        // Outside the window a dup is treated as new.
+        assert!(recent.accept(b"code 123456", true, now + 2_000 + DUP_WINDOW_MS + 1));
+    }
+
 }
 
 /// System notification for an incoming message. Sent from here rather than by
@@ -928,36 +947,4 @@ fn first_delivery_of_retained(app: &AppHandle, payload: &[u8]) -> bool {
     }
     let _ = db.settings_repo.set(key, &digest);
     true
-}
-
-enum E2eOpened {
-    Plain,
-    Decrypted(String),
-}
-
-/// With an end-to-end key set, only fresh messages sealed with it get
-/// through (strangers on the broker can neither read nor inject). Without
-/// one, sealed messages are dropped: there is nothing to open them with.
-fn open_e2e_payload(app: &AppHandle, payload: &str) -> Option<E2eOpened> {
-    use crate::services::e2e;
-    match e2e::load_keys(app) {
-        Some(keys) => {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
-            match keys.open_mqtt_text(payload, now) {
-                Ok(text) => Some(E2eOpened::Decrypted(text)),
-                Err(reason) => {
-                    info!(">>> [MQTT] Dropped a message: end-to-end check failed ({:?})", reason);
-                    None
-                }
-            }
-        }
-        None if e2e::is_sealed_mqtt_text(payload) => {
-            info!(">>> [MQTT] Dropped an encrypted message: no end-to-end key set");
-            None
-        }
-        None => Some(E2eOpened::Plain),
-    }
 }

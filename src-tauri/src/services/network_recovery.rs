@@ -99,11 +99,8 @@ pub fn start_network_recovery(app: AppHandle) {
         loop {
             let wake = WAKE_REQUESTED.swap(false, Ordering::Relaxed);
             if detector.observe(network_snapshot(), Instant::now(), SystemTime::now(), wake) {
-                crate::info!(">>> [SYNC] Recovering connections after network change or wake");
+                crate::info!(">>> [NET] Network change or wake detected; checking MQTT connection");
                 crate::services::mqtt_sub::recover_mqtt_connection(app.clone());
-                // Each WebDAV cycle creates a fresh HTTP client. Queue a pull instead of
-                // cancelling a possibly in-flight upload or starting a second sync task.
-                crate::services::cloud_sync::request_cloud_sync(app.clone());
             }
             tokio::select! {
                 _ = wake_signal().notified() => {},

@@ -221,17 +221,6 @@ fn apply_post_create(app: &AppHandle, window: &WebviewWindow) {
         crate::infrastructure::windows_api::drag_drop::register_emoji_drag_drop(app.clone());
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        crate::infrastructure::macos_api::window::configure_overlay_space_behavior(window);
-        if let Err(err) =
-            crate::infrastructure::macos_api::window::setup_clipboard_panel(window)
-        {
-            eprintln!("[light-mode] setup_clipboard_panel failed: {err}");
-        }
-        crate::infrastructure::macos_api::window::configure_overlay_space_behavior(window);
-        crate::app::window_manager::apply_macos_window_material(window).ok();
-    }
 
     crate::app::window_manager::maybe_open_devtools(window);
 }
@@ -368,11 +357,6 @@ pub fn try_enter_light_mode(app: &AppHandle) {
         NAVIGATION_MODE_ACTIVE.store(false, Ordering::SeqCst);
 
         // macOS can't destroy (see module docs); blank the page instead.
-        #[cfg(target_os = "macos")]
-        let released = tauri::Url::parse("about:blank")
-            .map_err(|err| err.to_string())
-            .and_then(|blank| main.navigate(blank).map_err(|err| err.to_string()));
-        #[cfg(not(target_os = "macos"))]
         let released = main.destroy().map_err(|err| err.to_string());
 
         if let Err(err) = released {

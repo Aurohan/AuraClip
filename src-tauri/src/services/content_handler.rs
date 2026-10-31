@@ -272,10 +272,6 @@ async fn handle_url_content(app_path: &Option<String>, content: &str) -> Result<
             return launch_windows_url_with_app(app, content);
         }
 
-        #[cfg(not(target_os = "windows"))]
-        {
-            launch_target_with_app(app, content).await?;
-        }
     } else {
         launch_with_default_app(content, "url", false)?;
     }
@@ -494,38 +490,7 @@ async fn launch_target_with_app(app: &str, target: &str) -> Result<(), AppError>
         return launch_with_default_app(target, "file", true);
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        let path = std::path::Path::new(app);
-        let is_app_bundle = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("app"))
-            .unwrap_or(false);
 
-        if is_app_bundle || !path.exists() {
-            Command::new("open")
-                .args(["-a", app, target])
-                .spawn()
-                .map_err(|e| AppError::Internal(format!("无法打开应用。\n详情：{}", e)))?;
-            return Ok(());
-        }
-
-        Command::new(app)
-            .arg(target)
-            .spawn()
-            .map_err(|e| AppError::Internal(format!("无法打开应用。\n详情：{}", e)))?;
-        return Ok(());
-    }
-
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        Command::new(app)
-            .arg(target)
-            .spawn()
-            .map_err(|e| AppError::Internal(format!("无法打开应用。\n详情：{}", e)))?;
-        return Ok(());
-    }
 
     #[allow(unreachable_code)]
     Ok(())
@@ -562,17 +527,7 @@ fn launch_with_default_app(
         }
     }
 
-    #[cfg(target_os = "macos")]
-    Command::new("open")
-        .arg(path_str)
-        .spawn()
-        .map_err(|e| AppError::Internal(format!("Failed to open file: {}", e)))?;
 
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    Command::new("xdg-open")
-        .arg(path_str)
-        .spawn()
-        .map_err(|e| AppError::Internal(format!("Failed to open file: {}", e)))?;
 
     Ok(())
 }
@@ -719,10 +674,8 @@ fn update_database_with_changes(
             "Clipboard entry updated and clipboard-updated event emitted for id: {}",
             id
         );
-        crate::services::cloud_sync::request_cloud_sync(app_handle.clone());
     } else {
         let _ = app_handle.emit("clipboard-changed", id);
-        crate::services::cloud_sync::request_cloud_sync(app_handle.clone());
     }
 }
 

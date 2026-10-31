@@ -523,99 +523,6 @@ body:has(.modal-overlay) #root {
   overflow: hidden;
 }
 
-.modal-update-header {
-  padding: 12px 16px 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--panel-divider-color);
-}
-
-.modal-update-header-info {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.modal-update-title {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.modal-update-version {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.modal-update-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-2xs);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.modal-update-badge.beta {
-  color: var(--tint-purple);
-  background: rgba(var(--tint-purple-rgb), 0.12);
-}
-
-.modal-update-badge.important {
-  color: color-mix(in srgb, var(--status-warning) 60%, var(--text-primary));
-  background: rgba(var(--status-warning-rgb), 0.14);
-}
-
-.modal-update-content {
-  padding: 12px 16px 16px;
-}
-
-.modal-update-notes {
-  margin: 0 0 12px;
-  max-height: 100px;
-  overflow-y: auto;
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
-.modal-update-progress {
-  margin-bottom: 12px;
-}
-
-.modal-update-progress-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-2xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.modal-update-progress-track {
-  height: 3px;
-  width: 100%;
-  background: var(--bg-input);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-
-.modal-update-progress-bar {
-  height: 100%;
-  background: var(--accent-color);
-  transition: width var(--duration-slow) ease;
-}
-
-.modal-update-progress-bar.indeterminate {
-  width: 36%;
-  animation: modal-update-indeterminate 1.2s ease-in-out infinite;
-}
-
 @keyframes modal-update-indeterminate {
   from {
     transform: translateX(-110%);
@@ -623,22 +530,6 @@ body:has(.modal-overlay) #root {
   to {
     transform: translateX(290%);
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .modal-update-progress-bar.indeterminate {
-    width: 55%;
-    animation: none;
-  }
-}
-
-.modal-update-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.modal-update-actions .modal-button {
-  flex: 1;
 }
 
 .modal-button.success {

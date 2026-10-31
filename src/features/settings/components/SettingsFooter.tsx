@@ -1,15 +1,10 @@
 import { RotateCcw } from "lucide-react";
 import SettingsAbout from "./SettingsAbout";
-import type { ReleaseChannel } from "../../../shared/lib/releaseBuild";
 
 interface SettingsFooterProps {
     expanded?: boolean;
     t: (key: string) => string;
     appVersion: string;
-    releaseChannel: ReleaseChannel;
-    portable: boolean;
-    updateStatus: string;
-    setUpdateStatus: (val: string) => void;
     onResetSettings: () => void;
     emailCopied: boolean;
     setEmailCopied: (val: boolean) => void;
@@ -19,8 +14,6 @@ const SettingsFooter = ({
     expanded = false,
     t,
     appVersion,
-    releaseChannel,
-    portable,
     onResetSettings,
 }: SettingsFooterProps) => {
     if (expanded) {
@@ -28,8 +21,6 @@ const SettingsFooter = ({
             <SettingsAbout
                 t={t}
                 appVersion={appVersion}
-                releaseChannel={releaseChannel}
-                portable={portable}
                 onResetSettings={onResetSettings}
             />
         );
@@ -87,12 +78,6 @@ const SettingsFooter = ({
                     gap: '8px'
                 }}>
                     <span>AuraClip {appVersion ? `v${appVersion}` : "v1.0.0"}</span>
-                    {releaseChannel === "beta" && (
-                        <span className="settings-version-badge beta">Beta</span>
-                    )}
-                    {portable && (
-                        <span className="settings-version-badge portable">Portable</span>
-                    )}
                 </div>
                 <div style={{
                     fontSize: 'var(--font-size-xs)',

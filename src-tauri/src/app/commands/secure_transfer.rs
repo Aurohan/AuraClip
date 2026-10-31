@@ -73,7 +73,6 @@ pub async fn export_secure_transfer(state: tauri::State<'_, DbState>, path: Stri
         let plain = serde_json::to_vec(&archive).map_err(|_| "Cannot encode archive")?;
         let bytes = seal(&plain, &password)?;
         let mut options = OpenOptions::new(); options.write(true).create_new(true);
-        #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
         // Exclusive creation: never truncate or overwrite an existing file/symlink.
         let mut file = options.open(&path).map_err(|_| "Cannot create archive; choose a new filename")?;
         file.write_all(&bytes).and_then(|_| file.sync_all()).map_err(|_| "Archive write failed; incomplete encrypted file may remain")?;

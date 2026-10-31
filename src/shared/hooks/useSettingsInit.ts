@@ -6,10 +6,11 @@ import { DEFAULT_THEME, migrateThemeSettings, resolveThemeAppearance } from "../
 import type { Locale } from "../types";
 import { isTauriRuntime } from "../lib/tauriRuntime";
 import { formatError } from "../lib/errorMessage";
+import { hotkeysFromSettings, type Hotkeys } from "../lib/hotkeyActions";
 
 interface UseSettingsInitOptions {
   setAppSettings: (settings: Record<string, string>) => void;
-  setHotkey: (val: string) => void;
+  setHotkeys: (update: (prev: Hotkeys) => Hotkeys) => void;
   setTheme: (val: string) => void;
   setColorMode: (val: string) => void;
   setNativePalette: (val: string) => void;
@@ -19,7 +20,7 @@ interface UseSettingsInitOptions {
 
 export const useSettingsInit = ({
   setAppSettings,
-  setHotkey,
+  setHotkeys,
   setTheme,
   setColorMode,
   setNativePalette,
@@ -52,8 +53,8 @@ export const useSettingsInit = ({
               .catch(error => console.error("Theme migration failed", error));
           }
           setAppSettings(migrated);
-          // Empty: the user cleared it (as for the other hotkeys).
-          if (result["app.hotkey"] !== undefined) setHotkey(result["app.hotkey"]);
+          // Empty values stay empty: the user cleared that hotkey.
+          setHotkeys((prev) => hotkeysFromSettings(result, prev));
 
           const { theme: loadedTheme, nativePalette } = resolveThemeAppearance(migrated["app.theme"] || DEFAULT_THEME, migrated["app.native_palette"]);
           const loadedColorMode = result["app.color_mode"] || "system";
@@ -104,7 +105,7 @@ export const useSettingsInit = ({
       disposed = true;
       unlisten.then((off) => off());
     };
-  }, [setAppSettings, setHotkey, setTheme, setColorMode, setNativePalette, setCompactMode, setLanguage]);
+  }, [setAppSettings, setHotkeys, setTheme, setColorMode, setNativePalette, setCompactMode, setLanguage]);
 
   return settings;
 };

@@ -31,14 +31,11 @@ conflicts.txt
 git_graph.txt
 git_log_out.txt
 
-# Sub-projects
-mobile-app/
-
 # Excel temporary lock files
 ~$*.xlsx
 ~$*.xls
 
-# Tauri Updater Keys
+# Signing keys
 src-tauri/*.key
 src-tauri/*.key.pub
 coverage

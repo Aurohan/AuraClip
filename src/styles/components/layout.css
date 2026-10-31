@@ -47,12 +47,6 @@ header {
   margin-left: 4px;
 }
 
-.mac-traffic-lights {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
 .windows-close-btn {
   flex: 0 0 auto;
   color: var(--text-secondary);
@@ -107,70 +101,9 @@ header {
   transform: scale(0.96);
 }
 
-.traffic-light {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  background-color: var(--line-strong);
-  opacity: 0.6;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--duration-base) ease;
-}
-
 /* Emblems (symbols inside dots) - hidden by default */
-.traffic-light::before {
-  content: '';
-  font-size: 8px; /* design-ok: macOS traffic-light glyph size */
-  font-weight: 700;
-  color: var(--traffic-glyph);
-  opacity: 0;
-  transition: opacity var(--duration-fast) ease;
-  line-height: 1;
-}
-
-.mac-traffic-lights:hover .traffic-light {
-  opacity: 1;
-}
-
-.mac-traffic-lights:hover .traffic-light::before {
-  opacity: 1;
-}
 
 /* Hover colors and emblems */
-.mac-traffic-lights:hover .traffic-light.red {
-  background-color: var(--traffic-red);
-  box-shadow: 0 0 2px color-mix(in srgb, var(--traffic-red) 40%, transparent);
-}
-.mac-traffic-lights:hover .traffic-light.red::before {
-  content: '×';
-  margin-top: -1px;
-}
-
-.mac-traffic-lights:hover .traffic-light.yellow {
-  background-color: var(--traffic-yellow);
-  box-shadow: 0 0 2px color-mix(in srgb, var(--traffic-yellow) 40%, transparent);
-}
-.mac-traffic-lights:hover .traffic-light.yellow::before {
-  content: '−';
-  font-size: 10px; /* design-ok: macOS traffic-light glyph size */
-  margin-top: -1px;
-}
-
-.mac-traffic-lights:hover .traffic-light.green {
-  background-color: var(--traffic-green);
-  box-shadow: 0 0 2px color-mix(in srgb, var(--traffic-green) 40%, transparent);
-}
-.mac-traffic-lights:hover .traffic-light.green::before {
-  content: '+';
-  font-size: 9px; /* design-ok: macOS traffic-light glyph size */
-  margin-top: -0.5px; /* design-ok: optical centring of the glyph */
-}
 
 .header-drag-region {
   display: flex;
@@ -601,14 +534,6 @@ select.search-input option {
   flex: 1;
   min-height: 0;
   height: 100%;
-}
-
-.main-content.file-transfer-mode {
-  padding-bottom: 0;
-}
-
-.main-content.file-transfer-mode .main-split-list {
-  gap: 0;
 }
 
 .virtual-list-wrapper {

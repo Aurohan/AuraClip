@@ -39,15 +39,6 @@
 }
 
 /* The narrow layout's horizontal chip strip keeps a hairline indicator. */
-html.platform-macos .tag-manager-body:not(.is-split) .tag-manager-chip-row::-webkit-scrollbar {
-  width: 2px;
-  height: 2px;
-}
-
-html.platform-macos .tag-manager-body:not(.is-split) .tag-manager-chip-row::-webkit-scrollbar-thumb {
-  border: 0;
-  border-radius: var(--radius-pill);
-}
 
 .tag-manager-chip {
   display: inline-flex;

@@ -2,26 +2,6 @@
 /* Component adjustments for this theme, kept ahead of the theme's own rules
    (they used to sit in the component stylesheets). */
 
-/* ---- From components/ai.css ---- */
-
-.theme-retro .ai-action-btn {
-  border: 2px solid var(--border-dark);
-  border-radius: 0;
-  box-shadow: 2px 2px 0 0 var(--shadow-color);
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
-.theme-retro .ai-action-btn:hover {
-  box-shadow: 3px 3px 0 0 var(--shadow-color);
-  transform: translate(-1px, -1px);
-}
-
-.theme-retro .ai-action-btn:active {
-  box-shadow: 0 0 0 0 var(--shadow-color);
-  transform: translate(2px, 2px);
-}
-
 /* ---- From components/compact-mode.css ---- */
 
 body.theme-retro .compact-action-menu,
@@ -35,12 +15,6 @@ html.theme-retro .compact-action-menu {
 body.theme-retro .compact-action-menu-item,
 html.theme-retro .compact-action-menu-item {
     border-radius: 0;
-}
-
-/* ---- From components/file-transfer.css ---- */
-
-.theme-retro .wt-chat-view {
-  --im-bubble-shadow: 2px 2px 0 var(--line-strong);
 }
 
 :root.theme-retro,
@@ -118,9 +92,6 @@ body.theme-retro {
   --compact-card-radius: 0;
   --compact-media-radius: 0;
   --card-shadow: none;
-  --card-hover-border-color: var(--border-dark);
-  --card-hover-shadow: 5px 5px 0 0 var(--shadow-color);
-  --card-hover-transform: translate(-1px, -1px);
   --card-active-shadow: 2px 2px 0 0 var(--shadow-color);
   --card-active-transform: translate(2px, 2px);
   --card-selected-background: rgba(var(--accent-color-rgb), 0.1);
@@ -157,10 +128,6 @@ body.theme-retro {
   --keycap-radius: 4px;
   --keycap-shadow: none;
 
-  --segmented-border: 2px solid var(--border-dark);
-  --segmented-radius: 4px;
-  --segmented-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.1);
-  --segment-radius: 2px;
   --segment-active-background: var(--text-primary);
   --segment-active-color: var(--bg-window);
   --segment-active-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2);
@@ -202,12 +169,7 @@ body.theme-retro {
   --menu-radius: 4px;
   --menu-shadow: 4px 4px 0 0 var(--shadow-color);
 
-  --scrollbar-size: 10px;
-  --scrollbar-size-thin: 4px;
-  --scrollbar-radius: 0;
   --scrollbar-thumb-color: var(--text-secondary);
-  --scrollbar-thumb-hover-color: var(--text-primary);
-  --scrollbar-thumb-border: 3.5px solid transparent;
 
   --meta-text-transform: uppercase;
   --meta-letter-spacing: 0.5px;
@@ -215,7 +177,6 @@ body.theme-retro {
   --content-line-height: 1.35;
   --empty-state-font-family: var(--font-mono);
   --empty-state-text-transform: uppercase;
-
 
 }
 

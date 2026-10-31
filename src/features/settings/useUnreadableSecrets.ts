@@ -11,10 +11,6 @@ import { invoke } from "@tauri-apps/api/core";
 const SECTION_OF_SECRET: Record<string, string> = {
     mqtt_username: "sync",
     mqtt_password: "sync",
-    cloud_sync_webdav_password: "cloud_sync",
-    cloud_sync_api_key: "cloud_sync",
-    e2e_key: "cloud_sync",
-    ai_profiles: "ai",
 };
 
 export const useUnreadableSecrets = () => {

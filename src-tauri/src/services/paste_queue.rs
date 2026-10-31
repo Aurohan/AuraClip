@@ -173,26 +173,6 @@ async fn paste_next_step_inner(app_handle: tauri::AppHandle) {
                                 WindowExt::force_focus_window(HWND(previous as _));
                             }
                         }
-                        #[cfg(target_os = "macos")]
-                        {
-                            let mut reactivated = false;
-                            let prev_pid = crate::global_state::LAST_ACTIVE_APP_PID
-                                .load(std::sync::atomic::Ordering::Relaxed);
-                            if prev_pid != 0 {
-                                reactivated =
-                                    crate::infrastructure::macos_api::apps::activate_app_by_pid(
-                                        prev_pid as i32,
-                                    );
-                            }
-                            if !reactivated {
-                                let prev_app = crate::global_state::get_last_active_app_name();
-                                if !prev_app.is_empty() {
-                                    crate::infrastructure::macos_api::apps::activate_app_by_name(
-                                        &prev_app,
-                                    );
-                                }
-                            }
-                        }
                         // Wait for focus transfer to complete before sending keystroke
                         // Reduced from 150ms to 60ms for native activation.
                         tokio::time::sleep(std::time::Duration::from_millis(60)).await;

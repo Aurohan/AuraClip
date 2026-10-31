@@ -299,6 +299,12 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
             "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, 'true')",
             [AUTOSTART_PENDING_KEY],
         )?;
+        // Existing installs get it from hotkey_cmd::migrate_hotkey_defaults,
+        // which also moves old defaults out of its way.
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.phrases_hotkey', 'Alt+C')",
+            [],
+        )?;
     }
 
     // App settings
@@ -334,11 +340,10 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.deduplicate', 'true')",
         [],
     );
-    // 「后台启动」: on Windows TieZ lives in the tray; on macOS a Dock app that
-    // opens without a window looks broken, so it starts off there.
+    // 「后台启动」: AuraClip lives in the tray.
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.silent_start', ?1)",
-        [if cfg!(target_os = "macos") { "false" } else { "true" }],
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.silent_start', 'true')",
+        [],
     );
     let _ = conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.delete_after_paste', 'false')",
@@ -360,7 +365,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         [],
     );
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.sequential_hotkey', 'Alt+V')",
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.sequential_hotkey', 'Alt+Shift+S')",
         [],
     );
     let _ = conn.execute(
@@ -380,19 +385,11 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         [],
     );
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.sound_paste_enabled', 'true')",
-        [],
-    );
-    let _ = conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.sound_volume', '1.0')",
         [],
     );
     let _ = conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hide_tray_icon', 'false')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hide_dock_icon', 'false')",
         [],
     );
     let _ = conn.execute(
@@ -416,7 +413,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         [],
     );
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hotkey', 'Alt+C')",
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hotkey', 'Alt+V')",
         [],
     );
 

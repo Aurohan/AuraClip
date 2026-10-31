@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tauri::{App, AppHandle, Emitter, Manager};
 
-use crate::app::window_manager::{maybe_open_devtools, toggle_window};
+use crate::app::window_manager::toggle_window;
 #[cfg(target_os = "windows")]
 use crate::app::hooks::{keyboard_proc, mouse_proc};
 #[cfg(target_os = "windows")]
@@ -45,50 +45,10 @@ static WINDOW_SIZE_SAVE_PENDING: AtomicBool = AtomicBool::new(false);
 static LAST_WINDOW_SIZE_EVENT_MS: AtomicU64 = AtomicU64::new(0);
 static LAST_WINDOW_SIZE: OnceLock<Mutex<(u32, u32)>> = OnceLock::new();
 
-#[cfg(target_os = "macos")]
-fn register_macos_wake_hotkey_refresh(app_handle: AppHandle) {
-    use block2::RcBlock;
-    use objc2_app_kit::{NSWorkspace, NSWorkspaceDidWakeNotification};
-    use objc2_foundation::NSNotification;
-    use std::ptr::NonNull;
-    use std::time::Duration;
-
-    let center = NSWorkspace::sharedWorkspace().notificationCenter();
-    let wake_handler = RcBlock::new(move |_notification: NonNull<NSNotification>| {
-        crate::services::network_recovery::request_wake_recovery();
-        let app_handle = app_handle.clone();
-        std::thread::spawn(move || {
-            // macOS may need a short moment to restore Carbon event hotkeys after wake.
-            std::thread::sleep(Duration::from_millis(750));
-            let main_thread_handle = app_handle.clone();
-            let _ = app_handle.run_on_main_thread(move || {
-                match crate::app::commands::sync_registered_hotkeys(&main_thread_handle) {
-                    Ok(()) => info!(">>> [HOTKEY] Re-registered shortcuts after macOS wake"),
-                    Err(error) => {
-                        crate::error!(">>> [HOTKEY] Wake re-registration failed: {error}")
-                    }
-                }
-            });
-        });
-    });
-
-    // NSNotificationCenter owns the returned observer for the process lifetime.
-    unsafe {
-        let observer = center.addObserverForName_object_queue_usingBlock(
-            Some(NSWorkspaceDidWakeNotification),
-            None,
-            None,
-            &wake_handler,
-        );
-        let _ = objc2::rc::Retained::into_raw(observer);
-    }
-}
 
 pub fn init(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle().clone();
 
-    #[cfg(target_os = "macos")]
-    register_macos_wake_hotkey_refresh(app_handle.clone());
 
     // Initialize GLOBAL_APP_HANDLE
     let _ = GLOBAL_APP_HANDLE.set(app_handle.clone());
@@ -127,11 +87,6 @@ pub fn init(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     // 4. Initial Settings & Reset Safety
     apply_startup_resets(&settings_repo);
 
-    #[cfg(target_os = "macos")]
-    {
-        // Avoid stale persisted pin state causing unexpected always-on-top behavior.
-        let _ = settings_repo.set("app.window_pinned", "false");
-    }
 
     let settings = load_settings(&settings_repo);
 
@@ -174,11 +129,6 @@ pub(crate) fn default_app_data_dir<R: tauri::Runtime>(
     let dir = paths.app_data_dir()?;
     // `npm run tauri:dev` already uses the com.tiez.dev identifier; only a
     // debug build run with the release config still needs the suffix.
-    #[cfg(all(target_os = "macos", debug_assertions))]
-    let dir = match dir.file_name().and_then(|n| n.to_str()) {
-        Some(name) if name.ends_with(".dev") => dir,
-        name => dir.with_file_name(format!("{}.dev", name.unwrap_or("com.tiez"))),
-    };
     Ok(dir)
 }
 
@@ -258,72 +208,7 @@ fn apply_startup_resets(repo: &impl SettingsRepository) {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        fn migrate_hotkey_default(
-            repo: &impl SettingsRepository,
-            key: &str,
-            legacy_defaults: &[&str],
-            new_default: &str,
-        ) {
-            let current = match repo.get(key) {
-                Ok(Some(v)) => v,
-                _ => return,
-            };
-            let normalized = current.trim().to_ascii_lowercase();
-            if legacy_defaults
-                .iter()
-                .any(|legacy| normalized == legacy.trim().to_ascii_lowercase())
-            {
-                let _ = repo.set(key, new_default);
-            }
-        }
-
-        // Migrate only historical defaults to new mac-friendly defaults.
-        // User-customized values are preserved.
-        migrate_hotkey_default(
-            repo,
-            "app.hotkey",
-            &["Win+V", "Command+Shift+C", "Command+V"],
-            "Alt+C",
-        );
-        migrate_hotkey_default(
-            repo,
-            "app.sequential_hotkey",
-            &["Command+V", "Command+Alt+V", "Command+Z"],
-            "Alt+V",
-        );
-        migrate_hotkey_default(
-            repo,
-            "app.plain_paste_hotkey",
-            &["Ctrl+Shift+Z", "Command+Alt+Shift+V", "Command+Shift+V"],
-            "Alt+Shift+V",
-        );
-        migrate_hotkey_default(
-            repo,
-            "app.search_hotkey",
-            &["Command+F", "Command+Alt+F"],
-            "Alt+F",
-        );
-
-        migrate_silent_start_once(repo);
-    }
-}
-
-/// Marks that `app.silent_start` was reset once on this Mac.
-pub(crate) const SILENT_START_MAC_RESET_KEY: &str = "app.silent_start_mac_reset";
-
-/// 「后台启动」 used to do nothing on macOS while being seeded on for every
-/// install. Now that it works, set it once to what Mac users actually got (the
-/// window shows), or every Mac would open without a window after updating.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn migrate_silent_start_once(repo: &impl SettingsRepository) {
-    if repo.get(SILENT_START_MAC_RESET_KEY).ok().flatten().is_some() {
-        return;
-    }
-    if repo.set("app.silent_start", "false").is_ok() {
-        let _ = repo.set(SILENT_START_MAC_RESET_KEY, "true");
-    }
+    crate::app::commands::hotkey_cmd::migrate_hotkey_defaults(repo);
 }
 
 pub struct StartupSettings {
@@ -342,21 +227,16 @@ pub struct StartupSettings {
     pub cleanup_rules: String,
     pub app_cleanup_policies: String,
     pub sequential_mode: bool,
-    pub sequential_hotkey: String,
-    pub plain_paste_hotkey: String,
-    pub search_hotkey: String,
+    pub hotkeys: std::collections::HashMap<&'static str, String>,
     pub quick_paste_modifier: String,
     pub sound_enabled: bool,
-    pub paste_sound_enabled: bool,
     pub hide_tray_icon: bool,
-    pub hide_dock_icon: bool,
     pub follow_mouse: bool,
     pub edge_docking: bool,
     pub last_edge_dock: String,
     pub window_pinned: bool,
     pub window_width: Option<u32>,
     pub window_height: Option<u32>,
-    pub main_hotkey: String,
     pub arrow_key_selection: bool,
     pub light_mode_enabled: bool,
     pub light_mode_idle_minutes: u64,
@@ -436,19 +316,7 @@ pub(crate) fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .unwrap_or(Some("false".to_string()))
             .map(|v| v == "true")
             .unwrap_or(false),
-        sequential_hotkey: repo
-            .get("app.sequential_hotkey")
-            .unwrap_or(Some("Alt+V".to_string()))
-            .unwrap_or("Alt+V".to_string()),
-        plain_paste_hotkey: repo
-            .get("app.plain_paste_hotkey")
-            .ok()
-            .flatten()
-            .unwrap_or_default(),
-        search_hotkey: repo
-            .get("app.search_hotkey")
-            .unwrap_or(Some("Alt+F".to_string()))
-            .unwrap_or("Alt+F".to_string()),
+        hotkeys: crate::app::commands::hotkey_cmd::load_hotkeys(repo),
         quick_paste_modifier: repo
             .get("app.quick_paste_modifier")
             .unwrap_or(Some("disabled".to_string()))
@@ -458,18 +326,8 @@ pub(crate) fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .unwrap_or(Some("true".to_string()))
             .map(|v| v == "true")
             .unwrap_or(true),
-        paste_sound_enabled: repo
-            .get("app.sound_paste_enabled")
-            .unwrap_or(Some("true".to_string()))
-            .map(|v| v == "true")
-            .unwrap_or(true),
         hide_tray_icon: repo
             .get("app.hide_tray_icon")
-            .unwrap_or(Some("false".to_string()))
-            .map(|v| v == "true")
-            .unwrap_or(false),
-        hide_dock_icon: repo
-            .get("app.hide_dock_icon")
             .unwrap_or(Some("false".to_string()))
             .map(|v| v == "true")
             .unwrap_or(false),
@@ -502,10 +360,6 @@ pub(crate) fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .ok()
             .flatten()
             .and_then(|v| v.parse::<u32>().ok()),
-        main_hotkey: repo
-            .get("app.hotkey")
-            .unwrap_or(Some("Alt+C".to_string()))
-            .unwrap_or("Alt+C".to_string()),
         arrow_key_selection: repo
             .get("app.arrow_key_selection")
             .unwrap_or(Some("true".to_string()))
@@ -561,24 +415,6 @@ fn setup_state(
     crate::services::clipboard::start_session_file_sweeper(app.handle().clone(), &app_dir);
     crate::app::commands::thumbnail_cmd::init_thumbnail_cache(app.handle());
     app.manage(AppDataDir(std::sync::Mutex::new(app_dir)));
-    app.manage(crate::services::file_transfer::ChatState::default());
-    app.manage(crate::services::file_transfer::SharedFileState(
-        std::sync::Mutex::new(std::collections::HashMap::new()),
-    ));
-    app.manage(crate::services::file_transfer::ServerInfo {
-        port: std::sync::atomic::AtomicU16::new(0),
-        ip: std::sync::Mutex::new(String::new()),
-        access_token: std::sync::Mutex::new(String::new()),
-        lan_key: std::sync::Mutex::new(None),
-    });
-    app.manage(crate::services::file_transfer::UploadSessions::default());
-    app.manage(crate::services::file_transfer::ServerActivityState::default());
-    app.manage(crate::services::file_transfer::WsBroadcaster(
-        std::sync::Mutex::new(None),
-    ));
-    app.manage(crate::services::file_transfer::OnlineDevices(
-        std::sync::Mutex::new(std::collections::HashMap::new()),
-    ));
     app.manage(PasteQueue::default());
 }
 
@@ -611,38 +447,23 @@ pub(crate) fn settings_state_from(s: &StartupSettings) -> SettingsState {
         cleanup_rules: std::sync::Mutex::new(s.cleanup_rules.clone()),
         app_cleanup_policies: std::sync::Mutex::new(s.app_cleanup_policies.clone()),
         sequential_mode: AtomicBool::new(s.sequential_mode),
-        sequential_paste_hotkey: std::sync::Mutex::new(s.sequential_hotkey.clone()),
-        plain_paste_hotkey: std::sync::Mutex::new(s.plain_paste_hotkey.clone()),
-        search_hotkey: std::sync::Mutex::new(s.search_hotkey.clone()),
+        hotkeys: std::sync::Mutex::new(s.hotkeys.clone()),
         quick_paste_modifier: std::sync::Mutex::new(s.quick_paste_modifier.clone()),
         sound_enabled: AtomicBool::new(s.sound_enabled),
-        paste_sound_enabled: AtomicBool::new(s.paste_sound_enabled),
         hide_tray_icon: AtomicBool::new(s.hide_tray_icon),
-        hide_dock_icon: AtomicBool::new(s.hide_dock_icon),
         follow_mouse: AtomicBool::new(s.follow_mouse),
         edge_docking: AtomicBool::new(s.edge_docking),
         arrow_key_selection: AtomicBool::new(s.arrow_key_selection),
         light_mode_enabled: AtomicBool::new(s.light_mode_enabled),
         light_mode_idle_minutes: std::sync::atomic::AtomicU64::new(s.light_mode_idle_minutes),
-        main_hotkey: std::sync::Mutex::new(s.main_hotkey.clone()),
         monitors: std::sync::Mutex::new(Vec::new()),
         sound_volume: std::sync::Mutex::new(s.sound_volume),
     }
 }
 
-#[cfg(target_os = "macos")]
-fn apply_initial_dock_visibility(app: &mut App, s: &StartupSettings) {
-    let _ = app.set_dock_visibility(!s.hide_dock_icon);
-}
 
-#[cfg(not(target_os = "macos"))]
 fn apply_initial_dock_visibility(_app: &mut App, _s: &StartupSettings) {}
 
-/// Configure macOS Space / fullscreen overlay behavior for the main window.
-#[cfg(target_os = "macos")]
-fn set_window_all_spaces(window: &tauri::WebviewWindow) {
-    crate::infrastructure::macos_api::window::configure_overlay_space_behavior(window);
-}
 
 fn parse_dock_token(token: &str) -> i32 {
     match token.trim().to_ascii_lowercase().as_str() {
@@ -650,66 +471,6 @@ fn parse_dock_token(token: &str) -> i32 {
         "left" => 2,
         "right" => 3,
         _ => 0,
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn persist_edge_dock(_app_handle: &AppHandle, _dock: i32) {}
-
-fn dock_token_for(dock: i32) -> &'static str {
-    match dock {
-        1 => "top",
-        2 => "left",
-        3 => "right",
-        _ => "none",
-    }
-}
-
-#[cfg(target_os = "macos")]
-pub fn persist_edge_dock(app_handle: &AppHandle, dock: i32) {
-    if let Some(db_state) = app_handle.try_state::<DbState>() {
-        let _ = db_state
-            .settings_repo
-            .set("app.last_edge_dock", dock_token_for(dock));
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn apply_dock_position_on_main(window: &tauri::WebviewWindow, dock: i32) {
-    let (Ok(pos), Ok(size), Ok(Some(monitor))) = (
-        window.outer_position().or_else(|_| window.inner_position()),
-        window.outer_size().or_else(|_| window.inner_size()),
-        window.current_monitor(),
-    ) else {
-        return;
-    };
-    let sp = monitor.position();
-    let ss = monitor.size();
-    let screen_left = sp.x;
-    let screen_top = sp.y;
-    let screen_right = sp.x + ss.width as i32;
-    let hide_size = 3i32;
-
-    match dock {
-        1 => {
-            let _ = window.set_position(tauri::PhysicalPosition::new(
-                pos.x,
-                screen_top - size.height as i32 + hide_size,
-            ));
-        }
-        2 => {
-            let _ = window.set_position(tauri::PhysicalPosition::new(
-                screen_left - size.width as i32 + hide_size,
-                pos.y,
-            ));
-        }
-        3 => {
-            let _ = window.set_position(tauri::PhysicalPosition::new(
-                screen_right - hide_size,
-                pos.y,
-            ));
-        }
-        _ => {}
     }
 }
 
@@ -732,32 +493,14 @@ pub fn is_window_edge_tucked(window: &tauri::WebviewWindow) -> bool {
     let rect_left = pos.x;
     let rect_top = pos.y;
     let rect_right = pos.x + size.width as i32;
-    let rect_bottom = pos.y + size.height as i32;
     let screen_left = screen.x;
     let screen_top = screen.y;
     let screen_right = screen.x + screen_size.width as i32;
-    let screen_bottom = screen.y + screen_size.height as i32;
 
-    #[cfg(target_os = "macos")]
-    {
-        visibility_ratio_on_monitor(
-            rect_left,
-            rect_top,
-            rect_right,
-            rect_bottom,
-            screen_left,
-            screen_top,
-            screen_right,
-            screen_bottom,
-        ) < 0.18
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let threshold = 5;
-        rect_top <= screen_top + threshold
-            || rect_left <= screen_left + threshold
-            || rect_right >= screen_right - threshold
-    }
+    let threshold = 5;
+    rect_top <= screen_top + threshold
+        || rect_left <= screen_left + threshold
+        || rect_right >= screen_right - threshold
 }
 
 fn infer_edge_dock_from_geometry(
@@ -854,8 +597,6 @@ fn restore_pin_state_after_edge_expand(app_handle: &AppHandle, window: &tauri::W
     let prev = WINDOW_PINNED.swap(user_pinned, Ordering::Relaxed);
     if prev != user_pinned {
         let _ = window.set_always_on_top(user_pinned);
-        #[cfg(target_os = "macos")]
-        crate::infrastructure::macos_api::window::set_window_focusable(&window, !user_pinned);
         let _ = app_handle.emit("window-pinned-changed", user_pinned);
     } else {
         set_edge_dock_topmost(window, user_pinned);
@@ -977,7 +718,6 @@ pub fn expand_from_edge_dock(app_handle: &AppHandle, window: &tauri::WebviewWind
     let _ = window.show();
     IS_HIDDEN.store(false, Ordering::Relaxed);
     CURRENT_DOCK.store(0, Ordering::Relaxed);
-    persist_edge_dock(app_handle, 0);
     restore_pin_state_after_edge_expand(app_handle, window);
 
     let now = std::time::SystemTime::now()
@@ -1012,13 +752,9 @@ fn setup_main_window(app: &App, s: &StartupSettings) {
         let _ = window.set_always_on_top(effective_pinned);
         #[cfg(target_os = "windows")]
         let _ = window.set_focusable(!effective_pinned);
-        #[cfg(target_os = "linux")]
-        let _ = window.set_focusable(true);
         // macOS: avoid set_focusable after NSPanel conversion (tao ivar panic).
 
         // macOS: Space flags before panel conversion.
-        #[cfg(target_os = "macos")]
-        set_window_all_spaces(&window);
 
         // Drop WebView2 browser accelerators (Ctrl+F find, F1 help, reload…) so
         // they cannot collide with TieZ / third-party global hotkeys (#159).
@@ -1093,81 +829,6 @@ fn setup_main_window(app: &App, s: &StartupSettings) {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
-    if should_show_main {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-
-            #[cfg(target_os = "macos")]
-            {
-                // Convert AFTER final show/focusable work — to_panel drops tao ivars.
-                if let Err(err) =
-                    crate::infrastructure::macos_api::window::setup_clipboard_panel(&window)
-                {
-                    eprintln!("[macos-overlay] setup_clipboard_panel failed: {err}");
-                }
-                crate::infrastructure::macos_api::window::configure_overlay_space_behavior(
-                    &window,
-                );
-                let window_spaces = window.clone();
-                std::thread::spawn(move || {
-                    for delay_ms in [50_u64, 200, 600, 1200] {
-                        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-                        crate::infrastructure::macos_api::window::configure_overlay_space_behavior_async(
-                            &window_spaces,
-                        );
-                    }
-                });
-
-                if restore_dock != 0 {
-                    // The window was docked when the app last quit. Skip set_focus
-                    // (which would pull the offscreen window back onscreen) and
-                    // re-apply the dock position. Retry briefly in case the
-                    // window-state plugin restores geometry asynchronously.
-                    CURRENT_DOCK.store(restore_dock, Ordering::Relaxed);
-                    IS_HIDDEN.store(true, Ordering::Relaxed);
-                    let _ = window.set_always_on_top(true);
-                    apply_dock_position_on_main(&window, restore_dock);
-
-                    let window_clone = window.clone();
-                    std::thread::spawn(move || {
-                        for _ in 0..6 {
-                            std::thread::sleep(std::time::Duration::from_millis(80));
-                            apply_dock_position_on_main(&window_clone, restore_dock);
-                        }
-                    });
-                } else {
-                    let _ = window.set_focus();
-                }
-            }
-
-            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-            let _ = window.set_focus();
-
-            maybe_open_devtools(&window);
-        }
-    } else {
-        // The main window is created visible (tauri.conf.json), so autostart
-        // and silent start must hide it, or it pops up at login (#107). On
-        // macOS this has to happen before the panel conversion below.
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.hide();
-        }
-        // Not showing on startup, but ensure window is focusable when it does appear
-        #[cfg(not(target_os = "windows"))]
-        if let Some(window) = app.get_webview_window("main") {
-            #[cfg(not(target_os = "macos"))]
-            crate::infrastructure::macos_api::window::set_window_focusable(&window, true);
-            #[cfg(target_os = "macos")]
-            {
-                if let Err(err) =
-                    crate::infrastructure::macos_api::window::setup_clipboard_panel(&window)
-                {
-                    eprintln!("[macos-overlay] setup_clipboard_panel failed: {err}");
-                }
-            }
-        }
-    }
 
     let _ = restore_dock;
 }
@@ -1191,13 +852,6 @@ fn enable_autostart_on_first_run(app_handle: &AppHandle, db_state: &DbState) {
     }
     // Run from the mounted DMG or a quarantine copy (App Translocation): the
     // path is temporary, so wait for a start from the installed location.
-    #[cfg(target_os = "macos")]
-    if let Ok(exe) = std::env::current_exe() {
-        let path = exe.to_string_lossy();
-        if path.starts_with("/Volumes/") || path.contains("/AppTranslocation/") {
-            return;
-        }
-    }
     use crate::app::commands::system_cmd::{apply_autostart, is_autostart_enabled};
     // apply_autostart ignores the launcher's error on macOS; check the result.
     let _ = apply_autostart(app_handle, true);
@@ -1212,103 +866,36 @@ fn enable_autostart_on_first_run(app_handle: &AppHandle, db_state: &DbState) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn login_item_switched_off() -> bool {
-    use crate::infrastructure::macos_api::login_item;
-    login_item::available() && login_item::requires_approval()
-}
 
-#[cfg(not(target_os = "macos"))]
 fn login_item_switched_off() -> bool {
     false
 }
 
-/// Moves a login item made the old way (~/Library/LaunchAgents, shown under
-/// the developer's name) to the in-bundle agent shown as TieZ. Only when it
-/// was on: an upgrade never turns launch at login on by itself.
-#[cfg(target_os = "macos")]
-fn migrate_macos_login_item(app_handle: &AppHandle) {
-    use crate::infrastructure::macos_api::login_item;
-    use tauri_plugin_autostart::ManagerExt;
-    if cfg!(debug_assertions) || !login_item::available() {
-        return;
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        let path = exe.to_string_lossy();
-        if path.starts_with("/Volumes/") || path.contains("/AppTranslocation/") {
-            return;
-        }
-    }
-    let autolaunch = app_handle.autolaunch();
-    if !autolaunch.is_enabled().unwrap_or(false) {
-        return;
-    }
-    match login_item::set_enabled(true) {
-        Ok(()) => {
-            let _ = autolaunch.disable();
-        }
-        // Moved, but switched off in System Settings: the user's choice.
-        Err(_) if login_item::requires_approval() => {
-            let _ = autolaunch.disable();
-        }
-        // Keep the old item rather than lose launch at login.
-        Err(error) => eprintln!(">>> [STARTUP] moving the login item failed: {error}"),
-    }
-}
 
 fn start_services(app: &App, s: &StartupSettings, app_handle: AppHandle) {
-    #[cfg(target_os = "macos")]
-    crate::infrastructure::macos_api::window_tracker::start_window_tracking(app_handle.clone());
     #[cfg(target_os = "windows")]
     crate::infrastructure::windows_api::window_tracker::start_window_tracking(app_handle.clone());
-    #[cfg(target_os = "macos")]
-    crate::infrastructure::macos_api::paste_key_monitor::start_paste_key_monitor();
     crate::services::clipboard::start_clipboard_monitor(app_handle.clone());
-    if s.sound_enabled {
-        crate::services::ui_sound::preload_ui_sounds();
-    }
     crate::services::mqtt_sub::start_mqtt_client(app_handle.clone());
-    crate::services::cloud_sync::start_cloud_sync_client(app_handle.clone());
     crate::services::network_recovery::start_network_recovery(app_handle.clone());
     start_edge_docking_monitor(app_handle.clone());
     crate::app::light_mode::start_idle_watcher(app_handle.clone());
     crate::app::light_mode::seed_hidden_if_needed(&app_handle);
 
     let db_state = app.state::<DbState>();
-    #[cfg(target_os = "macos")]
-    migrate_macos_login_item(&app_handle);
     enable_autostart_on_first_run(&app_handle, &db_state);
     #[cfg(target_os = "windows")]
     if crate::app::commands::system_cmd::check_is_admin() {
         std::thread::spawn(crate::infrastructure::windows_api::elevated_autostart::refresh_outdated_task);
     }
-    if db_state
-        .settings_repo
-        .get("file_server_enabled")
-        .unwrap_or(Some("false".to_string()))
-        == Some("true".to_string())
-    {
-        let port = db_state
-            .settings_repo
-            .get("file_server_port")
-            .unwrap_or(None)
-            .and_then(|x| x.parse::<u16>().ok());
+    ensure_anon_id(&db_state.settings_repo);
 
-        let h = app_handle.clone();
-        tauri::async_runtime::spawn(async move {
-            let _ = crate::services::file_transfer::toggle_file_server(h, true, port).await;
-        });
-    }
-
-    // Anonymous Analytics
-    init_analytics(app, &db_state.settings_repo);
-
-    // Register initial hotkey
-    let hotkey_str = s.main_hotkey.clone();
-    {
-        let mut guard = HOTKEY_STRING.lock().unwrap();
-        *guard = hotkey_str.clone();
-    }
+    // Register initial hotkeys (the mouse hook reads HOTKEY_STRING for MouseMiddle).
+    *HOTKEY_STRING.lock().unwrap() = s
+        .hotkeys
+        .get(crate::app::commands::hotkey_cmd::CLIPBOARD)
+        .cloned()
+        .unwrap_or_default();
     if let Err(error) = crate::app::commands::sync_registered_hotkeys(&app_handle) {
         crate::error!(">>> [HOTKEY] Initial registration failed: {error}");
     }
@@ -1328,356 +915,8 @@ fn start_services(app: &App, s: &StartupSettings, app_handle: AppHandle) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn visibility_ratio_on_monitor(
-    rect_left: i32,
-    rect_top: i32,
-    rect_right: i32,
-    rect_bottom: i32,
-    screen_left: i32,
-    screen_top: i32,
-    screen_right: i32,
-    screen_bottom: i32,
-) -> f64 {
-    let vis_left = rect_left.max(screen_left);
-    let vis_top = rect_top.max(screen_top);
-    let vis_right = rect_right.min(screen_right);
-    let vis_bottom = rect_bottom.min(screen_bottom);
-    let iw = (vis_right.saturating_sub(vis_left)).max(0) as u64;
-    let ih = (vis_bottom.saturating_sub(vis_top)).max(0) as u64;
-    let visible_area = iw.saturating_mul(ih);
-    let ww = (rect_right.saturating_sub(rect_left)).max(1) as u64;
-    let wh = (rect_bottom.saturating_sub(rect_top)).max(1) as u64;
-    let total_area = ww.saturating_mul(wh).max(1);
-    visible_area as f64 / total_area as f64
-}
 
-/// Drop stale edge-hide state when it disagrees with real geometry (resume, monitor layout, startup restore).
-#[cfg(target_os = "macos")]
-fn reconcile_stale_edge_hide(
-    rect_left: i32,
-    rect_top: i32,
-    rect_right: i32,
-    rect_bottom: i32,
-    screen_left: i32,
-    screen_top: i32,
-    screen_right: i32,
-    screen_bottom: i32,
-) {
-    if !IS_HIDDEN.load(Ordering::Relaxed) {
-        return;
-    }
-    let dock = CURRENT_DOCK.load(Ordering::Relaxed);
-    if dock == 0 {
-        IS_HIDDEN.store(false, Ordering::Relaxed);
-        return;
-    }
-    let ratio = visibility_ratio_on_monitor(
-        rect_left,
-        rect_top,
-        rect_right,
-        rect_bottom,
-        screen_left,
-        screen_top,
-        screen_right,
-        screen_bottom,
-    );
-    // Truly tucked windows expose only a thin strip (~1–5% area). Much more visible ⇒ flags are stale.
-    if ratio > 0.18 {
-        IS_HIDDEN.store(false, Ordering::Relaxed);
-        CURRENT_DOCK.store(0, Ordering::Relaxed);
-    }
-}
 
-#[cfg(target_os = "macos")]
-fn start_edge_docking_monitor(app_handle: AppHandle) {
-    std::thread::spawn(move || {
-        // The docked state and offscreen position are applied during
-        // setup_main_window (driven by the persisted `app.last_edge_dock` value).
-        // Wait briefly so the window-state plugin's async restore can settle
-        // before reconciliation runs, otherwise a partially-restored geometry
-        // could wipe the just-restored docked state.
-        let startup_grace_until = std::time::Instant::now()
-            + std::time::Duration::from_millis(if IS_HIDDEN.load(Ordering::Relaxed) {
-                900
-            } else {
-                0
-            });
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(150));
-
-            let in_startup_grace = std::time::Instant::now() < startup_grace_until;
-
-            let settings = match app_handle.try_state::<SettingsState>() {
-                Some(s) => s,
-                None => continue,
-            };
-
-            if !settings.edge_docking.load(Ordering::Relaxed) {
-                if IS_HIDDEN.load(Ordering::Relaxed) {
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        if let (Ok(pos), Ok(size), Ok(Some(monitor))) = (
-                            window.outer_position().or_else(|_| window.inner_position()),
-                            window.outer_size().or_else(|_| window.inner_size()),
-                            window.current_monitor(),
-                        ) {
-                            let screen = monitor.position();
-                            let screen_right = screen.x + monitor.size().width as i32;
-                            let dock_actual = match CURRENT_DOCK.load(Ordering::Relaxed) {
-                                1 => DockPosition::Top,
-                                2 => DockPosition::Left,
-                                3 => DockPosition::Right,
-                                _ => DockPosition::None,
-                            };
-                            match dock_actual {
-                                DockPosition::Top => {
-                                    let _ = window.set_position(tauri::PhysicalPosition::new(
-                                        pos.x, screen.y,
-                                    ));
-                                }
-                                DockPosition::Left => {
-                                    let _ = window.set_position(tauri::PhysicalPosition::new(
-                                        screen.x, pos.y,
-                                    ));
-                                }
-                                DockPosition::Right => {
-                                    let _ = window.set_position(tauri::PhysicalPosition::new(
-                                        screen_right - size.width as i32,
-                                        pos.y,
-                                    ));
-                                }
-                                DockPosition::None => {}
-                            }
-                        }
-                        let _ = window.show();
-                        IS_HIDDEN.store(false, Ordering::Relaxed);
-                        CURRENT_DOCK.store(0, Ordering::Relaxed);
-                        persist_edge_dock(&app_handle, 0);
-                    }
-                }
-                continue;
-            }
-
-            let Some(window) = app_handle.get_webview_window("main") else {
-                continue;
-            };
-
-            if window.is_minimized().unwrap_or(false) {
-                continue;
-            }
-
-            let pos = match window.outer_position().or_else(|_| window.inner_position()) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-            let size = match window.outer_size().or_else(|_| window.inner_size()) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            let rect_left = pos.x;
-            let rect_top = pos.y;
-            let rect_right = pos.x.saturating_add(size.width as i32);
-            let rect_bottom = pos.y.saturating_add(size.height as i32);
-
-            let monitor = match window.current_monitor() {
-                Ok(Some(m)) => m,
-                _ => continue,
-            };
-            let screen_size = monitor.size();
-            let screen_pos = monitor.position();
-            let screen_left = screen_pos.x;
-            let screen_top = screen_pos.y;
-            let screen_right = screen_pos.x + screen_size.width as i32;
-            let screen_bottom = screen_pos.y + screen_size.height as i32;
-
-            if !in_startup_grace {
-                reconcile_stale_edge_hide(
-                    rect_left,
-                    rect_top,
-                    rect_right,
-                    rect_bottom,
-                    screen_left,
-                    screen_top,
-                    screen_right,
-                    screen_bottom,
-                );
-            }
-
-            let is_window_visible = window.is_visible().unwrap_or(true);
-            let is_hidden_by_edge = IS_HIDDEN.load(Ordering::Relaxed);
-
-            // Skip edge docking checks if window was hidden by other mechanisms.
-            if !is_window_visible && !is_hidden_by_edge {
-                continue;
-            }
-
-            let last_show = LAST_SHOW_TIMESTAMP.load(Ordering::Relaxed);
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
-
-            // Avoid immediate re-dock right after showing.
-            if !is_hidden_by_edge
-                && NAVIGATION_ENABLED.load(Ordering::SeqCst)
-                && now.saturating_sub(last_show) < 800
-            {
-                continue;
-            }
-
-            // Grace period after showing — but never block mouse-reveal while tucked.
-            if !is_hidden_by_edge && now.saturating_sub(last_show) < 500 {
-                continue;
-            }
-
-            // In this screen's pixels, like its edges and the window; tao
-            // scales the raw cursor by the primary screen's factor instead.
-            let monitor_scale = monitor.scale_factor();
-            let (cursor_x, cursor_y) = crate::app::window_manager::global_cursor_layout(&window)
-                .map(|(x, y)| ((x * monitor_scale).round() as i32, (y * monitor_scale).round() as i32))
-                .unwrap_or((-9999, -9999));
-
-            let threshold = 5;
-            let is_mouse_near_edge = if is_hidden_by_edge {
-                match CURRENT_DOCK.load(Ordering::Relaxed) {
-                    1 => {
-                        cursor_y <= screen_top + threshold
-                            && cursor_x >= rect_left
-                            && cursor_x <= rect_right
-                    }
-                    2 => {
-                        cursor_x <= screen_left + threshold
-                            && cursor_y >= rect_top
-                            && cursor_y <= rect_bottom
-                    }
-                    3 => {
-                        cursor_x >= screen_right - threshold
-                            && cursor_y >= rect_top
-                            && cursor_y <= rect_bottom
-                    }
-                    _ => false,
-                }
-            } else {
-                false
-            };
-
-            let is_mouse_in = if is_hidden_by_edge {
-                is_mouse_near_edge
-            } else {
-                cursor_x >= rect_left
-                    && cursor_x <= rect_right
-                    && cursor_y >= rect_top
-                    && cursor_y <= rect_bottom
-            };
-
-            let window_center_x = (rect_left + rect_right) / 2;
-            let window_center_y = (rect_top + rect_bottom) / 2;
-            let is_on_current_monitor = window_center_x >= screen_left
-                && window_center_x < screen_right
-                && window_center_y >= screen_top
-                && window_center_y < screen_bottom;
-
-            if !is_hidden_by_edge && !is_on_current_monitor {
-                if IS_HIDDEN.load(Ordering::Relaxed) {
-                    IS_HIDDEN.store(false, Ordering::Relaxed);
-                    CURRENT_DOCK.store(0, Ordering::Relaxed);
-                    persist_edge_dock(&app_handle, 0);
-                }
-                continue;
-            }
-
-            let hide_size = 3;
-            let window_rect = (rect_left, rect_top, rect_right, rect_bottom);
-            let mut dock = DockPosition::None;
-            if rect_top <= screen_top + threshold
-                && can_dock_on_edge(&window, &monitor, 1, window_rect)
-            {
-                dock = DockPosition::Top;
-            } else if rect_left <= screen_left + threshold
-                && can_dock_on_edge(&window, &monitor, 2, window_rect)
-            {
-                dock = DockPosition::Left;
-            } else if rect_right >= screen_right - threshold
-                && can_dock_on_edge(&window, &monitor, 3, window_rect)
-            {
-                dock = DockPosition::Right;
-            }
-
-            if is_hidden_by_edge {
-                if is_mouse_in {
-                    let _ = expand_from_edge_dock(&app_handle, &window);
-                }
-            } else if dock != DockPosition::None {
-                // Keep the window fully visible while cursor is still inside it.
-                if is_mouse_in {
-                    continue;
-                }
-
-                if !IS_HIDDEN.load(Ordering::Relaxed) {
-                    // Keep top-most z-order for the edge sliver without flipping WINDOW_PINNED.
-                    if !WINDOW_PINNED.load(Ordering::Relaxed) {
-                        let _ = window.set_always_on_top(true);
-                    }
-
-                    let window_height = rect_bottom - rect_top;
-                    let window_width = rect_right - rect_left;
-                    let mut new_dock = 0i32;
-                    match dock {
-                        DockPosition::Top => {
-                            let _ = window.set_position(tauri::PhysicalPosition::new(
-                                rect_left,
-                                screen_top - window_height + hide_size,
-                            ));
-                            CURRENT_DOCK.store(1, Ordering::Relaxed);
-                            new_dock = 1;
-                        }
-                        DockPosition::Left => {
-                            let _ = window.set_position(tauri::PhysicalPosition::new(
-                                screen_left - window_width + hide_size,
-                                rect_top,
-                            ));
-                            CURRENT_DOCK.store(2, Ordering::Relaxed);
-                            new_dock = 2;
-                        }
-                        DockPosition::Right => {
-                            let _ = window.set_position(tauri::PhysicalPosition::new(
-                                screen_right - hide_size,
-                                rect_top,
-                            ));
-                            CURRENT_DOCK.store(3, Ordering::Relaxed);
-                            new_dock = 3;
-                        }
-                        DockPosition::None => {}
-                    }
-                    IS_HIDDEN.store(true, Ordering::Relaxed);
-                    if new_dock != 0 {
-                        persist_edge_dock(&app_handle, new_dock);
-                    }
-                }
-            } else if IS_HIDDEN.load(Ordering::Relaxed) {
-                IS_HIDDEN.store(false, Ordering::Relaxed);
-                CURRENT_DOCK.store(0, Ordering::Relaxed);
-                persist_edge_dock(&app_handle, 0);
-
-                // Restore pinned state based on user setting when undocked.
-                let mut user_pinned = WINDOW_PINNED.load(Ordering::Relaxed);
-                if let Some(db_state) = app_handle.try_state::<DbState>() {
-                    if let Ok(val) = db_state.settings_repo.get("app.window_pinned") {
-                        user_pinned = val.as_deref() == Some("true");
-                    }
-                }
-
-                let prev = WINDOW_PINNED.swap(user_pinned, Ordering::Relaxed);
-                if prev != user_pinned {
-                    let _ = window.set_always_on_top(user_pinned);
-                    crate::infrastructure::macos_api::window::set_window_focusable(&window, true);
-                    let _ = app_handle.emit("window-pinned-changed", user_pinned);
-                }
-            }
-        }
-    });
-}
 
 #[cfg(target_os = "windows")]
 fn start_edge_docking_monitor(app_handle: AppHandle) {
@@ -1930,7 +1169,8 @@ fn start_edge_docking_monitor(app_handle: AppHandle) {
     });
 }
 
-fn init_analytics(app: &App, repo: &impl SettingsRepository) {
+/// Stable per-device id; the default MQTT client id is derived from it.
+fn ensure_anon_id(repo: &impl SettingsRepository) {
     let machine_id = crate::app::system::get_machine_id();
     let stored_anon_id = repo.get("app.anon_id").unwrap_or(None);
     let anon_id = stored_anon_id
@@ -1944,33 +1184,6 @@ fn init_analytics(app: &App, repo: &impl SettingsRepository) {
     {
         let _ = repo.set("app.anon_id", &anon_id);
     }
-
-    // The window's ping id (see resolve_ping_id). On the first start after an
-    // update it isn't stored yet: only the window pings, and stores it, so
-    // the device keeps the id it had.
-    let Some(ping_id) = repo
-        .get(crate::app::system::PING_ID_KEY)
-        .unwrap_or(None)
-        .as_deref()
-        .and_then(crate::app::system::valid_ping_id)
-    else {
-        return;
-    };
-
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    if repo.get("app.last_ping_date").unwrap_or(None).as_deref() != Some(&today) {
-        let _ = repo.set("app.last_ping_date", &today);
-        let version = app.package_info().version.to_string();
-        
-        let ping_url_base = crate::build_config::announcement_ping_url();
-        
-        std::thread::spawn(move || {
-            let _ = reqwest::blocking::get(format!(
-                "{}?v={}&id={}",
-                ping_url_base, version, ping_id
-            ));
-        });
-    }
 }
 
 fn setup_tray(app: &App, hide_tray: bool) {
@@ -1983,7 +1196,7 @@ fn setup_tray(app: &App, hide_tray: bool) {
     let icon =
         tauri::image::Image::from_bytes(include_bytes!("../../icons/tray-icon.png")).unwrap();
 
-    let mut tray_builder = TrayIconBuilder::with_id("main_tray")
+    let tray_builder = TrayIconBuilder::with_id("main_tray")
         .icon(icon)
         .tooltip("AuraClip 极光剪贴板")
         .show_menu_on_left_click(false)
@@ -2005,11 +1218,6 @@ fn setup_tray(app: &App, hide_tray: bool) {
                 crate::app::window_manager::toggle_window(tray.app_handle());
             }
         });
-
-    #[cfg(target_os = "macos")]
-    {
-        tray_builder = tray_builder.icon_as_template(true);
-    }
 
     let tray = tray_builder.build(app).expect("Failed to build tray");
 
@@ -2116,60 +1324,17 @@ pub fn handle_global_shortcut(
     shortcut: &tauri_plugin_global_shortcut::Shortcut,
     state: tauri_plugin_global_shortcut::ShortcutState,
 ) {
-    use tauri_plugin_global_shortcut::Shortcut;
+    use crate::app::commands::hotkey_cmd::{self, action_for_shortcut};
     use tauri_plugin_global_shortcut::ShortcutState;
     let settings = app.state::<SettingsState>();
+    let released = state == ShortcutState::Released;
 
-    if state == ShortcutState::Pressed {
-        #[cfg(target_os = "windows")]
-        {
-            let phrases = "Alt+C".parse::<Shortcut>().ok();
-            let clipboard = "Alt+V".parse::<Shortcut>().ok();
-            if phrases.as_ref() == Some(shortcut) || clipboard.as_ref() == Some(shortcut) {
-                let tab = if phrases.as_ref() == Some(shortcut) { "phrases" } else { "clipboard" };
-                if crate::app::light_mode::needs_rebuild(app) {
-                    crate::app::light_mode::rebuild_then(app, move |app| {
-                        if !crate::app::window_manager::is_main_window_shown(app) {
-                            toggle_window(app);
-                        }
-                        let _ = app.emit("open-main-tab", tab);
-                    });
-                } else {
-                    if tab == "clipboard" || !crate::app::window_manager::is_main_window_shown(app) {
-                        toggle_window(app);
-                    }
-                    let _ = app.emit("open-main-tab", tab);
-                }
-                return;
-            }
-        }
-        if let Ok(main_s) = {
-            let val = settings.main_hotkey.lock().unwrap().clone();
-            val.replace("Win", "Super").parse::<Shortcut>()
-        } {
-            if shortcut == &main_s {
-                toggle_window(app);
-                return;
-            }
-        }
-
-    } else if state == ShortcutState::Released {
-        if let Ok(seq_s) = {
-            let val = settings.sequential_paste_hotkey.lock().unwrap().clone();
-            val.replace("Win", "Super").parse::<Shortcut>()
-        } {
-            if shortcut == &seq_s {
-                if settings.sequential_mode.load(Ordering::Relaxed) {
-                    crate::services::paste_queue::paste_next_step(app.clone());
-                }
-            }
-        }
-
-        if let Ok(plain_s) = {
-            let val = settings.plain_paste_hotkey.lock().unwrap().clone();
-            val.replace("Win", "Super").parse::<Shortcut>()
-        } {
-            if shortcut == &plain_s {
+    if let Some(action) = action_for_shortcut(&settings, shortcut, released) {
+        match action.id {
+            hotkey_cmd::CLIPBOARD => open_main_tab(app, hotkey_cmd::CLIPBOARD),
+            hotkey_cmd::PHRASES => open_main_tab(app, hotkey_cmd::PHRASES),
+            hotkey_cmd::SEQUENTIAL => crate::services::paste_queue::paste_next_step(app.clone()),
+            hotkey_cmd::PLAIN => {
                 // A registered hotkey never reaches the window, so with an
                 // entry picked by Up/Down the window pastes that one;
                 // otherwise the newest entry is pasted.
@@ -2178,20 +1343,16 @@ pub fn handle_global_shortcut(
                 } else {
                     crate::services::clipboard_ops::paste_latest_plain(app.clone());
                 }
-                return;
             }
-        }
-
-        if let Ok(search_s) = {
-            let val = settings.search_hotkey.lock().unwrap().clone();
-            val.replace("Win", "Super").parse::<Shortcut>()
-        } {
-            if shortcut == &search_s {
+            hotkey_cmd::SEARCH => {
                 let _ = app.emit("focus-search", ());
-                return;
             }
+            _ => {}
         }
+        return;
+    }
 
+    if released {
         let quick_paste_modifier = settings.quick_paste_modifier.lock().unwrap().clone();
         if let Some(index) =
             crate::app::commands::quick_paste_index_from_shortcut(&quick_paste_modifier, shortcut)
@@ -2202,8 +1363,39 @@ pub fn handle_global_shortcut(
                     crate::services::clipboard_ops::paste_history_item_by_index(app_handle, index)
                         .await;
             });
-            return;
         }
+    }
+}
+
+/// Clipboard / quick-phrases hotkeys: hidden → show on `tab`; shown on the
+/// other tab → switch; shown on `tab` → hide.
+fn open_main_tab(app: &AppHandle, tab: &'static str) {
+    use crate::app::commands::hotkey_cmd::{self, TabEffect};
+    if crate::app::light_mode::needs_rebuild(app) {
+        // The rebuilt page starts on the clipboard tab.
+        hotkey_cmd::reset_main_tab();
+        crate::app::light_mode::rebuild_then(app, move |app| {
+            if !crate::app::window_manager::is_main_window_shown(app) {
+                toggle_window(app);
+            }
+            hotkey_cmd::set_main_tab(tab.to_string());
+            let _ = app.emit("open-main-tab", tab);
+        });
+        return;
+    }
+    let shown = crate::app::window_manager::is_main_window_shown(app)
+        && !IS_HIDDEN.load(Ordering::Relaxed);
+    match hotkey_cmd::tab_effect(shown, hotkey_cmd::current_tab(), tab) {
+        TabEffect::Show => {
+            hotkey_cmd::set_main_tab(tab.to_string());
+            let _ = app.emit("open-main-tab", tab);
+            toggle_window(app);
+        }
+        TabEffect::Switch => {
+            hotkey_cmd::set_main_tab(tab.to_string());
+            let _ = app.emit("open-main-tab", tab);
+        }
+        TabEffect::Hide => toggle_window(app),
     }
 }
 
@@ -2242,13 +1434,6 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             }
             api.prevent_close();
             let _ = window.app_handle().emit("force-hide-compact-preview", ());
-            #[cfg(target_os = "macos")]
-            if !crate::infrastructure::macos_api::window::hide_clipboard_panel(
-                window.app_handle(),
-            ) {
-                let _ = window.hide();
-            }
-            #[cfg(not(target_os = "macos"))]
             let _ = window.hide();
             IS_HIDDEN.store(false, Ordering::Relaxed);
             CURRENT_DOCK.store(0, Ordering::Relaxed);
@@ -2312,18 +1497,7 @@ fn persist_window_size(window: &tauri::Window, width: u32, height: u32) {
     });
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn handle_blur(_window: &tauri::Window) {}
 
-#[cfg(target_os = "macos")]
-fn handle_blur(_window: &tauri::Window) {
-    if is_blur_ignored() || WINDOW_PINNED.load(Ordering::Relaxed) {
-        return;
-    }
-
-    // The NSPanel resign-key delegate owns macOS auto-hide. Keep Tauri's
-    // duplicate focus event passive so it cannot race the panel lifecycle.
-}
 
 #[cfg(target_os = "windows")]
 fn handle_blur(window: &tauri::Window) {
@@ -2361,31 +1535,4 @@ fn handle_blur(window: &tauri::Window) {
             }
         }
     });
-}
-
-#[cfg(test)]
-mod silent_start_tests {
-    use super::{migrate_silent_start_once, SILENT_START_MAC_RESET_KEY};
-    use crate::infrastructure::repository::settings_repo::{
-        SettingsRepository, SqliteSettingsRepository,
-    };
-    use std::sync::{Arc, Mutex};
-
-    #[test]
-    fn mac_reset_runs_once_and_then_keeps_the_users_choice() {
-        let conn = Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
-        conn.lock()
-            .unwrap()
-            .execute_batch("CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);")
-            .unwrap();
-        let repo = SqliteSettingsRepository::new(conn);
-        repo.set("app.silent_start", "true").unwrap();
-        migrate_silent_start_once(&repo);
-        assert_eq!(repo.get("app.silent_start").unwrap().as_deref(), Some("false"));
-        assert!(repo.get(SILENT_START_MAC_RESET_KEY).unwrap().is_some());
-
-        repo.set("app.silent_start", "true").unwrap();
-        migrate_silent_start_once(&repo);
-        assert_eq!(repo.get("app.silent_start").unwrap().as_deref(), Some("true"));
-    }
 }

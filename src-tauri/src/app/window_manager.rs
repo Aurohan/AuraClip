@@ -29,10 +29,6 @@ pub fn disable_webview_browser_accelerators(
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (app_handle, label);
-    }
 
     Ok(())
 }
@@ -81,65 +77,6 @@ pub fn maybe_open_devtools(window: &WebviewWindow) {
 #[cfg(not(feature = "devtools"))]
 pub fn maybe_open_devtools(_window: &WebviewWindow) {}
 
-/// AppKit view mutations must run together on the main thread. In particular,
-/// clearing off-thread can succeed while applying returns NotMainThread, leaving
-/// only the transparent webview. Keep the material attached across hide/show.
-#[cfg(target_os = "macos")]
-pub fn apply_macos_window_material(window: &WebviewWindow) -> tauri::Result<()> {
-    let target = window.clone();
-    window.run_on_main_thread(move || {
-        use window_vibrancy::{
-            apply_liquid_glass, apply_vibrancy, clear_liquid_glass, LiquidGlassOptions,
-            NSGlassEffectViewStyle, NSVisualEffectMaterial, NSVisualEffectState,
-        };
-
-        // Read at execution time so queued requests cannot restore an old theme.
-        let settings = target.app_handle().state::<SettingsState>();
-        let theme = settings.theme.lock().unwrap().clone();
-        let material = match theme.as_str() {
-            "mica" => Some(NSVisualEffectMaterial::Sidebar),
-            "acrylic" => Some(NSVisualEffectMaterial::Popover),
-            _ => None,
-        };
-
-        // Both APIs mutate the same native container. Clear on the main thread
-        // before changing material so repeated theme changes never stack views.
-        if let Err(error) = clear_liquid_glass(&target) {
-            eprintln!("[window-material] clear glass failed: {error}");
-            return;
-        }
-        if let Err(error) = window_vibrancy::clear_vibrancy(&target) {
-            eprintln!("[window-material] clear failed: {error}");
-            return;
-        }
-        if theme == "acrylic" {
-            // The library checks AppKit availability before creating the view.
-            // Regular provides frosting; Clear is intentionally more transparent.
-            let options = LiquidGlassOptions::new(NSGlassEffectViewStyle::Regular)
-                .radius(10.0)
-                .opaque(false);
-            match apply_liquid_glass(&target, options) {
-                Ok(()) => return,
-                Err(window_vibrancy::Error::UnsupportedPlatformVersion(_)) => {}
-                Err(error) => {
-                    eprintln!("[window-material] glass failed, using Popover: {error}");
-                }
-            }
-        }
-        if let Some(material) = material {
-            // The clipboard is a non-activating panel and can remain visible
-            // while another application owns focus (especially when pinned).
-            if let Err(error) = apply_vibrancy(
-                &target,
-                material,
-                Some(NSVisualEffectState::Active),
-                Some(12.0),
-            ) {
-                eprintln!("[window-material] apply {theme} failed: {error}");
-            }
-        }
-    })
-}
 
 /// Windows 10-style composition acrylic (SetWindowCompositionAttribute,
 /// accent 4). From 22H2 window-vibrancy maps apply_acrylic to the DWM system
@@ -266,10 +203,6 @@ pub fn apply_windows_window_material(window: &WebviewWindow, theme: &str, is_dar
 }
 
 pub fn apply_window_vibrancy(_app: &AppHandle, window: &WebviewWindow) {
-    #[cfg(target_os = "macos")]
-    if let Err(error) = apply_macos_window_material(window) {
-        eprintln!("[window-material] scheduling failed: {error}");
-    }
 
     #[cfg(target_os = "windows")]
     {
@@ -356,16 +289,7 @@ fn remap_fixed_window_position(
     )
 }
 
-/// Screens, the cursor and the window measured in one unit: points on macOS,
-/// pixels on Windows. On macOS tao gives each screen in its own scale's
-/// pixels, the window in its current screen's and the cursor in the primary
-/// screen's, so with a Retina and a 1x screen the raw numbers don't line up.
-#[cfg(target_os = "macos")]
-pub(crate) fn layout_scale(scale_factor: f64) -> f64 {
-    scale_factor
-}
 
-#[cfg(not(target_os = "macos"))]
 pub(crate) fn layout_scale(_scale_factor: f64) -> f64 {
     1.0
 }
@@ -382,21 +306,6 @@ pub(crate) fn global_cursor_layout(window: &WebviewWindow) -> Option<(f64, f64)>
             }
         }
         Some((point.x as f64, point.y as f64))
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let cursor = window.cursor_position().ok()?;
-        let scale = window
-            .primary_monitor()
-            .ok()
-            .flatten()
-            .map_or(1.0, |monitor| monitor.scale_factor());
-        Some((cursor.x / scale, cursor.y / scale))
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        let _ = window;
-        None
     }
 }
 
@@ -474,21 +383,11 @@ fn position_window_follow_mouse(window: &WebviewWindow) {
         &screens,
     );
 
-    #[cfg(target_os = "macos")]
-    let position = tauri::Position::Logical(tauri::LogicalPosition { x, y });
-    #[cfg(not(target_os = "macos"))]
     let position = tauri::Position::Physical(tauri::PhysicalPosition {
         x: x.round() as i32,
         y: y.round() as i32,
     });
     let _ = window.set_position(position);
-}
-
-fn maybe_position_window_follow_mouse(app: &AppHandle, window: &WebviewWindow) {
-    let settings = app.state::<SettingsState>();
-    if settings.follow_mouse.load(Ordering::Relaxed) {
-        position_window_follow_mouse(window);
-    }
 }
 
 pub fn show_and_focus_main_window(app: &AppHandle) {
@@ -568,28 +467,16 @@ pub fn show_and_focus_main_window(app: &AppHandle) {
             }
         }
 
-        #[cfg(not(windows))]
-        {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
     }
 }
 
 pub fn toggle_window(app: &AppHandle) {
     #[cfg(target_os = "windows")]
     toggle_window_windows(app);
-    #[cfg(target_os = "macos")]
-    toggle_window_macos(app);
 }
 
 /// Whether the clipboard window is currently on screen.
 pub fn is_main_window_shown(app: &AppHandle) -> bool {
-    #[cfg(target_os = "macos")]
-    if crate::infrastructure::macos_api::window::is_clipboard_panel_available(app) {
-        return crate::infrastructure::macos_api::window::is_clipboard_panel_visible();
-    }
     app.get_webview_window("main")
         .map(|window| window.is_visible().unwrap_or(false))
         .unwrap_or(false)
@@ -848,95 +735,6 @@ fn toggle_window_windows(app: &AppHandle) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn toggle_window_macos(app_handle: &AppHandle) {
-    if crate::app::light_mode::needs_rebuild(app_handle) {
-        rebuild_then_toggle(app_handle);
-        return;
-    }
-
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let panel_available =
-            crate::infrastructure::macos_api::window::is_clipboard_panel_available(app_handle);
-        let is_visible = if panel_available {
-            crate::infrastructure::macos_api::window::is_clipboard_panel_visible()
-        } else {
-            window.is_visible().unwrap_or(false)
-        };
-        let is_tucked = crate::app::setup::is_window_edge_tucked(&window);
-
-        eprintln!(
-            "[macos-toggle] visible={} panel={} tucked={}",
-            is_visible, panel_available, is_tucked
-        );
-
-        if is_visible && !is_tucked {
-            eprintln!("[macos-toggle] hide visible panel");
-            let _ = app_handle.emit("force-hide-compact-preview", ());
-            let pinned = WINDOW_PINNED.load(Ordering::Relaxed);
-            let _ = window.set_always_on_top(pinned);
-            crate::infrastructure::macos_api::window::set_window_focusable(&window, false);
-            if !crate::infrastructure::macos_api::window::hide_clipboard_panel(app_handle) {
-                let _ = window.hide();
-            }
-            let _ = restore_previous_app_focus(app_handle.clone());
-
-            IS_HIDDEN.store(false, Ordering::Relaxed);
-            CURRENT_DOCK.store(0, Ordering::Relaxed);
-            NAVIGATION_ENABLED.store(false, Ordering::SeqCst);
-            NAVIGATION_MODE_ACTIVE.store(false, Ordering::SeqCst);
-            crate::app::light_mode::on_window_hidden();
-            return;
-        }
-
-        crate::app::light_mode::on_window_shown();
-        let (prev_app_name, prev_app_pid) =
-            crate::infrastructure::macos_api::window::get_active_app_info();
-        let self_pid = std::process::id();
-        if !prev_app_name.is_empty() && !prev_app_name.eq_ignore_ascii_case("TieZ") {
-            crate::global_state::set_last_active_app_name(prev_app_name);
-        }
-        if let Ok(pid) = prev_app_pid.parse::<u32>() {
-            if pid != 0 && pid != self_pid {
-                crate::global_state::LAST_ACTIVE_APP_PID.store(pid, Ordering::Relaxed);
-            }
-        }
-
-        let expanded = crate::app::setup::expand_from_edge_dock(app_handle, &window);
-        if !expanded {
-            IS_HIDDEN.store(false, Ordering::Relaxed);
-            CURRENT_DOCK.store(0, Ordering::Relaxed);
-            crate::app::setup::persist_edge_dock(app_handle, 0);
-            NAVIGATION_ENABLED.store(true, Ordering::SeqCst);
-        }
-
-        let pinned = WINDOW_PINNED.load(Ordering::Relaxed);
-        let _ = window.set_always_on_top(true);
-        crate::infrastructure::macos_api::window::set_window_focusable(&window, !pinned);
-        let _ = app_handle.emit("window-pinned-changed", pinned);
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        if !expanded {
-            LAST_SHOW_TIMESTAMP.store(now, Ordering::Relaxed);
-            maybe_position_window_follow_mouse(app_handle, &window);
-        }
-
-        eprintln!("[macos-toggle] show + present overlay");
-        if !crate::infrastructure::macos_api::window::show_clipboard_panel(app_handle) {
-            apply_window_vibrancy(app_handle, &window);
-            let _ = window.show();
-            crate::infrastructure::macos_api::window::present_overlay_above_fullscreen_async(
-                &window,
-            );
-            let _ = app_handle.emit("clipboard-shown", ());
-        }
-        crate::infrastructure::macos_api::window::reinforce_overlay_above_fullscreen(&window);
-        maybe_open_devtools(&window);
-    }
-}
 
 #[tauri::command]
 pub fn set_navigation_enabled(enabled: bool) -> Result<(), String> {
@@ -956,8 +754,6 @@ pub fn set_navigation_mode(active: bool) -> Result<(), String> {
 #[tauri::command]
 pub fn activate_window_focus(app_handle: AppHandle) -> Result<(), String> {
     if let Some(window) = app_handle.get_webview_window("main") {
-        #[cfg(target_os = "macos")]
-        crate::infrastructure::macos_api::window::set_window_focusable(&window, true);
 
         #[cfg(windows)]
         {
@@ -976,12 +772,6 @@ pub fn activate_window_focus(app_handle: AppHandle) -> Result<(), String> {
         // Nonactivating NSPanel: Tauri `set_focus()` often fails to make the panel
         // key (or blurs the focused input). Use AppKit makeKeyWindow instead so
         // search/note/tag fields can receive typed characters.
-        #[cfg(target_os = "macos")]
-        {
-            if crate::infrastructure::macos_api::window::make_clipboard_panel_key(&app_handle) {
-                return Ok(());
-            }
-        }
 
         let _ = window.set_focus();
     }
@@ -993,18 +783,6 @@ pub fn activate_window_focus(app_handle: AppHandle) -> Result<(), String> {
 /// an input click can make the non-activating panel resign key mid-keystroke.
 #[tauri::command]
 pub fn activate_app_focus(app_handle: AppHandle) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        use objc2::MainThreadMarker;
-        use objc2_app_kit::NSApplication;
-
-        if let Some(mtm) = MainThreadMarker::new() {
-            #[allow(deprecated)]
-            NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
-        } else {
-            crate::infrastructure::macos_api::apps::activate_app_by_pid(std::process::id() as i32);
-        }
-    }
 
     activate_window_focus(app_handle)
 }
@@ -1021,15 +799,6 @@ fn hide_window(app_handle: AppHandle, restore_focus: bool) -> Result<(), String>
         CURRENT_DOCK.store(0, Ordering::Relaxed);
         let pinned = WINDOW_PINNED.load(Ordering::Relaxed);
         let _ = window.set_always_on_top(pinned);
-        #[cfg(target_os = "macos")]
-        crate::infrastructure::macos_api::window::set_window_focusable(&window, false);
-        #[cfg(target_os = "macos")]
-        {
-            if !crate::infrastructure::macos_api::window::hide_clipboard_panel(&app_handle) {
-                let _ = window.hide();
-            }
-        }
-        #[cfg(not(target_os = "macos"))]
         let _ = window.hide();
         NAVIGATION_ENABLED.store(false, Ordering::SeqCst);
         NAVIGATION_MODE_ACTIVE.store(false, Ordering::SeqCst);
@@ -1089,9 +858,6 @@ pub fn focus_clipboard_window(app_handle: AppHandle) -> Result<(), String> {
         let _ = crate::app::setup::expand_from_edge_dock(&app_handle, &window);
         IS_HIDDEN.store(false, Ordering::Relaxed);
         CURRENT_DOCK.store(0, Ordering::Relaxed);
-        crate::app::setup::persist_edge_dock(&app_handle, 0);
-        #[cfg(target_os = "macos")]
-        crate::infrastructure::macos_api::window::set_window_focusable(&window, true);
 
         #[cfg(windows)]
         {
@@ -1100,39 +866,6 @@ pub fn focus_clipboard_window(app_handle: AppHandle) -> Result<(), String> {
             return Ok(());
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64;
-            LAST_SHOW_TIMESTAMP.store(now, Ordering::Relaxed);
-
-            if crate::infrastructure::macos_api::window::is_clipboard_panel_visible() {
-                let _ =
-                    crate::infrastructure::macos_api::window::make_clipboard_panel_key(&app_handle);
-                maybe_open_devtools(&window);
-                return Ok(());
-            }
-
-            if !crate::infrastructure::macos_api::window::show_clipboard_panel(&app_handle) {
-                apply_window_vibrancy(&app_handle, &window);
-                let _ = window.show();
-                let _ = window.set_focus();
-                let _ = app_handle.emit("clipboard-shown", ());
-            }
-            crate::infrastructure::macos_api::window::reinforce_overlay_above_fullscreen(&window);
-            maybe_open_devtools(&window);
-            return Ok(());
-        }
-        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-        {
-            let _ = window.show();
-            let _ = window.set_focus();
-            let _ = app_handle.emit("clipboard-shown", ());
-            maybe_open_devtools(&window);
-            return Ok(());
-        }
     } else {
         Err("Main window not found".to_string())
     }
@@ -1150,18 +883,6 @@ pub fn restore_previous_app_focus(_app_handle: AppHandle) -> Result<(), String> 
         std::thread::sleep(std::time::Duration::from_millis(60));
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        let prev_pid = crate::global_state::LAST_ACTIVE_APP_PID.load(Ordering::Relaxed);
-        if prev_pid != 0 {
-            crate::infrastructure::macos_api::apps::activate_app_by_pid(prev_pid as i32);
-        } else {
-            let prev_app = crate::global_state::get_last_active_app_name();
-            if !prev_app.trim().is_empty() {
-                crate::infrastructure::macos_api::apps::activate_app_by_name(&prev_app);
-            }
-        }
-    }
 
     Ok(())
 }

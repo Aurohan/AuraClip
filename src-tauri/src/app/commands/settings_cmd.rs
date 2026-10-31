@@ -31,63 +31,6 @@ pub fn set_sequential_mode(
 }
 
 #[tauri::command]
-pub fn set_sequential_hotkey(
-    app_handle: AppHandle,
-    state: State<'_, SettingsState>,
-    hotkey: String,
-) -> AppResult<()> {
-    if let Ok(mut guard) = state.sequential_paste_hotkey.lock() {
-        *guard = hotkey.clone();
-    }
-
-    let db_state = app_handle.state::<DbState>();
-    db_state
-        .settings_repo
-        .set("app.sequential_hotkey", &hotkey)
-        .map_err(AppError::from)?;
-
-    sync_registered_hotkeys(&app_handle)
-}
-
-#[tauri::command]
-pub fn set_plain_paste_hotkey(
-    app_handle: AppHandle,
-    state: State<'_, SettingsState>,
-    hotkey: String,
-) -> AppResult<()> {
-    if let Ok(mut guard) = state.plain_paste_hotkey.lock() {
-        *guard = hotkey.clone();
-    }
-
-    let db_state = app_handle.state::<DbState>();
-    db_state
-        .settings_repo
-        .set("app.plain_paste_hotkey", &hotkey)
-        .map_err(AppError::from)?;
-
-    sync_registered_hotkeys(&app_handle)
-}
-
-#[tauri::command]
-pub fn set_search_hotkey(
-    app_handle: AppHandle,
-    state: State<'_, SettingsState>,
-    hotkey: String,
-) -> AppResult<()> {
-    if let Ok(mut guard) = state.search_hotkey.lock() {
-        *guard = hotkey.clone();
-    }
-
-    let db_state = app_handle.state::<DbState>();
-    db_state
-        .settings_repo
-        .set("app.search_hotkey", &hotkey)
-        .map_err(AppError::from)?;
-
-    sync_registered_hotkeys(&app_handle)
-}
-
-#[tauri::command]
 pub fn set_quick_paste_modifier(
     app_handle: AppHandle,
     state: State<'_, SettingsState>,
@@ -142,11 +85,6 @@ pub fn save_setting(
         "app.sound_enabled" => {
             settings_state
                 .sound_enabled
-                .store(value == "true", Ordering::Relaxed);
-        }
-        "app.sound_paste_enabled" => {
-            settings_state
-                .paste_sound_enabled
                 .store(value == "true", Ordering::Relaxed);
         }
         "app.sound_volume" => {
@@ -219,11 +157,6 @@ pub fn save_setting(
                 .hide_tray_icon
                 .store(value == "true", Ordering::Relaxed);
         }
-        "app.hide_dock_icon" => {
-            settings_state
-                .hide_dock_icon
-                .store(value == "true", Ordering::Relaxed);
-        }
         _ => {}
     }
 
@@ -263,19 +196,6 @@ pub fn set_window_pinned(app_handle: AppHandle, state: State<'_, DbState>, pinne
         let _ = window.set_always_on_top(pinned);
         #[cfg(target_os = "windows")]
         let _ = window.set_focusable(!pinned);
-        #[cfg(target_os = "macos")]
-        {
-            // NSPanel focusability cannot be changed through Tauri after panel
-            // conversion. In pinned mode, let ordinary clicks pass through
-            // without making the clipboard key; editable controls opt in via
-            // the shared focus coordinator.
-            let _ = crate::infrastructure::macos_api::window::set_clipboard_panel_pinned_interaction(
-                &app_handle,
-                pinned,
-            );
-        }
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-        let _ = window.set_focusable(false);
         #[cfg(windows)]
         {
             use windows::Win32::Foundation::HWND;
@@ -318,29 +238,6 @@ pub fn get_undecryptable_settings(state: State<'_, DbState>) -> AppResult<Vec<St
 #[tauri::command]
 pub fn clear_undecryptable_settings(state: State<'_, DbState>, keys: Vec<String>) -> AppResult<Vec<String>> {
     state.settings_repo.clear_undecryptable(&keys).map_err(AppError::from)
-}
-
-#[tauri::command]
-pub fn set_file_server_auto_close(
-    state: State<'_, crate::app_state::SettingsState>,
-    db_state: State<'_, DbState>,
-    enabled: bool,
-) -> AppResult<()> {
-    state
-        .file_server_auto_close
-        .store(enabled, Ordering::Relaxed);
-    db_state
-        .settings_repo
-        .set("file_transfer_auto_close", &enabled.to_string())
-        .map_err(AppError::from)
-}
-
-#[tauri::command]
-pub fn set_file_transfer_auto_open(db_state: State<'_, DbState>, enabled: bool) -> AppResult<()> {
-    db_state
-        .settings_repo
-        .set("file_transfer_auto_open", &enabled.to_string())
-        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -403,22 +300,6 @@ pub fn set_rich_text_snapshot_preview(
     db_state
         .settings_repo
         .set("app.rich_text_snapshot_preview", &enabled.to_string())
-        .map_err(AppError::from)
-}
-
-#[tauri::command]
-pub fn set_auto_copy_file(
-    state: State<'_, crate::app_state::SettingsState>,
-    db_state: State<'_, DbState>,
-    enabled: bool,
-) -> AppResult<()> {
-    state.auto_copy_file.store(enabled, Ordering::Relaxed);
-    db_state
-        .settings_repo
-        .set(
-            "file_transfer_auto_copy",
-            if enabled { "true" } else { "false" },
-        )
         .map_err(AppError::from)
 }
 
@@ -534,25 +415,7 @@ pub fn set_sound_enabled(
         .settings_repo
         .set("app.sound_enabled", &enabled.to_string())
         .map_err(AppError::from)?;
-    if enabled {
-        crate::services::ui_sound::preload_ui_sounds();
-    }
     Ok(())
-}
-
-#[tauri::command]
-pub fn set_paste_sound_enabled(
-    state: State<'_, crate::app_state::SettingsState>,
-    db_state: State<'_, DbState>,
-    enabled: bool,
-) -> AppResult<()> {
-    state
-        .paste_sound_enabled
-        .store(enabled, Ordering::Relaxed);
-    db_state
-        .settings_repo
-        .set("app.sound_paste_enabled", &enabled.to_string())
-        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -577,33 +440,6 @@ pub fn restart_mqtt_client(app_handle: AppHandle) {
 }
 
 #[tauri::command]
-pub fn get_cloud_sync_status() -> crate::services::cloud_sync::CloudSyncStatus {
-    crate::services::cloud_sync::get_cloud_sync_status()
-}
-
-#[tauri::command]
-pub fn restart_cloud_sync_client(app_handle: AppHandle) {
-    crate::services::cloud_sync::restart_cloud_sync_client(app_handle);
-}
-
-#[tauri::command]
-pub fn request_cloud_sync(app_handle: AppHandle) {
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
-}
-
-#[tauri::command]
-pub fn stop_cloud_sync_client(app_handle: AppHandle) {
-    crate::services::cloud_sync::stop_cloud_sync_client(app_handle);
-}
-
-#[tauri::command]
-pub async fn cloud_sync_now(
-    app_handle: AppHandle,
-) -> AppResult<crate::services::cloud_sync::CloudSyncStatus> {
-    crate::services::cloud_sync::cloud_sync_now(app_handle).await
-}
-
-#[tauri::command]
 pub fn reset_settings(
     app: AppHandle,
     state: State<'_, DbState>,
@@ -611,22 +447,11 @@ pub fn reset_settings(
 ) -> AppResult<()> {
     use crate::database::seed_defaults;
 
-    // A reset must not make this device count as a new one.
-    let ping_id = state
-        .settings_repo
-        .get(crate::app::system::PING_ID_KEY)
-        .unwrap_or(None);
     state.settings_repo.clear().map_err(AppError::from)?;
     {
         let conn = state.conn.lock().unwrap();
         seed_defaults(&conn).map_err(AppError::from)?;
     }
-    if let Some(ping_id) = ping_id {
-        let _ = state
-            .settings_repo
-            .set(crate::app::system::PING_ID_KEY, &ping_id);
-    }
-
     let machine_id = crate::app::system::get_machine_id();
     let new_id = crate::app::system::build_anon_id(&machine_id);
     state
@@ -637,10 +462,13 @@ pub fn reset_settings(
     // Running state follows the defaults now, not after the next start.
     let fresh = crate::app::setup::load_settings(&state.settings_repo);
     settings_state.take_values_from(crate::app::setup::settings_state_from(&fresh));
-    *crate::global_state::HOTKEY_STRING.lock().unwrap() = fresh.main_hotkey.clone();
+    *crate::global_state::HOTKEY_STRING.lock().unwrap() = fresh
+        .hotkeys
+        .get(crate::app::commands::hotkey_cmd::CLIPBOARD)
+        .cloned()
+        .unwrap_or_default();
     // The window applies the rest when it reloads, but not these two.
     let _ = set_tray_visible(app.clone(), app.state(), !fresh.hide_tray_icon);
-    let _ = set_dock_visible(app.clone(), app.state(), !fresh.hide_dock_icon);
 
     sync_registered_hotkeys(&app)
 }
@@ -663,43 +491,6 @@ pub fn set_tray_visible(
 }
 
 #[tauri::command]
-pub fn set_dock_visible(
-    app_handle: AppHandle,
-    state: State<'_, crate::app_state::SettingsState>,
-    visible: bool,
-) -> AppResult<()> {
-    state.hide_dock_icon.store(!visible, Ordering::Relaxed);
-    #[cfg(target_os = "macos")]
-    {
-        crate::infrastructure::macos_api::window::set_dock_visibility_preserving_panel(
-            &app_handle, visible,
-        ).map_err(AppError::from)?;
-        if !visible {
-            // Tao intentionally drops a hide within one second of showing the
-            // Dock icon. Retry beyond that interval, but respect a newer toggle.
-            let app = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
-                let app_on_main = app.clone();
-                let _ = app.run_on_main_thread(move || {
-                    let settings = app_on_main.state::<crate::app_state::SettingsState>();
-                    if settings.hide_dock_icon.load(Ordering::Relaxed) {
-                        if let Err(error) = crate::infrastructure::macos_api::window::set_dock_visibility_preserving_panel(&app_on_main, false) {
-                            eprintln!("Failed to retry hiding Dock icon: {error}");
-                        }
-                    }
-                });
-            });
-        }
-    }
-    let db_state = app_handle.state::<DbState>();
-    db_state
-        .settings_repo
-        .set("app.hide_dock_icon", &(!visible).to_string())
-        .map_err(AppError::from)
-}
-
-#[tauri::command]
 pub fn set_edge_docking(
     app_handle: AppHandle,
     state: State<'_, crate::app_state::SettingsState>,
@@ -711,9 +502,6 @@ pub fn set_edge_docking(
         .settings_repo
         .set("app.edge_docking", &enabled.to_string())
         .map_err(AppError::from)?;
-    if !enabled {
-        crate::app::setup::persist_edge_dock(&app_handle, 0);
-    }
     Ok(())
 }
 

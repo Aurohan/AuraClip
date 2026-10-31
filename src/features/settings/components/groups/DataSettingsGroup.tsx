@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import AppModal from "../../../../shared/components/AppModal";
 import { withNativeDialog } from "../../../../shared/lib/focus";
-import { isMacPlatform, isWindowsPlatform } from "../../../../shared/lib/platform";
 import { formatError } from "../../../../shared/lib/errorMessage";
 
 interface DataSettingsGroupProps {
@@ -26,8 +25,6 @@ interface DataSettingsGroupProps {
     collapsed: boolean;
     onToggle: () => void;
     dataPath: string;
-    /** Portable build: the data stays in the folder next to the app. */
-    portable: boolean;
 }
 
 interface ImportReport {
@@ -57,7 +54,7 @@ interface DiscoveredImportSource {
 }
 
 interface SupportedImportApp {
-    id: "maccy" | "ditto";
+    id: "ditto";
     name: string;
     platform: string;
     summaryKey: string;
@@ -68,16 +65,7 @@ interface SupportedImportApp {
 
 type ImportStep = "apps" | "confirm" | "progress" | "result" | "error";
 
-const allImportApps: SupportedImportApp[] = [
-    {
-        id: "maccy",
-        name: "Maccy",
-        platform: "macOS",
-        summaryKey: "third_party_import_summary_maccy",
-        chooseKey: "third_party_import_choose_maccy",
-        fileTypeKey: "third_party_import_file_type_maccy",
-        extensions: ["sqlite", "sqlite3"]
-    },
+const supportedApps: SupportedImportApp[] = [
     {
         id: "ditto",
         name: "Ditto",
@@ -101,8 +89,7 @@ const DataSettingsGroup = ({
     theme,
     collapsed,
     onToggle,
-    dataPath,
-    portable
+    dataPath
 }: DataSettingsGroupProps) => {
     const [modalOpen, setModalOpen] = useState(false);
     const [step, setStep] = useState<ImportStep>("apps");
@@ -114,12 +101,6 @@ const DataSettingsGroup = ({
     const [report, setReport] = useState<ImportReport | null>(null);
     const [importError, setImportError] = useState("");
     const importing = step === "progress";
-
-    const supportedApps = isMacPlatform()
-        ? allImportApps.filter((app) => app.id === "maccy")
-        : isWindowsPlatform()
-            ? allImportApps.filter((app) => app.id === "ditto")
-            : allImportApps;
 
     const format = (key: string, values: Record<string, string | number>) =>
         Object.entries(values).reduce(
@@ -427,46 +408,44 @@ const DataSettingsGroup = ({
                                     <span className="item-label">{t("data_path")}</span>
                                 </div>
                                 <div className="settings-action-group">
-                                    {!portable && (
-                                        <button
-                                            type="button"
-                                            className="settings-action-button settings-action-button--small"
-                                            onClick={async () => {
-                                                await withNativeDialog(async () => {
-                                                    const selected = await open({
-                                                        directory: true,
-                                                        multiple: false,
-                                                        title: t("change_data_path")
-                                                    });
-                                                    if (!selected) return;
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button--small"
+                                        onClick={async () => {
+                                            await withNativeDialog(async () => {
+                                                const selected = await open({
+                                                    directory: true,
+                                                    multiple: false,
+                                                    title: t("change_data_path")
+                                                });
+                                                if (!selected) return;
 
-                                                    const newPath = selected as string;
-                                                    const confirmed = await ask(
-                                                        t("data_move_confirm").replace("{path}", newPath),
-                                                        { title: t("change_data_path"), kind: "warning", okLabel: t("confirm"), cancelLabel: t("cancel") }
+                                                const newPath = selected as string;
+                                                const confirmed = await ask(
+                                                    t("data_move_confirm").replace("{path}", newPath),
+                                                    { title: t("change_data_path"), kind: "warning", okLabel: t("confirm"), cancelLabel: t("cancel") }
+                                                );
+                                                if (!confirmed) return;
+
+                                                try {
+                                                    await invoke("set_data_path", { newPath });
+                                                    await message(
+                                                        t("data_move_success"),
+                                                        { title: t("notice"), kind: "info" }
                                                     );
-                                                    if (!confirmed) return;
-
-                                                    try {
-                                                        await invoke("set_data_path", { newPath });
-                                                        await message(
-                                                            t("data_move_success"),
-                                                            { title: t("notice"), kind: "info" }
-                                                        );
-                                                        await invoke("relaunch");
-                                                    } catch (error: unknown) {
-                                                        console.error(error);
-                                                        await message(
-                                                            t("data_move_failed").replace("{e}", formatError(error, t)),
-                                                            { title: t("error"), kind: "error" }
-                                                        );
-                                                    }
-                                                }, "settings:change-data-path");
-                                            }}
-                                        >
-                                            {t("change_app")}
-                                        </button>
-                                    )}
+                                                    await invoke("relaunch");
+                                                } catch (error: unknown) {
+                                                    console.error(error);
+                                                    await message(
+                                                        t("data_move_failed").replace("{e}", formatError(error, t)),
+                                                        { title: t("error"), kind: "error" }
+                                                    );
+                                                }
+                                            }, "settings:change-data-path");
+                                        }}
+                                    >
+                                        {t("change_app")}
+                                    </button>
                                     <button
                                         type="button"
                                         className="settings-action-button settings-action-button--small"
@@ -491,9 +470,6 @@ const DataSettingsGroup = ({
                             <div className="data-panel settings-path-panel is-static">
                                 {dataPath}
                             </div>
-                            {portable && (
-                                <span className="item-desc">{t("data_path_portable_hint")}</span>
-                            )}
                         </div>
                         <div className="setting-item clipboard-import-entry">
                             <div className="item-label-group">

@@ -1,20 +1,13 @@
-import type { ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import appLogo from "../../../../src-tauri/icons/128x128@2x.png";
-import type { ReleaseChannel } from "../../../shared/lib/releaseBuild";
 
 interface SettingsAboutProps {
     t: (key: string) => string;
     appVersion: string;
-    releaseChannel: ReleaseChannel;
-    portable: boolean;
-    updateButton?: ReactNode;
-    emailCopied?: boolean;
-    onCopyEmail?: () => void;
     onResetSettings: () => void;
 }
 
-const SettingsAbout = ({ t, appVersion, releaseChannel, portable, onResetSettings }: SettingsAboutProps) => (
+const SettingsAbout = ({ t, appVersion, onResetSettings }: SettingsAboutProps) => (
     <section className="settings-about" aria-label={t("settings_about")}>
         <header className="settings-about-header">
             <div className="settings-about-identity">
@@ -32,8 +25,6 @@ const SettingsAbout = ({ t, appVersion, releaseChannel, portable, onResetSetting
                 <span className="settings-about-caption">{t("about_version")}</span>
                 <div className="settings-about-version-number">
                     <strong>{appVersion ? `v${appVersion}` : "v1.0.0"}</strong>
-                    {releaseChannel === "beta" && <span className="settings-version-badge beta">Beta</span>}
-                    {portable && <span className="settings-version-badge portable">Portable</span>}
                 </div>
             </div>
         </div>

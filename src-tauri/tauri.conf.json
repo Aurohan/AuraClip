@@ -3,18 +3,10 @@
   "productName": "AuraClip",
   "version": "1.0.0",
   "identifier": "com.auradesk.auraclip",
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0MDY1QzlGQkU0ODcwMjMKUldRamNFaStuMXdHcEtFWlNINnVJcVgxa2tRb0wrRlBjdzRmZ3Z1WGJxZ1V3R0w5ZmNUemtvRjMK",
-      "endpoints": [
-        "https://tiez.name666.top/api/v1/latest-version?target={{target}}&arch={{arch}}&current_version={{current_version}}&channel=stable"
-      ]
-    }
-  },
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist/web"
   },
   "app": {
@@ -35,13 +27,10 @@
         "devtools": false,
         "skipTaskbar": true,
         "visible": false,
-        "visibleOnAllWorkspaces": true,
         "dragDropEnabled": false,
-        "acceptFirstMouse": true,
         "focusable": true
       }
     ],
-    "macOSPrivateApi": true,
     "security": {
       "dangerousDisableAssetCspModification": [
         "style-src"
@@ -93,27 +82,6 @@
             "dialog:allow-open",
             "dialog:allow-save",
             "dialog:default",
-            "fs:default",
-            {
-              "identifier": "fs:allow-read",
-              "allow": [
-                {
-                  "path": "**"
-                },
-                {
-                  "path": "$HOME/**"
-                },
-                {
-                  "path": "$APPDATA/**"
-                },
-                {
-                  "path": "$APPLOCALDATA/**"
-                },
-                {
-                  "path": "$PROFILE/**"
-                }
-              ]
-            },
             {
               "identifier": "core:path:default",
               "allow": [
@@ -131,27 +99,7 @@
                 }
               ]
             },
-            "opener:default",
-            {
-              "identifier": "opener:allow-open-url",
-              "allow": [
-                {
-                  "url": "http://localhost:3000/**"
-                },
-                {
-                  "url": "http://127.0.0.1:3000/**"
-                },
-                {
-                  "url": "https://tiez.name666.top/**"
-                },
-                {
-                  "url": "https://github.com/jimuzhe/tie-z/**"
-                }
-              ]
-            },
-            "window-state:default",
-            "updater:default",
-            "process:allow-restart"
+            "window-state:default"
           ]
         }
       ]
@@ -159,20 +107,29 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/app.icns"
+      "icons/icon.ico"
     ],
-    "targets": [
-      "dmg",
-      "app"
-    ],
-    "macOS": {
-      "frameworks": [],
-      "minimumSystemVersion": "10.13"
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "compression": "lzma",
+        "installerHooks": "nsis/uninstall.nsh",
+        "languages": [
+          "English",
+          "SimpChinese",
+          "TradChinese"
+        ],
+        "displayLanguageSelector": true,
+        "startMenuFolder": "AuraClip"
+      }
     }
   }
 }

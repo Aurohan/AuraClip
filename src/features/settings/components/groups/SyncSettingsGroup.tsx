@@ -1,13 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import ConfigShareQr from "../ConfigShareQr";
 import { SettingSwitch } from "../SettingControls";
-import {
-    buildMqttConfigQrPayload,
-    isMqttConfigQrReady,
-} from "../../utils/configQr";
-import E2eKeyPanel from "./E2eKeyPanel";
 
 interface LabelWithHintProps {
     label: string;
@@ -40,8 +34,6 @@ interface SyncSettingsGroupProps {
     setMqttTopic: (val: string) => void;
     mqttNotificationEnabled: boolean;
     setMqttNotificationEnabled: (val: boolean) => void;
-    e2eKey: string;
-    saveE2eKey: (value: string) => Promise<void>;
 }
 
 const SyncSettingsGroup = ({
@@ -68,9 +60,7 @@ const SyncSettingsGroup = ({
     mqttTopic,
     setMqttTopic,
     mqttNotificationEnabled,
-    setMqttNotificationEnabled,
-    e2eKey,
-    saveE2eKey
+    setMqttNotificationEnabled
 }: SyncSettingsGroupProps) => (
     <div className={`settings-group ${collapsed ? 'collapsed' : ''}`}>
         <button type="button" className="group-header" aria-expanded={!collapsed} onClick={onToggle}>
@@ -87,22 +77,6 @@ const SyncSettingsGroup = ({
         </button>
         {!collapsed && (
             <div className="group-content">
-                <div className="settings-notice settings-notice--action">
-                    <span>{t('mqtt_tutorial_hint')}</span>
-                    <button
-                        type="button"
-                        className="settings-action-button settings-action-button--small"
-                        onClick={() => {
-                            invoke("open_content", {
-                                id: 0,
-                                content: 'https://my.feishu.cn/docx/JFjVdSqaGou5ZDxFGUZczCz2nth?from=from_copylink',
-                                contentType: 'url'
-                            });
-                        }}
-                    >
-                        {t('view_tutorial')}
-                    </button>
-                </div>
                 <div className="setting-item">
                     <div className="item-label-group">
                         <span className="item-label">{t('enable_sync')}</span>
@@ -228,34 +202,6 @@ const SyncSettingsGroup = ({
                                 placeholder="tiez/my_device"
                             />
                         </div>
-                        {/* Encryption is not offered to new setups; a device that already
-                            has a key still sees it, so it can be turned off. Above the
-                            QR code, which carries the key while one is set. */}
-                        {e2eKey && <E2eKeyPanel t={t} e2eKey={e2eKey} saveE2eKey={saveE2eKey} hintPrefix="mqtt" />}
-                        {(() => {
-                            const mqttQr = buildMqttConfigQrPayload({
-                                server: mqttServer,
-                                port: mqttPort,
-                                protocol: mqttProtocol,
-                                wsPath: mqttWsPath,
-                                username: mqttUser,
-                                password: mqttPass,
-                                topic: mqttTopic,
-                                e2eKey,
-                            });
-                            const mqttQrReady = isMqttConfigQrReady(mqttQr);
-                            return (
-                                <ConfigShareQr
-                                    value={JSON.stringify(mqttQr)}
-                                    ready={mqttQrReady}
-                                    title={t('mqtt_share_qr_title')}
-                                    hint={t('mqtt_share_qr_hint')}
-                                    emptyHint={t('mqtt_share_qr_empty')}
-                                revealLabel={t('config_qr_reveal')}
-                                revealHint={t('config_qr_reveal_hint')}
-                                />
-                            );
-                        })()}
                     </>
                 )}
             </div>

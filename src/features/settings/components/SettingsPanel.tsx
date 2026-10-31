@@ -1,13 +1,12 @@
 
 import { memo, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { emit, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import {
     AppWindow,
     ChevronRight,
     Clipboard,
-    Cloud,
     Database,
     Info,
     ListFilter,
@@ -15,39 +14,28 @@ import {
     Palette,
     Settings2,
     ShieldCheck,
-    Sparkles,
-    Wifi,
     type LucideIcon
 } from "lucide-react";
 import type { Locale } from "../../../shared/types";
-import { formatError } from "../../../shared/lib/errorMessage";
-import type { DefaultAppsMap, InstalledAppOption, SettingsSubpage, CloudSyncContentPrefs } from "../../app/types";
-import type { AiProfile, AiProfileStatusMap, AppCleanupPolicy, EditableAiProfile } from "../types";
-import { resolveTaskProfile } from "../aiPresets";
+import type { DefaultAppsMap, InstalledAppOption, SettingsSubpage } from "../../app/types";
+import type { HotkeySettings } from "../../../shared/lib/hotkeyActions";
+import type { AppCleanupPolicy } from "../types";
 import { chosenApp, unchosenFallback } from "../utils/defaultApps";
 import AppSelectorModal from "./AppSelectorModal";
-// Removed UpdateModal imports
-import AiProfileModal from "./AiProfileModal";
 import GeneralSettingsGroup from "./groups/GeneralSettingsGroup";
 import ClipboardSettingsGroup from "./groups/ClipboardSettingsGroup";
 import AdvancedSettingsGroup from "./groups/AdvancedSettingsGroup";
 import AppearanceSettingsGroup from "./groups/AppearanceSettingsGroup";
 import SyncSettingsGroup from "./groups/SyncSettingsGroup";
-import CloudSyncSettingsGroup, { type CloudSyncStatusPayload } from "./groups/CloudSyncSettingsGroup";
-import { useE2eKey } from "../hooks/useE2eKey";
 import DefaultAppsSettingsGroup from "./groups/DefaultAppsSettingsGroup";
 import DataSettingsGroup from "./groups/DataSettingsGroup";
-import FileTransferSettingsGroup from "./groups/FileTransferSettingsGroup";
 import { useUnreadableSecrets } from "../useUnreadableSecrets";
-import AiSettingsGroup from "./groups/AiSettingsGroup";
 import SettingsFooter from "./SettingsFooter";
 import { LabelWithHint, SettingsHintProvider } from "./SettingsHint";
 import SecureTransfer from "./SecureTransfer";
 import { useWideWindow } from "../../../shared/hooks/useWideWindow";
 import { usePaneWidth } from "../../../shared/hooks/usePaneWidth";
 import PaneDivider from "../../../shared/components/PaneDivider";
-import { CLOUD_SYNC_ENABLED } from "../../../shared/config/edition";
-import { getReleaseBuildInfo, type ReleaseBuildInfo } from "../../../shared/lib/releaseBuild";
 
 interface SettingsPanelProps {
     t: (key: string) => string;
@@ -89,12 +77,6 @@ interface SettingsPanelProps {
     registryWinVEnabled: boolean;
     setRegistryWinVEnabled: (val: boolean) => void;
     sequentialMode: boolean;
-    sequentialHotkey: string;
-    isRecordingSequential: boolean;
-    plainPasteHotkey: string;
-    isRecordingPlain: boolean;
-    searchHotkey: string;
-    isRecordingSearch: boolean;
     quickPasteModifier: "disabled" | "ctrl" | "alt" | "shift" | "win";
     setQuickPasteModifier: (val: "disabled" | "ctrl" | "alt" | "shift" | "win") => void;
     privacyProtection: boolean;
@@ -112,7 +94,6 @@ interface SettingsPanelProps {
     setCleanupRules: (val: string) => void;
     appCleanupPolicies: AppCleanupPolicy[];
     setAppCleanupPolicies: (val: AppCleanupPolicy[]) => void;
-    hotkey: string;
     showHotkeyHint: boolean;
     showSearchBox: boolean;
     setShowSearchBox: (val: boolean) => void;
@@ -120,8 +101,6 @@ interface SettingsPanelProps {
     setSearchBoxPinned: (val: boolean) => void;
     scrollTopButtonEnabled: boolean;
     setScrollTopButtonEnabled: (val: boolean) => void;
-    emojiPanelEnabled: boolean;
-    setEmojiPanelEnabled: (val: boolean) => void;
     tagManagerEnabled: boolean;
     setTagManagerEnabled: (val: boolean) => void;
     arrowKeySelection: boolean;
@@ -134,14 +113,10 @@ interface SettingsPanelProps {
 
     soundEnabled: boolean;
     setSoundEnabled: (val: boolean) => void;
-    pasteSoundEnabled: boolean;
-    setPasteSoundEnabled: (val: boolean) => void;
     soundVolume: number;
     setSoundVolume: (val: number) => void;
     hideTrayIcon: boolean;
     setHideTrayIcon: (val: boolean) => void;
-    hideDockIcon: boolean;
-    setHideDockIcon: (val: boolean) => void;
     edgeDocking: boolean;
     setEdgeDocking: (val: boolean) => void;
     followMouse: boolean;
@@ -163,33 +138,6 @@ interface SettingsPanelProps {
     mqttProtocol: string;
     mqttWsPath: string;
     mqttNotificationEnabled: boolean;
-    cloudSyncEnabled: boolean;
-    cloudSyncAuto: boolean;
-    cloudSyncProvider: "http" | "webdav";
-    cloudSyncServer: string;
-    cloudSyncApiKey: string;
-    cloudSyncIntervalSec: string;
-    cloudSyncSnapshotIntervalMin: string;
-    cloudSyncWebdavUrl: string;
-    cloudSyncWebdavUsername: string;
-    cloudSyncWebdavPassword: string;
-    cloudSyncWebdavBasePath: string;
-    cloudSyncContentPrefs: CloudSyncContentPrefs;
-    setCloudSyncContentPrefs: (val: CloudSyncContentPrefs) => void;
-
-    fileServerEnabled: boolean;
-    fileServerPort: string;
-    localIp: string;
-    availableIps?: string[];
-    setLocalIp?: (val: string) => void;
-    actualPort: string;
-    fileTransferAccessToken: string;
-    fileTransferLanKey: string;
-    fileTransferAutoOpen: boolean;
-    showAutoCloseHint: boolean;
-    fileServerAutoClose: boolean;
-    fileTransferAutoCopy: boolean;
-    fileTransferPath: string;
 
     installedApps: InstalledAppOption[];
     appSettings: Record<string, string>;
@@ -215,18 +163,9 @@ interface SettingsPanelProps {
     setClickCopyOnly: (val: boolean) => void;
     saveAppSetting: (key: string, val: string) => void;
     setSequentialModeState: (val: boolean) => void;
-    setIsRecordingSequential: (val: boolean) => void;
-    updateSequentialHotkey: (key: string) => void;
-    setIsRecordingPlain: (val: boolean) => void;
-    updatePlainPasteHotkey: (key: string) => void;
-    setIsRecordingSearch: (val: boolean) => void;
-    updateSearchHotkey: (key: string) => void;
     setPrivacyProtection: (val: boolean) => void;
     setShowHotkeyHint: (val: boolean) => void;
-    setIsRecording: (val: boolean) => void;
-    isRecording: boolean;
-    hotkeyParts: string[];
-    updateHotkey: (key: string) => void;
+    hotkeySettings: HotkeySettings;
 
     setTheme: (val: string) => void;
     setColorMode: (val: string) => void;
@@ -239,7 +178,6 @@ interface SettingsPanelProps {
     setCompactShowTime: (val: boolean) => void;
     splitViewEnabled: boolean;
     setSplitViewEnabled: (val: boolean) => void;
-    checkHotkeyConflict: (newHotkey: string, mode: 'main' | 'sequential' | 'plain' | 'search') => boolean;
 
 
     setMqttEnabled: (val: boolean) => void;
@@ -252,45 +190,9 @@ interface SettingsPanelProps {
     setMqttProtocol: (val: string) => void;
     setMqttWsPath: (val: string) => void;
     setMqttNotificationEnabled: (val: boolean) => void;
-    setCloudSyncEnabled: (val: boolean) => void;
-    setCloudSyncAuto: (val: boolean) => void;
-    setCloudSyncProvider: (val: "http" | "webdav") => void;
-    setCloudSyncServer: (val: string) => void;
-    setCloudSyncApiKey: (val: string) => void;
-    setCloudSyncIntervalSec: (val: string) => void;
-    setCloudSyncSnapshotIntervalMin: (val: string) => void;
-    setCloudSyncWebdavUrl: (val: string) => void;
-    setCloudSyncWebdavUsername: (val: string) => void;
-    setCloudSyncWebdavPassword: (val: string) => void;
-    setCloudSyncWebdavBasePath: (val: string) => void;
-    saveCloudSync: (key: string, val: string) => void;
-
-    setFileServerEnabled: (val: boolean) => void;
-    setFileServerPort: (val: string) => void;
-    setFileTransferAutoOpen: (val: boolean) => void;
-    setShowAutoCloseHint: (val: boolean) => void;
-    setFileServerAutoClose: (val: boolean) => void;
-    setFileTransferAutoCopy: (val: boolean) => void;
-    fetchEffectiveTransferPath: () => void;
 
     setShowAppSelector: (val: string | null) => void;
     handleResetSettings: () => void;
-    onOpenChat?: () => void;
-
-    // AI Settings
-    aiEnabled: boolean;
-    setAiEnabled: (val: boolean) => void;
-    aiTargetLang: string;
-    setAiTargetLang: (val: string) => void;
-    saveSetting: (key: string, val: string) => void;
-    aiProfiles: AiProfile[];
-    setAiProfiles: (val: AiProfile[]) => void;
-    aiAssignedProfileTask: string;
-    setAiAssignedProfileTask: (id: string) => void;
-    aiAssignedProfileMouthpiece: string;
-    setAiAssignedProfileMouthpiece: (id: string) => void;
-    aiAssignedProfileTranslate: string;
-    setAiAssignedProfileTranslate: (id: string) => void;
 }
 
 const ABOUT_SECTION = "about";
@@ -303,18 +205,15 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
     clipboard: Clipboard,
     [ADVANCED_ENTRY]: ListFilter,
     default_apps: AppWindow,
-    ai: Sparkles,
     sync: MessageSquareText,
-    cloud_sync: Cloud,
-    file_transfer: Wifi,
     secure_transfer: ShieldCheck,
     data: Database
 };
 
 const NAV_GROUPS: { labelKey: string; ids: string[] }[] = [
     { labelKey: "settings_nav_group_basic", ids: ["general", "appearance"] },
-    { labelKey: "settings_nav_group_clipboard", ids: ["clipboard", ADVANCED_ENTRY, "default_apps", "ai"] },
-    { labelKey: "settings_nav_group_sync", ids: ["sync", "cloud_sync", "file_transfer"] },
+    { labelKey: "settings_nav_group_clipboard", ids: ["clipboard", ADVANCED_ENTRY, "default_apps"] },
+    { labelKey: "settings_nav_group_sync", ids: ["sync"] },
     { labelKey: "settings_nav_group_data", ids: ["secure_transfer", "data"] }
 ];
 
@@ -322,62 +221,34 @@ const SettingsPanel = (props: SettingsPanelProps) => {
     const {
         t, theme, nativePalette, nativeCustomColor, setNativePalette, language, colorMode, showAppBorder, setShowAppBorder, showSourceAppIcon, setShowSourceAppIcon, hideUnselectedItemActions, setHideUnselectedItemActions,
         collapsedGroups, settingsSubpage, autoStart, elevatedAutostart, silentStart, persistent, persistentLimitEnabled, persistentLimit, deduplicate, captureFiles, captureRichText, richTextSnapshotPreview, deleteAfterPaste, moveToTopAfterPaste, clickCopyOnly, pasteMethod, setPasteMethod, registryWinVEnabled, setRegistryWinVEnabled,
-        sequentialMode, sequentialHotkey, isRecordingSequential,
-        plainPasteHotkey, isRecordingPlain, searchHotkey, isRecordingSearch, quickPasteModifier, setQuickPasteModifier,
+        sequentialMode, quickPasteModifier, setQuickPasteModifier,
         privacyProtection, privacyProtectionKinds, setPrivacyProtectionKinds, privacyProtectionCustomRules, setPrivacyProtectionCustomRules, sensitiveMaskPrefixVisible, setSensitiveMaskPrefixVisible, sensitiveMaskSuffixVisible, setSensitiveMaskSuffixVisible, sensitiveMaskEmailDomain, setSensitiveMaskEmailDomain, cleanupRules, setCleanupRules, appCleanupPolicies, setAppCleanupPolicies, setShowSearchBox, searchBoxPinned, setSearchBoxPinned, scrollTopButtonEnabled, setScrollTopButtonEnabled, arrowKeySelection, setArrowKeySelection,
         lightModeEnabled, setLightModeEnabled, lightModeIdleMinutes, setLightModeIdleMinutes,
-        soundEnabled, setSoundEnabled, pasteSoundEnabled, setPasteSoundEnabled,
+        soundEnabled, setSoundEnabled,
         soundVolume, setSoundVolume,
         hideTrayIcon, setHideTrayIcon,
-        hideDockIcon, setHideDockIcon,
         edgeDocking, setEdgeDocking,
         followMouse, setFollowMouse,
         customBackground, setCustomBackground,
         customBackgroundOpacity, setCustomBackgroundOpacity,
         surfaceOpacity, setSurfaceOpacity,
         mqttEnabled, mqttServer, mqttPort, mqttUser, mqttPass, mqttTopic, mqttProtocol, mqttWsPath, mqttNotificationEnabled,
-        cloudSyncEnabled, cloudSyncAuto, cloudSyncIntervalSec, cloudSyncSnapshotIntervalMin, cloudSyncWebdavUrl, cloudSyncWebdavUsername, cloudSyncWebdavPassword, cloudSyncWebdavBasePath, cloudSyncContentPrefs,
-        fileServerEnabled, fileServerPort, localIp, availableIps, setLocalIp, actualPort, fileTransferAccessToken, fileTransferLanKey, fileTransferAutoOpen, showAutoCloseHint, fileServerAutoClose, fileTransferAutoCopy, fileTransferPath,
         installedApps, appSettings, defaultApps, showAppSelector, dataPath,
 
         toggleGroup, setSettingsSubpage, setAutoStart, setElevatedAutostart, setSilentStart, setPersistent, setPersistentLimitEnabled, setPersistentLimit, setDeduplicate, setCaptureFiles, setCaptureRichText, setRichTextSnapshotPreview, setDeleteAfterPaste, setMoveToTopAfterPaste, setClickCopyOnly, saveAppSetting,
-        setSequentialModeState, setIsRecordingSequential, updateSequentialHotkey,
-        setIsRecordingPlain, updatePlainPasteHotkey,
-        setIsRecordingSearch, updateSearchHotkey,
+        setSequentialModeState,
         setPrivacyProtection,
-        setIsRecording, isRecording, hotkey, hotkeyParts, updateHotkey,
-        setTheme, setColorMode, setLanguage, compactMode, setCompactMode, compactShowTime, setCompactShowTime, splitViewEnabled, setSplitViewEnabled, checkHotkeyConflict,
+        hotkeySettings,
+        setTheme, setColorMode, setLanguage, compactMode, setCompactMode, compactShowTime, setCompactShowTime, splitViewEnabled, setSplitViewEnabled,
         clipboardItemFontSize, setClipboardItemFontSize, clipboardTagFontSize, setClipboardTagFontSize,
-        emojiPanelEnabled, setEmojiPanelEnabled, tagManagerEnabled, setTagManagerEnabled,
+        tagManagerEnabled, setTagManagerEnabled,
         setMqttEnabled, saveMqtt, setMqttServer, setMqttPort, setMqttUser, setMqttPass, setMqttTopic, setMqttProtocol, setMqttWsPath, setMqttNotificationEnabled,
-        setCloudSyncEnabled, setCloudSyncAuto, setCloudSyncIntervalSec, setCloudSyncSnapshotIntervalMin, setCloudSyncWebdavUrl, setCloudSyncWebdavUsername, setCloudSyncWebdavPassword, setCloudSyncWebdavBasePath, setCloudSyncContentPrefs, saveCloudSync,
-        setFileServerEnabled, setFileServerPort, setFileTransferAutoOpen, setShowAutoCloseHint, setFileServerAutoClose, setFileTransferAutoCopy, fetchEffectiveTransferPath,
-        setShowAppSelector, handleResetSettings,
-        aiEnabled, setAiEnabled, aiTargetLang, setAiTargetLang, saveSetting,
-        onOpenChat,
-        aiProfiles, setAiProfiles, aiAssignedProfileTask, setAiAssignedProfileTask, aiAssignedProfileMouthpiece, setAiAssignedProfileMouthpiece, aiAssignedProfileTranslate, setAiAssignedProfileTranslate
+        setShowAppSelector, handleResetSettings
     } = props;
 
     const [emailCopied, setEmailCopied] = useState(false);
     const [appVersion, setAppVersion] = useState("");
-    const [releaseBuildInfo, setReleaseBuildInfo] = useState<ReleaseBuildInfo>({
-        channel: "stable",
-        portable: false
-    });
     const [mqttStatus, setMqttStatus] = useState<"connected" | "disconnected" | "connecting">("disconnected");
-    const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatusPayload>({
-        state: "disabled",
-        running: false,
-        last_sync_at: null,
-        last_error: null,
-        uploaded_items: 0,
-        received_items: 0
-    });
-    const [cloudSyncNowRunning, setCloudSyncNowRunning] = useState(false);
-    const [editingProfile, setEditingProfile] = useState<EditableAiProfile | null>(null);
-    const [profileStatuses, setProfileStatuses] = useState<AiProfileStatusMap>({});
-    const [updateStatus, setUpdateStatus] = useState<string>("");
-    // Removed updateModalData
     const [privacyKindsOpen, setPrivacyKindsOpen] = useState(false);
     const [privacyRulesOpen, setPrivacyRulesOpen] = useState(false);
     const isWide = useWideWindow();
@@ -398,91 +269,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
         minRest: 360
     });
 
-    const applyFileServerPort = async (portStr: string) => {
-        const port = Number(portStr);
-        if (!Number.isInteger(port) || port < 1 || port > 65535) return;
-        if (!fileServerEnabled) return;
-        try {
-            await invoke("toggle_file_server", { enabled: false });
-            await invoke("toggle_file_server", { enabled: true, port });
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    const checkModelStatus = async (profile: AiProfile) => {
-        setProfileStatuses(prev => ({ ...prev, [profile.id]: 'loading' }));
-        try {
-            const result = await invoke<string>("check_ai_connectivity", {
-                baseUrl: profile.baseUrl,
-                apiKey: profile.apiKey,
-                model: profile.model,
-                provider: profile.provider ?? null
-            });
-            if (result === "success") {
-                setProfileStatuses(prev => ({ ...prev, [profile.id]: 'success' }));
-            }
-        } catch (e: unknown) {
-            console.error("AI Check failed:", e);
-            setProfileStatuses(prev => ({ ...prev, [profile.id]: 'error' }));
-            // The red dot alone left users guessing (#114).
-            void emit("toast", `${t("ai_check_failed")}${formatError(e, t)}`);
-        }
-    };
-
-    const handleCloudSyncNow = async () => {
-        if (!CLOUD_SYNC_ENABLED) return;
-        setCloudSyncNowRunning(true);
-        try {
-            const status = await invoke<CloudSyncStatusPayload>("cloud_sync_now");
-            setCloudSyncStatus(status);
-        } catch (err) {
-            console.error("Cloud sync now failed:", err);
-            void emit("toast", `${t("sync_now_failed")}${String(err)}`);
-        } finally {
-            setCloudSyncNowRunning(false);
-        }
-    };
-
-    const aiTaskAssignments = [
-        { value: aiAssignedProfileTask, set: setAiAssignedProfileTask, key: 'ai_assigned_profile_task' },
-        { value: aiAssignedProfileMouthpiece, set: setAiAssignedProfileMouthpiece, key: 'ai_assigned_profile_mouthpiece' },
-        { value: aiAssignedProfileTranslate, set: setAiAssignedProfileTranslate, key: 'ai_assigned_profile_translate' },
-    ];
-
-    /** Saves the model list and moves tasks left with nothing to run on. */
-    const commitAiProfiles = (newProfiles: AiProfile[], deletedId?: string) => {
-        setAiProfiles(newProfiles);
-        saveSetting('ai_profiles', JSON.stringify(newProfiles));
-        for (const task of aiTaskAssignments) {
-            let next = resolveTaskProfile(task.value, newProfiles);
-            if (next === deletedId) next = 'default';
-            if (next !== task.value) {
-                task.set(next);
-                saveSetting(task.key, next);
-            }
-        }
-    };
-
-    const handleSaveProfile = (profile: EditableAiProfile) => {
-        let newProfiles: AiProfile[];
-        if (profile.isNew) {
-            const { isNew, id: _id, ...rest } = profile;
-            newProfiles = [...aiProfiles, { ...rest, id: Date.now().toString() }];
-        } else {
-            if (!profile.id) return;
-            const { isNew, ...rest } = profile;
-            const updatedProfile: AiProfile = { ...rest, id: profile.id };
-            newProfiles = aiProfiles.map(p => p.id === profile.id ? updatedProfile : p);
-        }
-        commitAiProfiles(newProfiles);
-        setEditingProfile(null);
-    };
-
-    const handleDeleteProfile = (id: string) => {
-        commitAiProfiles(aiProfiles.filter(p => p.id !== id), id);
-    };
-
     useEffect(() => {
         getVersion()
             .then(v => setAppVersion(v))
@@ -490,22 +276,11 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                 console.error("Failed to get version:", err);
                 setAppVersion("0.2.0");
             });
-        getReleaseBuildInfo().then(setReleaseBuildInfo);
 
         const unlistenMqtt = listen<string>("mqtt-status", (event) => {
             console.log('[MQTT STATUS] Received status:', event.payload);
             setMqttStatus(event.payload as "connected" | "disconnected" | "connecting");
         });
-
-        let unlistenCloud: Promise<() => void> | null = null;
-        if (CLOUD_SYNC_ENABLED) {
-            unlistenCloud = listen<CloudSyncStatusPayload>("cloud-sync-status", (event) => {
-                setCloudSyncStatus(event.payload);
-            });
-            invoke<CloudSyncStatusPayload>("get_cloud_sync_status")
-                .then(setCloudSyncStatus)
-                .catch(console.error);
-        }
 
         Promise.all([
             invoke<boolean>("get_mqtt_status"),
@@ -523,9 +298,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
 
         return () => {
             unlistenMqtt.then(f => f());
-            if (unlistenCloud) {
-                unlistenCloud.then(f => f());
-            }
         };
     }, []);
 
@@ -535,7 +307,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
 
     // Narrow windows show an accordion of collapsible groups. Wide ones list the
     // sections on the left and show the selected group, always open, on the right.
-    const { key: e2eKey, save: saveE2eKey } = useE2eKey();
     const groupState = (id: string) => wideLayout
         ? { collapsed: false, onToggle: noop }
         : { collapsed: collapsedGroups[id], onToggle: () => toggleGroup(id) };
@@ -557,16 +328,12 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setSilentStart={setSilentStart}
                     hideTrayIcon={hideTrayIcon}
                     setHideTrayIcon={setHideTrayIcon}
-                    hideDockIcon={hideDockIcon}
-                    setHideDockIcon={setHideDockIcon}
                     edgeDocking={edgeDocking}
                     setEdgeDocking={setEdgeDocking}
                     followMouse={followMouse}
                     setFollowMouse={setFollowMouse}
                     soundEnabled={soundEnabled}
                     setSoundEnabled={setSoundEnabled}
-                    pasteSoundEnabled={pasteSoundEnabled}
-                    setPasteSoundEnabled={setPasteSoundEnabled}
                     soundVolume={soundVolume}
                     setSoundVolume={setSoundVolume}
                     searchBoxPinned={searchBoxPinned}
@@ -574,8 +341,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setShowSearchBox={setShowSearchBox}
                     scrollTopButtonEnabled={scrollTopButtonEnabled}
                     setScrollTopButtonEnabled={setScrollTopButtonEnabled}
-                    emojiPanelEnabled={emojiPanelEnabled}
-                    setEmojiPanelEnabled={setEmojiPanelEnabled}
                     tagManagerEnabled={tagManagerEnabled}
                     setTagManagerEnabled={setTagManagerEnabled}
                     arrowKeySelection={arrowKeySelection}
@@ -611,14 +376,7 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setCaptureRichText={setCaptureRichText}
                     richTextSnapshotPreview={richTextSnapshotPreview}
                     setRichTextSnapshotPreview={setRichTextSnapshotPreview}
-                    plainPasteHotkey={plainPasteHotkey}
-                    isRecordingPlain={isRecordingPlain}
-                    setIsRecordingPlain={setIsRecordingPlain}
-                    updatePlainPasteHotkey={updatePlainPasteHotkey}
-                    searchHotkey={searchHotkey}
-                    isRecordingSearch={isRecordingSearch}
-                    setIsRecordingSearch={setIsRecordingSearch}
-                    updateSearchHotkey={updateSearchHotkey}
+                    hotkeySettings={hotkeySettings}
                     quickPasteModifier={quickPasteModifier}
                     setQuickPasteModifier={setQuickPasteModifier}
                     deleteAfterPaste={deleteAfterPaste}
@@ -633,11 +391,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setRegistryWinVEnabled={setRegistryWinVEnabled}
                     sequentialMode={sequentialMode}
                     setSequentialModeState={setSequentialModeState}
-                    sequentialHotkey={sequentialHotkey}
-                    isRecordingSequential={isRecordingSequential}
-                    setIsRecordingSequential={setIsRecordingSequential}
-                    updateSequentialHotkey={updateSequentialHotkey}
-                    checkHotkeyConflict={checkHotkeyConflict}
                     privacyProtection={privacyProtection}
                     setPrivacyProtection={setPrivacyProtection}
                     privacyProtectionKinds={privacyProtectionKinds}
@@ -655,11 +408,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     privacyRulesOpen={privacyRulesOpen}
                     setPrivacyRulesOpen={setPrivacyRulesOpen}
 
-                    isRecording={isRecording}
-                    setIsRecording={setIsRecording}
-                    hotkeyParts={hotkeyParts}
-                    updateHotkey={updateHotkey}
-                    hotkey={hotkey}
                     appSettings={appSettings}
                     theme={theme}
                     colorMode={colorMode}
@@ -737,105 +485,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setMqttTopic={setMqttTopic}
                     mqttNotificationEnabled={mqttNotificationEnabled}
                     setMqttNotificationEnabled={setMqttNotificationEnabled}
-                    e2eKey={e2eKey}
-                    saveE2eKey={saveE2eKey}
-                />
-            )
-        },
-        ...(CLOUD_SYNC_ENABLED
-            ? [{
-                id: "cloud_sync",
-                label: t("cloud_sync_settings"),
-                node: (
-                    <CloudSyncSettingsGroup
-                        t={t}
-                        {...groupState('cloud_sync')}
-                        LabelWithHint={LabelWithHint}
-                        cloudSyncEnabled={cloudSyncEnabled}
-                        setCloudSyncEnabled={setCloudSyncEnabled}
-                        cloudSyncAuto={cloudSyncAuto}
-                        setCloudSyncAuto={setCloudSyncAuto}
-                        cloudSyncIntervalSec={cloudSyncIntervalSec}
-                        setCloudSyncIntervalSec={setCloudSyncIntervalSec}
-                        cloudSyncSnapshotIntervalMin={cloudSyncSnapshotIntervalMin}
-                        setCloudSyncSnapshotIntervalMin={setCloudSyncSnapshotIntervalMin}
-                        cloudSyncWebdavUrl={cloudSyncWebdavUrl}
-                        setCloudSyncWebdavUrl={setCloudSyncWebdavUrl}
-                        cloudSyncWebdavUsername={cloudSyncWebdavUsername}
-                        setCloudSyncWebdavUsername={setCloudSyncWebdavUsername}
-                        cloudSyncWebdavPassword={cloudSyncWebdavPassword}
-                        setCloudSyncWebdavPassword={setCloudSyncWebdavPassword}
-                        cloudSyncWebdavBasePath={cloudSyncWebdavBasePath}
-                        setCloudSyncWebdavBasePath={setCloudSyncWebdavBasePath}
-                        cloudSyncContentPrefs={cloudSyncContentPrefs}
-                        setCloudSyncContentPrefs={setCloudSyncContentPrefs}
-                        saveCloudSync={saveCloudSync}
-                        status={cloudSyncStatus}
-                        syncingNow={cloudSyncNowRunning}
-                        onSyncNow={handleCloudSyncNow}
-                        e2eKey={e2eKey}
-                        saveE2eKey={saveE2eKey}
-                    />
-                )
-            }]
-            : []),
-        {
-            id: "ai",
-            label: t("ai_settings"),
-            node: (
-                <AiSettingsGroup
-                    t={t}
-                    {...groupState('ai')}
-                    aiEnabled={aiEnabled}
-                    setAiEnabled={setAiEnabled}
-                    saveSetting={saveSetting}
-                    aiProfiles={aiProfiles}
-                    profileStatuses={profileStatuses}
-                    checkModelStatus={checkModelStatus}
-                    setEditingProfile={setEditingProfile}
-                    handleDeleteProfile={handleDeleteProfile}
-                    aiAssignedProfileTask={aiAssignedProfileTask}
-                    setAiAssignedProfileTask={setAiAssignedProfileTask}
-                    aiAssignedProfileMouthpiece={aiAssignedProfileMouthpiece}
-                    setAiAssignedProfileMouthpiece={setAiAssignedProfileMouthpiece}
-                    aiAssignedProfileTranslate={aiAssignedProfileTranslate}
-                    setAiAssignedProfileTranslate={setAiAssignedProfileTranslate}
-                    aiTargetLang={aiTargetLang}
-                    setAiTargetLang={setAiTargetLang}
-                    theme={theme}
-                />
-            )
-        },
-        {
-            id: "file_transfer",
-            label: t("file_transfer"),
-            node: (
-                <FileTransferSettingsGroup
-                    t={t}
-                    {...groupState('file_transfer')}
-                    fileServerEnabled={fileServerEnabled}
-                    setFileServerEnabled={setFileServerEnabled}
-                    fileServerPort={fileServerPort}
-                    setFileServerPort={setFileServerPort}
-                    applyFileServerPort={applyFileServerPort}
-                    localIp={localIp}
-                    availableIps={availableIps}
-                    setLocalIp={setLocalIp}
-                    actualPort={actualPort}
-                    accessToken={fileTransferAccessToken}
-                    lanKey={fileTransferLanKey}
-                    fileTransferAutoOpen={fileTransferAutoOpen}
-                    setFileTransferAutoOpen={setFileTransferAutoOpen}
-                    showAutoCloseHint={showAutoCloseHint}
-                    setShowAutoCloseHint={setShowAutoCloseHint}
-                    fileServerAutoClose={fileServerAutoClose}
-                    setFileServerAutoClose={setFileServerAutoClose}
-                    fileTransferAutoCopy={fileTransferAutoCopy}
-                    setFileTransferAutoCopy={setFileTransferAutoCopy}
-                    onOpenChat={onOpenChat}
-                    fileTransferPath={fileTransferPath}
-                    saveSetting={saveSetting}
-                    fetchEffectiveTransferPath={fetchEffectiveTransferPath}
                 />
             )
         },
@@ -869,7 +518,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     theme={theme}
                     {...groupState('data')}
                     dataPath={dataPath}
-                    portable={releaseBuildInfo.portable}
                 />
             )
         }
@@ -901,10 +549,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
             expanded={wideLayout}
             t={t}
             appVersion={appVersion}
-            releaseChannel={releaseBuildInfo.channel}
-            portable={releaseBuildInfo.portable}
-            updateStatus={updateStatus}
-            setUpdateStatus={setUpdateStatus}
             onResetSettings={handleResetSettings}
             emailCopied={emailCopied}
             setEmailCopied={setEmailCopied}
@@ -913,14 +557,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
 
     const modals = (
         <>
-            <AiProfileModal
-                editingProfile={editingProfile}
-                t={t}
-                onClose={() => setEditingProfile(null)}
-                onSave={handleSaveProfile}
-                setEditingProfile={setEditingProfile}
-            />
-
             <AppSelectorModal
                 show={showAppSelector}
                 installedApps={installedApps}

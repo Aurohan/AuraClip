@@ -1,1 +1,13 @@
-{}
+{
+  "components/clipboard-item.css": {
+    "font-size-token": 1,
+    "motion-token": 1,
+    "no-important": 10,
+    "no-raw-color": 12,
+    "radius-token": 1,
+    "spacing-scale": 2
+  },
+  "components/settings.css": {
+    "no-raw-color": 1
+  }
+}

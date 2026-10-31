@@ -91,10 +91,6 @@ fn main() -> AppResult<()> {
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -118,8 +114,6 @@ fn main() -> AppResult<()> {
             .build(),
     );
 
-    #[cfg(target_os = "macos")]
-    let builder = builder.plugin(tauri_nspanel::init());
 
     let app = builder
         // Launching TieZ again brings the running instance forward: the way
@@ -157,8 +151,6 @@ fn main() -> AppResult<()> {
             app::window_manager::focus_clipboard_window,
             app::window_manager::main_ui_ready,
             app::window_manager::main_ui_released,
-            services::e2e::e2e_key_fingerprint,
-            services::e2e::generate_e2e_key,
             app::window_manager::disable_webview_browser_accelerators,
             app::window_manager::set_navigation_enabled,
             app::window_manager::set_navigation_mode,
@@ -198,9 +190,8 @@ fn main() -> AppResult<()> {
             app::commands::get_clipboard_content,
             app::commands::get_clipboard_content_with_html,
             app::commands::set_sequential_mode,
-            app::commands::set_sequential_hotkey,
-            app::commands::set_plain_paste_hotkey,
-            app::commands::set_search_hotkey,
+            app::commands::set_hotkey,
+            app::commands::set_main_tab,
             app::commands::set_quick_paste_modifier,
             app::commands::set_deduplication,
             app::commands::save_setting,
@@ -211,12 +202,10 @@ fn main() -> AppResult<()> {
             app::commands::get_settings,
             app::commands::get_undecryptable_settings,
             app::commands::clear_undecryptable_settings,
-            app::commands::set_file_server_auto_close,
             app::commands::set_persistence,
             app::commands::set_capture_files,
             app::commands::set_capture_rich_text,
             app::commands::set_rich_text_snapshot_preview,
-            app::commands::set_auto_copy_file,
             app::commands::set_silent_start,
             app::commands::set_delete_after_paste,
             app::commands::set_privacy_protection,
@@ -228,22 +217,13 @@ fn main() -> AppResult<()> {
             app::commands::get_mqtt_status,
             app::commands::get_mqtt_running,
             app::commands::restart_mqtt_client,
-            app::commands::get_cloud_sync_status,
-            app::commands::restart_cloud_sync_client,
-            app::commands::request_cloud_sync,
-            app::commands::stop_cloud_sync_client,
-            app::commands::cloud_sync_now,
             app::commands::set_sound_enabled,
-            app::commands::set_paste_sound_enabled,
             app::commands::play_preview_sound,
-            app::commands::set_file_transfer_auto_open,
             app::commands::set_arrow_key_selection,
             app::commands::set_tray_visible,
-            app::commands::set_dock_visible,
             app::commands::set_edge_docking,
             app::commands::set_follow_mouse,
             app::commands::get_data_path,
-            app::commands::get_ping_id,
             app::commands::scan_installed_apps,
             app::commands::get_system_default_app,
             app::commands::get_associated_apps,
@@ -271,61 +251,28 @@ fn main() -> AppResult<()> {
             app::commands::check_is_admin,
             app::commands::quit,
             app::commands::relaunch,
-            app::commands::check_macos_permissions,
-            app::commands::request_macos_permissions,
-            app::commands::get_macos_accessibility_binary_path,
-            app::commands::open_macos_accessibility_settings,
             app::commands::set_theme,
             app::commands::install_theme_package,
-            app::commands::install_theme_from_store,
             app::commands::list_installed_themes,
             app::commands::get_installed_theme_css,
             app::commands::uninstall_theme_package,
             app::commands::send_system_notification,
-            app::commands::register_hotkey,
             app::commands::test_hotkey_available,
-            app::commands::get_release_build_info,
-            app::commands::check_beta_update,
             app::commands::toggle_clipboard_pin,
             app::commands::update_tags,
             app::commands::update_entry_note,
             app::commands::add_manual_item,
             app::commands::update_item_content,
-            app::commands::save_emoji_favorite,
-            app::commands::remove_emoji_favorite,
-            app::commands::save_emoji_favorite_data_url,
-            app::commands::save_emoji_favorite_url,
-            app::commands::list_emoji_favorites,
             app::commands::get_file_size,
             app::commands::get_image_thumbnail,
             app::commands::get_video_thumbnail,
             app::commands::save_file_copy,
             app::commands::save_file_batch,
-            services::file_transfer::send_chat_message,
-            services::file_transfer::get_chat_history,
-            services::file_transfer::get_online_devices,
-            services::file_transfer::clear_chat_history,
-            services::file_transfer::open_file_transfer_folder,
-            services::file_transfer::send_file_to_client,
-            services::file_transfer::send_files_to_client,
-            services::file_transfer::save_temp_image,
-            services::file_transfer::expand_transfer_paths,
-            services::file_transfer::get_local_ip_addr,
-            services::file_transfer::get_available_ips,
-            services::file_transfer::get_available_network_interfaces,
-            services::file_transfer::set_display_ip,
-            services::file_transfer::get_file_server_status,
-            services::file_transfer::get_download_url,
-            services::file_transfer::toggle_file_server,
-            services::file_transfer::get_active_file_transfer_path,
             services::paste_queue::get_paste_queue,
             services::paste_queue::set_paste_queue,
             services::paste_queue::paste_next_step,
             app::commands::get_tag_colors,
-            app::commands::set_tag_color,
-            app::commands::call_ai,
-            app::commands::apply_ai_result,
-            app::commands::check_ai_connectivity
+            app::commands::set_tag_color
         ])
         .on_window_event(|window, event| {
             setup::handle_window_event(window, event);
@@ -335,17 +282,13 @@ fn main() -> AppResult<()> {
     match app {
         Ok(app) => {
             info!(">>> [STARTUP] Tauri app built successfully.");
-            app.run(|app_handle, event| {
+            app.run(|_app_handle, event| {
                 if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                     if !crate::app::light_mode::ALLOW_APP_EXIT.load(std::sync::atomic::Ordering::SeqCst)
                     {
                         // Keep tray + clipboard daemon alive after WebView light-mode destroy.
                         api.prevent_exit();
                     }
-                }
-                #[cfg(target_os = "macos")]
-                if let tauri::RunEvent::Reopen { .. } = event {
-                    let _ = crate::app::window_manager::focus_clipboard_window(app_handle.clone());
                 }
             });
             Ok(())

@@ -7,9 +7,7 @@ import type { DragControls } from "framer-motion";
 import { ArrowUp, Clipboard } from "lucide-react";
 import SettingsPanel from "../../settings/components/SettingsPanel";
 import { VirtualClipboardList } from "../../clipboard/components/VirtualClipboardList";
-import FileTransferChatView from "../../file-transfer/components/FileTransferChatView";
 import TagManager from "../../tag/components/TagManager";
-import EmojiPanel from "../../emoji/components/EmojiPanel";
 import type { ClipboardEntry } from "../../../shared/types";
 import type { VirtualClipboardListHandle } from "../../clipboard/types";
 
@@ -33,18 +31,7 @@ interface AppMainContentProps {
   showTagManager: boolean;
   setShowTagManager?: (val: boolean) => void;
   tagManagerEnabled: boolean;
-  showEmojiPanel: boolean;
-  chatMode: boolean;
-  localIp: string;
-  actualPort: string;
-  fileTransferAccessToken: string;
-  fileTransferLanKey: string;
   settingsPanelProps: SettingsPanelProps;
-  emojiFavorites: string[];
-  setEmojiFavorites: (val: string[] | ((prev: string[]) => string[])) => void;
-  emojiPanelTab: "emoji" | "favorites";
-  setEmojiPanelTab: (val: "emoji" | "favorites") => void;
-  saveSetting: (key: string, val: string) => void;
   filteredHistory: ClipboardEntry[];
   search: string;
   pinnedItems: ClipboardEntry[];
@@ -118,18 +105,7 @@ const AppMainContent = ({
   showTagManager,
   setShowTagManager,
   tagManagerEnabled,
-  showEmojiPanel,
-  chatMode,
-  localIp,
-  actualPort,
-  fileTransferAccessToken,
-  fileTransferLanKey,
   settingsPanelProps,
-  emojiFavorites,
-  setEmojiFavorites,
-  emojiPanelTab,
-  setEmojiPanelTab,
-  saveSetting,
   filteredHistory,
   search,
   pinnedItems,
@@ -169,7 +145,7 @@ const AppMainContent = ({
     );
   }, [renderItemContent, pinnedItems.length]);
 
-    if (mainTab === "phrases" && !showSettings && !showTagManager && !showEmojiPanel) {
+  if (mainTab === "phrases" && !showSettings && !showTagManager) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -197,7 +173,7 @@ const AppMainContent = ({
     );
   }
 
-if (showTagManager && tagManagerEnabled) {
+  if (showTagManager && tagManagerEnabled) {
     return (
       <motion.div
         initial={{ opacity: 0, x: 20 }}
@@ -218,53 +194,7 @@ if (showTagManager && tagManagerEnabled) {
     );
   }
 
-  if (showEmojiPanel) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        style={{
-            height: "100%",
-            maxHeight: "100%",
-            minHeight: 0,
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-            flex: 1,
-          }}
-      >
-        <EmojiPanel
-          t={t}
-          language={settingsPanelProps.language}
-          favorites={emojiFavorites}
-          setFavorites={setEmojiFavorites}
-          activeTab={emojiPanelTab}
-          setActiveTab={setEmojiPanelTab}
-          saveSetting={saveSetting}
-        />
-      </motion.div>
-    );
-  }
-
   if (showSettings) {
-    if (chatMode) {
-      return (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          style={{ height: "100%", overflow: "hidden" }}
-        >
-          <FileTransferChatView
-            t={t}
-            localIp={localIp}
-            actualPort={actualPort}
-            accessToken={fileTransferAccessToken}
-            lanKey={fileTransferLanKey}
-          />
-        </motion.div>
-      );
-    }
-
     return (
       <div className="settings-view">
         <SettingsPanel {...settingsPanelProps} />

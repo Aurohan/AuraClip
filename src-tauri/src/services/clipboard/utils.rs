@@ -991,55 +991,6 @@ pub fn infer_rich_html_from_plain_text(
     None
 }
 
-pub struct ResolvedClipboardCapture {
-    pub text: String,
-    pub html: Option<String>,
-}
-
-/// Build capturable text/html from platform clipboard fragments (WPS/Office often omit plain text).
-pub fn resolve_clipboard_text_capture(
-    raw_text: Option<&str>,
-    raw_html: Option<&str>,
-    rtf_html: Option<String>,
-    rich_text_enabled: bool,
-    source_app: &str,
-    source_app_path: Option<&str>,
-) -> Option<ResolvedClipboardCapture> {
-    let mut text = raw_text.unwrap_or("").to_string();
-    let mut html = raw_html
-        .filter(|value| !value.trim().is_empty())
-        .map(|value| value.to_string());
-
-    if html.is_none() {
-        html = rtf_html.filter(|value| !value.trim().is_empty());
-    }
-
-    if rich_text_enabled && html.is_none() && !text.is_empty() {
-        html = infer_rich_html_from_plain_text(&text, source_app, source_app_path);
-    }
-
-    if text.is_empty() {
-        if let Some(ref html_value) = html {
-            let derived = derive_rich_text_content("", Some(html_value));
-            if !derived.is_empty() || is_whitespace_only(&derived) {
-                text = derived;
-            }
-        }
-    }
-
-    if text.is_empty() && html.is_none() {
-        return None;
-    }
-
-    if text.is_empty() {
-        if let Some(ref html_value) = html {
-            text = derive_rich_text_content("", Some(html_value));
-        }
-    }
-
-    Some(ResolvedClipboardCapture { text, html })
-}
-
 /// HTML that carries only pictures and no text, like the `<img src>` browsers
 /// put next to the bitmap when copying an image. Taken as rich text, that copy
 /// was saved as a lone space and showed as "·" instead of the image.
@@ -1460,10 +1411,6 @@ pub fn normalize_plain_text_for_clipboard_paste(text: &str) -> String {
     {
         return normalized.replace('\n', "\r\n");
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        normalized
-    }
 }
 
 /// Wrap an HTML fragment in the Windows CF_HTML envelope expected by Office apps.
@@ -1836,21 +1783,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_clipboard_capture_preserves_trailing_whitespace() {
-        let resolved = super::resolve_clipboard_text_capture(
-            Some("copied text  \t"),
-            Some("<html><body>copied text</body></html>"),
-            None,
-            true,
-            "Browser",
-            None,
-        )
-        .expect("clipboard text should be capturable");
-
-        assert_eq!(resolved.text, "copied text  \t");
-    }
-
-    #[test]
     fn normalize_clipboard_line_endings_preserves_whitespace() {
         assert_eq!(normalize_clipboard_line_endings(" \t\r\n"), " \t\n");
         assert_eq!(normalize_clipboard_line_endings(" test "), " test ");
@@ -1947,17 +1879,6 @@ mod tests {
         let content = derive_rich_text_content(text, Some(html));
 
         assert_eq!(content, text);
-    }
-
-    #[test]
-    fn resolve_clipboard_text_capture_html_only_payload() {
-        let html = "<html><body><p>WPS 内容</p></body></html>";
-        let resolved =
-            super::resolve_clipboard_text_capture(None, Some(html), None, true, "WPS Office", None)
-                .expect("html-only clipboard should be capturable");
-
-        assert_eq!(resolved.text, "WPS 内容");
-        assert_eq!(resolved.html.as_deref(), Some(html));
     }
 
     #[test]

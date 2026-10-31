@@ -6,9 +6,9 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 
-for (const [platform, nativeTheme] of [["MacIntel", "macos"], ["Win32", "mica"]]) {
-  test(`${platform}: migrates Sakura without changing other settings`, () => {
-    vi.stubGlobal("navigator", { platform, userAgent: platform });
+const nativeTheme = "acrylic";
+
+test("migrates Sakura without changing other settings", () => {
     const before = { "app.theme": "sakura", "app.color_mode": "dark", "app.custom_background": "/image.png", "app.surface_opacity": "30" };
     const migrated = migrateThemeSettings(before);
     expect(migrated).toEqual({ ...before, "app.theme": nativeTheme, "app.native_palette": "sakura" });
@@ -17,11 +17,15 @@ for (const [platform, nativeTheme] of [["MacIntel", "macos"], ["Win32", "mica"]]
     expect(resolveThemeAppearance("sakura")).toEqual({ theme: nativeTheme, nativePalette: "sakura" });
     expect(getSelectableThemes().map(t => t.id)).toContain(nativeTheme);
     expect(getSelectableThemes().map(t => t.id)).not.toContain("sakura");
-  });
-}
+});
+
+test("a stored macOS theme falls back to acrylic", () => {
+  expect(resolveThemeAppearance("macos").theme).toBe("acrylic");
+  expect(getSelectableThemes().map(t => t.id)).not.toContain("macos");
+});
 
 test("leaves existing native, other and installed themes intact", () => {
-  for (const theme of ["macos", "mica", "paper", "store-custom"]) {
+  for (const theme of ["acrylic", "mica", "paper", "store-custom"]) {
     const settings = { "app.theme": theme, "app.native_palette": "sakura" };
     expect(migrateThemeSettings(settings)).toBe(settings);
   }
@@ -30,7 +34,6 @@ test("leaves existing native, other and installed themes intact", () => {
 });
 
 test("switching palettes and themes clears retired classes without affecting dark mode", () => {
-  vi.stubGlobal("navigator", { platform: "MacIntel", userAgent: "Mac" });
   const classes = new Set(["theme-sakura", "dark-mode"]);
   const target = { setAttribute: () => {}, classList: {
     add: (...names: string[]) => names.forEach(n => classes.add(n)),
@@ -40,10 +43,10 @@ test("switching palettes and themes clears retired classes without affecting dar
   } } as unknown as Element;
   applyThemeClasses("sakura", target);
   applyNativePalette("sakura", undefined, target);
-  expect([...classes].sort()).toEqual(["dark-mode", "native-palette-sakura", "theme-macos"]);
-  applyNativePalette("macos", "default", target);
+  expect([...classes].sort()).toEqual(["dark-mode", "native-palette-sakura", "theme-acrylic"]);
+  applyNativePalette("acrylic", "default", target);
   expect(classes.has("native-palette-sakura")).toBe(false);
-  applyNativePalette("macos", "sakura", target);
+  applyNativePalette("acrylic", "sakura", target);
   applyThemeClasses("paper", target);
   applyNativePalette("paper", "sakura", target);
   expect([...classes].sort()).toEqual(["dark-mode", "theme-paper"]);
@@ -51,7 +54,6 @@ test("switching palettes and themes clears retired classes without affecting dar
 
 
 test("custom palette styles are cleared on switching away and preview data stays exact", () => {
-  vi.stubGlobal("navigator", { platform: "MacIntel", userAgent: "Mac" });
   const classes = new Set<string>(), styles = new Map<string, string>([["--other-setting", "42"]]);
   const attributes = new Map<string, string>();
   const target = {
@@ -61,11 +63,11 @@ test("custom palette styles are cleared on switching away and preview data stays
     style: { get length() { return styles.size; }, item: (index: number) => [...styles.keys()][index],
       setProperty: (name: string, value: string) => styles.set(name, value), removeProperty: (name: string) => styles.delete(name) }
   } as unknown as Element;
-  applyNativePalette("macos", "custom:#12abef", target);
+  applyNativePalette("acrylic", "custom:#12abef", target);
   expect(getAppliedNativePalette(target)).toBe("custom:#12abef");
   expect(classes.has("native-palette-color")).toBe(true);
   expect(styles.has("--native-palette-dark-accent")).toBe(true);
-  applyNativePalette("macos", "sakura", target);
+  applyNativePalette("acrylic", "sakura", target);
   expect(classes.has("native-palette-color")).toBe(false);
   expect([...styles]).toEqual([["--other-setting", "42"]]);
   applyNativePalette("paper", "custom:#12abef", target);

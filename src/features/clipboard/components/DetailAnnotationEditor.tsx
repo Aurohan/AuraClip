@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { ClipboardEntry } from "../../../shared/types";
 import { activateForInput } from "../../../shared/lib/focus";
-import { getNotePlaceholder, isMacPlatform } from "../../../shared/lib/platform";
+import { getNotePlaceholder } from "../../../shared/lib/platform";
 import type { DetailPaneActions } from "./ClipboardDetailPane";
 
 interface EditorProps {
@@ -163,7 +163,7 @@ const DetailNoteEditor = ({ item, t, actions, noteDraft, onNoteDraftChange }: Ed
         }}
       />
       <div className="item-note-editor-footer">
-        <span className="item-note-hint">{isMacPlatform() ? t("note_editor_hint_mac") : t("note_editor_hint_win")}</span>
+        <span className="item-note-hint">{t("note_editor_hint_win")}</span>
         <div className="item-note-actions">
           <button type="button" className="btn-note-action cancel" onMouseDown={() => { ignoreBlurRef.current = true; }} onClick={() => actions.setNoteEditor(item, false)}>{t("cancel")}</button>
           <button type="button" className="btn-note-action save" onMouseDown={() => { ignoreBlurRef.current = true; }} onClick={() => actions.saveNote(item, value)}>{t("save")}</button>

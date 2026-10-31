@@ -1,30 +1,21 @@
-//! Clipboard sounds (Kenney, CC0; see resources/sounds/README.md) embedded as
-//! WAV. macOS plays them through NSSound; elsewhere this module plays them.
-//!
-//! Uses `PlaySoundW` (no rodio/cpal) to keep the Windows binary small.
+//! Copy feedback sound (Kenney, CC0; see resources/sounds/README.md) embedded
+//! as WAV and played with `PlaySoundW` (no rodio/cpal) to keep the binary small.
 
-// The old click_002 copy cue is only 11 ms and is often swallowed by Windows
-// audio startup latency. Reuse the longer CC0 drop cue for audible feedback.
-pub(crate) static COPY_SOUND: &[u8] = include_bytes!("../../resources/sounds/paste.wav");
-pub(crate) static PASTE_SOUND: &[u8] = include_bytes!("../../resources/sounds/paste.wav");
+// 188 ms drop cue: the former 11 ms click was often swallowed by Windows audio
+// startup latency.
+pub(crate) static COPY_SOUND: &[u8] = include_bytes!("../../resources/sounds/copy.wav");
 
 #[cfg(target_os = "windows")]
 use std::io::Cursor;
 
-#[cfg(not(target_os = "macos"))]
-pub fn play_clipboard_sound(kind: &str, volume: f64) {
+pub fn play_copy_sound(volume: f64) {
     let vol = volume.clamp(0.0, 1.0) as f32;
     if vol <= 0.0 {
         return;
     }
 
-    let wav = match kind {
-        "paste" => PASTE_SOUND,
-        _ => COPY_SOUND,
-    };
-
     #[cfg(target_os = "windows")]
-    play_wav_on_windows(wav, vol);
+    play_wav_on_windows(COPY_SOUND, vol);
 }
 
 #[cfg(target_os = "windows")]

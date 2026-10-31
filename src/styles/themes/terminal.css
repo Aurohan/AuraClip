@@ -5,32 +5,6 @@
 /* Component adjustments for this theme, kept ahead of the theme's own rules
    (they used to sit in the component stylesheets). */
 
-/* ---- From components/ai.css ---- */
-
-.theme-terminal .ai-action-btn {
-  border: 1px solid var(--term-border);
-  border-radius: 0;
-  background: var(--term-bg);
-  color: var(--term-fg);
-  font-family: var(--font-mono);
-}
-
-.theme-terminal .ai-action-btn:hover {
-  background: var(--term-prompt);
-  color: var(--term-bg);
-  border-color: var(--term-prompt);
-}
-
-/* ---- From components/file-transfer.css ---- */
-
-.theme-terminal .wt-chat-view {
-  --im-canvas: var(--bg-window);
-  --im-canvas-shade: color-mix(in srgb, var(--bg-window) 90%, transparent);
-  --im-incoming: var(--bg-element);
-  --im-bubble-border: var(--line-soft);
-}
-
-
 :root.theme-terminal,
 body.theme-terminal {
   --font-main: "SF Mono", Menlo, Monaco, "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
@@ -179,9 +153,6 @@ body.theme-terminal {
   --compact-card-radius: 0;
   --compact-media-radius: 0;
   --card-shadow: none;
-  --card-hover-shadow: none;
-  --card-hover-transform: none;
-  --card-hover-border-color: transparent;
   --card-active-shadow: none;
   --card-active-transform: none;
   --card-selected-background: var(--term-selection);
@@ -200,10 +171,6 @@ body.theme-terminal {
   --data-panel-shadow: none;
   --data-panel-hover-background: rgba(255, 255, 255, 0.03);
 
-  --segmented-border: 1px solid var(--term-border);
-  --segmented-radius: 0;
-  --segmented-shadow: none;
-  --segment-radius: 0;
   --segment-active-background: rgba(63, 185, 80, 0.12);
   --segment-active-color: var(--term-green);
   --segment-active-shadow: none;
@@ -240,12 +207,7 @@ body.theme-terminal {
   --dialog-button-active-shadow: none;
   --dialog-button-active-transform: none;
 
-  --scrollbar-size: 6px;
-  --scrollbar-size-thin: 3px;
-  --scrollbar-radius: 0;
   --scrollbar-thumb-color: #484f58;
-  --scrollbar-thumb-hover-color: var(--term-green);
-
 
 }
 

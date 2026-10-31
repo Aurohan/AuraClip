@@ -1,5 +1,4 @@
-/// A screen in the units screens are laid out in: points on macOS, where each
-/// screen's pixels are scaled by its own factor, pixels on Windows.
+/// A screen in physical pixels (how Windows lays out monitors).
 #[derive(Clone, Copy, Debug)]
 struct LayoutRect {
     left: f64,
@@ -8,23 +7,14 @@ struct LayoutRect {
     bottom: f64,
 }
 
-fn layout_scale(monitor: &tauri::Monitor) -> f64 {
-    if cfg!(target_os = "macos") {
-        monitor.scale_factor()
-    } else {
-        1.0
-    }
-}
-
 fn layout_rect(monitor: &tauri::Monitor) -> LayoutRect {
-    let scale = layout_scale(monitor);
     let pos = monitor.position();
     let size = monitor.size();
     LayoutRect {
-        left: pos.x as f64 / scale,
-        top: pos.y as f64 / scale,
-        right: (pos.x as f64 + size.width as f64) / scale,
-        bottom: (pos.y as f64 + size.height as f64) / scale,
+        left: pos.x as f64,
+        top: pos.y as f64,
+        right: pos.x as f64 + size.width as f64,
+        bottom: pos.y as f64 + size.height as f64,
     }
 }
 
@@ -75,7 +65,6 @@ pub(super) fn can_dock_on_edge(
         return true;
     };
     let others: Vec<LayoutRect> = monitors.iter().map(layout_rect).collect();
-    let scale = layout_scale(monitor);
     let (left, top, right, bottom) = rect;
     let (from, to) = if dock == 1 {
         (left, right)
@@ -86,8 +75,8 @@ pub(super) fn can_dock_on_edge(
         layout_rect(monitor),
         &others,
         dock,
-        from as f64 / scale,
-        to as f64 / scale,
+        from as f64,
+        to as f64,
     )
 }
 

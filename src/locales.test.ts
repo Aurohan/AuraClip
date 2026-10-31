@@ -38,7 +38,7 @@ describe("i18n translations consistency", () => {
       "search_placeholder",
       "clear_history",
       "sequential_paste_mode",
-      "cloud_sync_settings",
+      "sync_settings",
       "settings_section_theme",
       "visual_theme",
     ];

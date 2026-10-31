@@ -5,14 +5,13 @@ use crate::error::{AppError, AppResult};
 use crate::infrastructure::repository::clipboard_repo::ClipboardRepository;
 use crate::infrastructure::repository::settings_repo::SettingsRepository;
 use crate::services::clipboard::{
-    app_likely_word_processor, attach_rich_image_fallback, attach_rich_named_formats,
+    attach_rich_image_fallback, attach_rich_named_formats,
     build_clipboard_text_fingerprint, build_exact_paste_html,
     capture_preserved_named_formats_from_clipboard, clipboard_image_fallback_data_url,
     derive_rich_text_content, extract_animated_image_data_url_from_html,
     html_has_renderable_rich_body, normalize_plain_text_for_clipboard_paste, parse_cf_html,
     plain_text_from_tabular_html, repair_html_fragment, rich_paste_needs_exact_text,
-    rtf_bytes_from_named_formats, sanitize_tabular_html_for_paste,
-    should_attach_rich_image_fallback_on_capture,
+    sanitize_tabular_html_for_paste,
     split_rich_html_and_image_fallback, split_rich_html_and_named_formats,
 };
 use arboard::Clipboard;
@@ -39,9 +38,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 enum ClipboardSnapshot {
-    /// macOS: the whole pasteboard, every item and type (lossless).
-    #[cfg(target_os = "macos")]
-    Native(crate::infrastructure::macos_api::clipboard::PasteboardSnapshot),
     Empty,
     Text { text: String, html: Option<String> },
     Image { data_url: String },
@@ -52,12 +48,6 @@ fn capture_clipboard_snapshot() -> ClipboardSnapshot {
     // macOS keeps the raw data of every type, so an image, rich text or files
     // come back exactly (an image used to come back as an empty string, rich
     // text as plain text).
-    #[cfg(target_os = "macos")]
-    if let Some(snapshot) =
-        crate::infrastructure::macos_api::clipboard::snapshot_pasteboard(64 * 1024 * 1024)
-    {
-        return ClipboardSnapshot::Native(snapshot);
-    }
 
     #[cfg(target_os = "windows")]
     unsafe {
@@ -70,16 +60,6 @@ fn capture_clipboard_snapshot() -> ClipboardSnapshot {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(files) =
-            crate::infrastructure::macos_api::clipboard::get_clipboard_files()
-        {
-            if !files.is_empty() {
-                return ClipboardSnapshot::Files { paths: files };
-            }
-        }
-    }
 
     let text = Clipboard::new()
         .ok()
@@ -162,11 +142,6 @@ fn capture_clipboard_snapshot() -> ClipboardSnapshot {
 
 async fn restore_clipboard_snapshot(snapshot: ClipboardSnapshot) -> AppResult<()> {
     match snapshot {
-        #[cfg(target_os = "macos")]
-        ClipboardSnapshot::Native(snapshot) => {
-            crate::infrastructure::macos_api::clipboard::restore_pasteboard(&snapshot)
-                .map_err(AppError::Internal)
-        }
         ClipboardSnapshot::Empty => {
             #[cfg(target_os = "windows")]
             unsafe {
@@ -174,13 +149,6 @@ async fn restore_clipboard_snapshot(snapshot: ClipboardSnapshot) -> AppResult<()
                     .map_err(AppError::Internal)?;
             }
 
-            #[cfg(not(target_os = "windows"))]
-            {
-                let mut clipboard = Clipboard::new().map_err(AppError::from)?;
-                clipboard
-                    .set_text(String::new())
-                    .map_err(|e| AppError::Internal(format!("Clipboard error: {}", e)))?;
-            }
 
             Ok(())
         }
@@ -432,9 +400,6 @@ pub(crate) fn resolve_paste_with_format(
 
 /// Simulating Cmd+V needs Accessibility on macOS; elsewhere it always works.
 fn paste_permission_missing() -> bool {
-    #[cfg(target_os = "macos")]
-    return !crate::infrastructure::macos_api::permissions::has_accessibility_permission();
-    #[cfg(not(target_os = "macos"))]
     return false;
 }
 
@@ -577,16 +542,10 @@ pub async fn paste_text_directly(app_handle: tauri::AppHandle, content: String) 
 /// leave it out.
 #[tauri::command]
 pub fn copy_private_text(text: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    return crate::infrastructure::macos_api::clipboard::set_private_text(&text);
 
     #[cfg(target_os = "windows")]
     return unsafe { crate::infrastructure::windows_api::win_clipboard::set_clipboard_text_private(&text) };
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    return Clipboard::new()
-        .and_then(|mut clipboard| clipboard.set_text(text))
-        .map_err(|e| e.to_string());
 }
 
 #[tauri::command]
@@ -774,18 +733,7 @@ async fn handle_window_focus_for_paste(app_handle: &tauri::AppHandle) -> AppResu
             }
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            let activated = handoff_macos_focus_for_paste();
-            tokio::time::sleep(std::time::Duration::from_millis(if activated {
-                60
-            } else {
-                8
-            }))
-            .await;
-        }
 
-        #[cfg(not(target_os = "macos"))]
         tokio::time::sleep(std::time::Duration::from_millis(60))
         .await;
     } else {
@@ -796,44 +744,7 @@ async fn handle_window_focus_for_paste(app_handle: &tauri::AppHandle) -> AppResu
     Ok(())
 }
 
-/// Give keyboard ownership back to the paste target without needlessly
-/// re-activating its whole application. A non-activating NSPanel can be key
-/// while the target remains frontmost; calling `activateWithOptions` in that
-/// state reorders/flashes the target application's windows.
-#[cfg(target_os = "macos")]
-fn handoff_macos_focus_for_paste() -> bool {
-    if let Some(app_handle) = crate::global_state::GLOBAL_APP_HANDLE.get() {
-        let _ = crate::infrastructure::macos_api::window::resign_clipboard_panel_key(app_handle);
-    }
 
-    let prev_pid = crate::global_state::LAST_ACTIVE_APP_PID.load(Ordering::Relaxed);
-    if prev_pid != 0 {
-        let frontmost = crate::infrastructure::macos_api::window::get_active_app_snapshot();
-        if frontmost.pid == prev_pid {
-            return false;
-        }
-
-        if crate::infrastructure::macos_api::apps::activate_app_by_pid_soft(prev_pid as i32) {
-            return true;
-        }
-        if crate::infrastructure::macos_api::apps::activate_app_by_pid(prev_pid as i32) {
-            return true;
-        }
-    }
-
-    let prev_app = crate::global_state::get_last_active_app_name();
-    if prev_app.trim().is_empty() {
-        return false;
-    }
-    crate::infrastructure::macos_api::apps::activate_app_by_name(&prev_app)
-}
-
-#[cfg(target_os = "macos")]
-fn macos_previous_app_is_frontmost() -> bool {
-    let prev_pid = crate::global_state::LAST_ACTIVE_APP_PID.load(Ordering::Relaxed);
-    prev_pid != 0
-        && crate::infrastructure::macos_api::window::get_active_app_snapshot().pid == prev_pid
-}
 
 fn calculate_content_hash(content: &str) -> (u64, u64) {
     let normalized = crate::services::clipboard::normalize_clipboard_line_endings(content);
@@ -938,21 +849,7 @@ async fn copy_content_to_system_clipboard(
                         .map_err(AppError::Internal)?;
                     }
 
-                    #[cfg(target_os = "macos")]
-                    {
-                        crate::infrastructure::macos_api::clipboard::set_clipboard_files(
-                            file_paths,
-                        )
-                        .map_err(AppError::Internal)?;
-                    }
 
-                    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-                    {
-                        let mut clipboard = arboard::Clipboard::new().map_err(AppError::from)?;
-                        clipboard
-                            .set_text(content.to_string())
-                            .map_err(AppError::from)?;
-                    }
                 }
             } else if content_type == "image" {
                 let b64_data = if content.starts_with("data:image") {
@@ -1003,28 +900,6 @@ async fn copy_content_to_system_clipboard(
                             sanitize_tabular_html_for_paste(&build_exact_paste_html(content));
                     }
 
-                    #[cfg(target_os = "macos")]
-                    {
-                        let paste_target = (
-                            crate::global_state::get_last_active_app_name(),
-                            None::<String>,
-                        );
-                        let paste_rtf = if app_likely_word_processor(
-                            &paste_target.0,
-                            paste_target.1.as_deref(),
-                        ) {
-                            rtf_bytes_from_named_formats(&named_formats)
-                        } else {
-                            None
-                        };
-                        crate::infrastructure::macos_api::clipboard::set_clipboard_text_html_rtf_and_image(
-                            &paste_plain,
-                            &paste_html,
-                            paste_rtf,
-                            image_bytes,
-                        )
-                        .map_err(AppError::Internal)?;
-                    }
 
                     #[cfg(target_os = "windows")]
                     {
@@ -1041,14 +916,6 @@ async fn copy_content_to_system_clipboard(
                         )?;
                     }
 
-                    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-                    {
-                        let _ = image_bytes;
-                        let mut clipboard = arboard::Clipboard::new().map_err(AppError::from)?;
-                        clipboard
-                            .set_html(paste_html, Some(paste_plain))
-                            .map_err(AppError::from)?;
-                    }
                 } else {
                     copy_text_with_retry(content).await?;
                 }
@@ -1064,7 +931,7 @@ async fn copy_content_to_system_clipboard(
     Ok(())
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn image_extension_for_bytes(bytes: &[u8]) -> &'static str {
     if bytes.len() >= 3 && &bytes[0..3] == b"GIF" {
         "gif"
@@ -1148,7 +1015,7 @@ fn resolve_image_paste_path(bytes: &[u8], source_path: Option<&str>) -> AppResul
     write_temp_image_path(bytes)
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn encode_png_from_rgba(rgba: &image::RgbaImage) -> AppResult<Vec<u8>> {
     let mut png_buf = Vec::new();
     image::DynamicImage::ImageRgba8(rgba.clone())
@@ -1160,43 +1027,6 @@ fn encode_png_from_rgba(rgba: &image::RgbaImage) -> AppResult<Vec<u8>> {
     Ok(png_buf)
 }
 
-/// macOS: write the stored bytes as they are (see set_clipboard_image). Only
-/// non-PNG images are decoded, for a static PNG of their first frame. The echo
-/// hash is the hash of what the monitor reads back first: the GIF bytes for a
-/// GIF, otherwise the PNG (it used to compare a GIF-bytes hash with a hash of
-/// decoded pixels, so every GIF paste came back as a new flattened entry).
-#[cfg(target_os = "macos")]
-fn copy_image_bytes_to_clipboard_macos(
-    bytes: &[u8],
-    is_gif: bool,
-    source_path: Option<&str>,
-) -> AppResult<(u64, u64)> {
-    let extension = image_extension_for_bytes(bytes);
-    let static_png = if extension == "png" {
-        None
-    } else {
-        let first_frame = image::load_from_memory(bytes)
-            .map_err(|e| AppError::Internal(format!("无法打开图片。\n详情：{}", e)))?
-            .to_rgba8();
-        Some(encode_png_from_rgba(&first_frame)?)
-    };
-    // The file itself lets chat apps and Finder take the animated original.
-    let file_path = source_path
-        .map(str::trim)
-        .filter(|path| is_gif && !path.is_empty() && std::path::Path::new(path).is_file());
-    crate::infrastructure::macos_api::clipboard::set_clipboard_image(
-        bytes,
-        extension,
-        static_png.as_deref(),
-        file_path,
-    )
-    .map_err(AppError::Internal)?;
-
-    let echo_bytes: &[u8] = if is_gif { bytes } else { static_png.as_deref().unwrap_or(bytes) };
-    let mut hasher = DefaultHasher::new();
-    echo_bytes.to_vec().hash(&mut hasher);
-    Ok((hasher.finish(), 0))
-}
 
 fn copy_image_bytes_to_clipboard(
     bytes: Vec<u8>,
@@ -1206,11 +1036,6 @@ fn copy_image_bytes_to_clipboard(
     // Check if it's a GIF by magic number
     let is_gif = bytes.len() > 3 && &bytes[0..3] == b"GIF";
 
-    #[cfg(target_os = "macos")]
-    {
-        crate::LAST_APP_SET_TIMESTAMP.store(current_time, Ordering::SeqCst);
-        return copy_image_bytes_to_clipboard_macos(&bytes, is_gif, source_path);
-    }
 
     #[allow(unreachable_code)]
     let (width, height, raw_bytes) = {
@@ -1276,21 +1101,6 @@ fn copy_image_bytes_to_clipboard(
 
         return Ok((primary_hash, secondary_hash));
     }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = source_path;
-        let mut clipboard = arboard::Clipboard::new().map_err(AppError::from)?;
-        clipboard
-            .set_image(arboard::ImageData {
-                width: width as usize,
-                height: height as usize,
-                bytes: raw_bytes.into(),
-            })
-            .map_err(AppError::from)?;
-    }
-
-    Ok((primary_hash, secondary_hash))
 }
 
 async fn copy_text_with_retry(content: &str) -> AppResult<()> {
@@ -1300,13 +1110,7 @@ async fn copy_text_with_retry(content: &str) -> AppResult<()> {
     // a history-item click exactly as captured.
     let paste_text = normalize_plain_text_for_clipboard_paste(content);
 
-    #[cfg(target_os = "macos")]
-    {
-        crate::infrastructure::macos_api::clipboard::set_clipboard_text_and_html(&paste_text, "")
-            .map_err(AppError::Internal)?;
-    }
 
-    #[cfg(not(target_os = "macos"))]
     {
         let mut retries = 3;
         while retries > 0 {
@@ -1377,12 +1181,6 @@ async fn perform_paste_action(
 
     // This is only a recovery path. The normal macOS path is already frontmost
     // and proceeds immediately after the initial 8 ms responder handoff.
-    #[cfg(target_os = "macos")]
-    if !macos_previous_app_is_frontmost() {
-        if handoff_macos_focus_for_paste() {
-            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
-        }
-    }
 
     // Send paste keystroke
     let paste_method = state
@@ -1413,10 +1211,6 @@ pub(crate) fn resolve_paste_method_for_target(method: &str) -> String {
     #[cfg(target_os = "windows")]
     {
         return resolve_windows_paste_method(method);
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        method.to_string()
     }
 }
 
@@ -1893,37 +1687,6 @@ pub fn send_paste_keystroke(method: &str, content: Option<&str>, content_type: O
             };
             SendInput(&[shift_up], std::mem::size_of::<INPUT>() as i32);
         }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _method = method;
-        let _content = content;
-        // Focus was already handed off and allowed to settle before the
-        // clipboard payload was prepared. Do not schedule another NSPanel
-        // resign here: it can race the Command+V event and adds avoidable work
-        // to every paste.
-
-        if !crate::infrastructure::macos_api::permissions::has_accessibility_permission() {
-            println!(
-                "[WARN] Accessibility permission missing; open Settings → Privacy → Accessibility"
-            );
-            return;
-        }
-
-        crate::infrastructure::macos_api::paste_key_monitor::suppress_paste_sound_briefly();
-        if crate::infrastructure::macos_api::permissions::send_command_v() {
-            if let Some(app) = crate::global_state::GLOBAL_APP_HANDLE.get() {
-                crate::services::ui_sound::schedule_paste_sound(app);
-            }
-        } else {
-            println!("[WARN] Native Command+V dispatch failed");
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    if let Some(app) = crate::global_state::GLOBAL_APP_HANDLE.get() {
-        crate::services::ui_sound::schedule_paste_sound(app);
     }
 }
 

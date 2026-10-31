@@ -2,7 +2,6 @@ use crate::app_state::AppDataDir;
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json;
-use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
 fn open_path_in_file_manager(path: &std::path::Path) -> AppResult<()> {
@@ -13,43 +12,7 @@ fn open_path_in_file_manager(path: &std::path::Path) -> AppResult<()> {
         )));
     }
 
-    #[cfg(not(target_os = "windows"))]
-    use std::process::Command;
 
-    #[cfg(target_os = "macos")]
-    {
-        let reveal = Command::new("open")
-            .arg("-R")
-            .arg(path)
-            .output()
-            .map_err(|e| AppError::Internal(format!("Failed to open folder: {}", e)))?;
-        if reveal.status.success() {
-            return Ok(());
-        }
-
-        let fallback = Command::new("open")
-            .arg(path)
-            .output()
-            .map_err(|e| AppError::Internal(format!("Failed to open folder: {}", e)))?;
-        if fallback.status.success() {
-            return Ok(());
-        }
-
-        let stderr = String::from_utf8_lossy(&reveal.stderr).trim().to_string();
-        let fallback_stderr = String::from_utf8_lossy(&fallback.stderr).trim().to_string();
-        let detail = if !stderr.is_empty() {
-            stderr
-        } else if !fallback_stderr.is_empty() {
-            fallback_stderr
-        } else {
-            "Unknown Finder error".to_string()
-        };
-
-        return Err(AppError::Internal(format!(
-            "Failed to open folder: {}",
-            detail
-        )));
-    }
 
     // explorer.exe exits with 1 even when the folder opened, so its exit code
     // reported every success as a failure. ShellExecute says whether it worked.
@@ -81,39 +44,6 @@ fn open_path_in_file_manager(path: &std::path::Path) -> AppResult<()> {
         return Ok(());
     }
 
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    {
-        let output = Command::new("xdg-open")
-            .arg(path)
-            .output()
-            .map_err(|e| AppError::Internal(format!("Failed to open folder: {}", e)))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            let detail = if stderr.is_empty() {
-                "xdg-open returned a non-zero exit status".to_string()
-            } else {
-                stderr
-            };
-            return Err(AppError::Internal(format!(
-                "Failed to open folder: {}",
-                detail
-            )));
-        }
-        return Ok(());
-    }
-}
-
-fn content_type_to_ext(content_type: &str) -> String {
-    let normalized = content_type.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "text" | "code" => "txt".to_string(),
-        "rich_text" => "html".to_string(),
-        "image" => "png".to_string(),
-        "video" => "mp4".to_string(),
-        "url" => "html".to_string(),
-        other if !other.is_empty() => other.to_string(),
-        _ => "txt".to_string(),
-    }
 }
 
 #[tauri::command]
@@ -128,33 +58,15 @@ pub async fn scan_installed_apps() -> Vec<serde_json::Value> {
             Err(_) => Vec::new(),
         }
     }
-    #[cfg(target_os = "macos")]
-    {
-        crate::infrastructure::macos_api::apps::scan_installed_apps()
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        Vec::new()
-    }
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn get_system_default_app(contentType: String) -> String {
-    let ext = content_type_to_ext(&contentType);
     #[cfg(target_os = "windows")]
     {
         return crate::infrastructure::windows_api::apps::get_system_default_app(contentType)
             .unwrap_or_default();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return crate::infrastructure::macos_api::apps::get_system_default_app(&ext);
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let _ = ext;
-        String::new()
     }
 }
 
@@ -170,15 +82,6 @@ pub async fn get_associated_apps(extension: String) -> Vec<serde_json::Value> {
             Err(_) => Vec::new(),
         }
     }
-    #[cfg(target_os = "macos")]
-    {
-        crate::infrastructure::macos_api::apps::get_associated_apps(&extension)
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let _ = extension;
-        Vec::new()
-    }
 }
 
 #[tauri::command]
@@ -186,16 +89,6 @@ pub fn get_executable_icon(executable_path: String) -> AppResult<Option<String>>
     #[cfg(target_os = "windows")]
     {
         return crate::infrastructure::windows_api::apps::get_executable_icon(executable_path);
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return crate::infrastructure::macos_api::apps::get_executable_icon(executable_path)
-            .map_err(AppError::Internal);
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let _ = executable_path;
-        Ok(None)
     }
 }
 
@@ -205,28 +98,12 @@ pub fn get_file_icon(file_path: String) -> AppResult<Option<String>> {
     {
         return crate::infrastructure::windows_api::apps::get_file_icon(file_path);
     }
-    #[cfg(target_os = "macos")]
-    {
-        return crate::infrastructure::macos_api::apps::get_file_icon(file_path).map_err(AppError::Internal);
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let _ = file_path;
-        Ok(None)
-    }
 }
 
 #[tauri::command]
 pub fn get_data_path(state: State<'_, AppDataDir>) -> AppResult<String> {
     let path = state.0.lock().unwrap();
     Ok(path.to_string_lossy().to_string())
-}
-
-/// The usage ping id (see resolve_ping_id); `window_id` is the id the window
-/// kept in WebView storage, if any.
-#[tauri::command]
-pub fn get_ping_id(state: State<'_, crate::database::DbState>, window_id: Option<String>) -> String {
-    crate::app::system::resolve_ping_id(&state.settings_repo, window_id.as_deref())
 }
 
 #[tauri::command]
@@ -250,20 +127,6 @@ pub fn open_file_with_default_app(file_path: String) -> AppResult<()> {
             .spawn()
             .map_err(|e| AppError::Internal(format!("Failed to open file: {}", e)))?;
     }
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(&file_path)
-            .spawn()
-            .map_err(|e| AppError::Internal(format!("Failed to open file: {}", e)))?;
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        Command::new("xdg-open")
-            .arg(&file_path)
-            .spawn()
-            .map_err(|e| AppError::Internal(format!("Failed to open file: {}", e)))?;
-    }
     Ok(())
 }
 
@@ -278,39 +141,12 @@ pub fn open_file_location(file_path: String) -> AppResult<()> {
             .spawn()
             .map_err(|e| AppError::Internal(format!("Failed to open file location: {}", e)))?;
     }
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg("-R")
-            .arg(&file_path)
-            .spawn()
-            .map_err(|e| AppError::Internal(format!("Failed to open file location: {}", e)))?;
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let path = std::path::Path::new(&file_path);
-        if let Some(parent) = path.parent() {
-            Command::new("xdg-open")
-                .arg(parent)
-                .spawn()
-                .map_err(|e| AppError::Internal(format!("Failed to open file location: {}", e)))?;
-        }
-    }
     Ok(())
 }
 
 #[tauri::command]
 pub fn toggle_autostart(app_handle: AppHandle, enabled: bool) -> AppResult<()> {
     let result = apply_autostart(&app_handle, enabled);
-    #[cfg(target_os = "macos")]
-    {
-        use crate::infrastructure::macos_api::login_item;
-        if enabled && result.is_err() && login_item::available() && login_item::requires_approval() {
-            // Switched off in System Settings, where only the user can switch
-            // it back on: take them there instead of failing silently.
-            login_item::open_settings();
-        }
-    }
     result
 }
 
@@ -338,29 +174,6 @@ pub(crate) fn apply_autostart(app_handle: &AppHandle, enabled: bool) -> AppResul
         return Ok(());
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        use tauri_plugin_autostart::ManagerExt;
-        let autolaunch = app_handle.autolaunch();
-        #[cfg(target_os = "macos")]
-        {
-            use crate::infrastructure::macos_api::login_item;
-            if login_item::available() {
-                // The old ~/Library/LaunchAgents item goes either way, so it
-                // can't start TieZ twice or show up under the developer's name.
-                if autolaunch.is_enabled().unwrap_or(false) {
-                    let _ = autolaunch.disable();
-                }
-                return login_item::set_enabled(enabled).map_err(AppError::Internal);
-            }
-        }
-        if enabled {
-            let _ = autolaunch.enable();
-        } else {
-            let _ = autolaunch.disable();
-        }
-        Ok(())
-    }
 }
 
 #[tauri::command]
@@ -373,19 +186,6 @@ pub fn is_autostart_enabled(app_handle: AppHandle) -> AppResult<bool> {
             || elevated_autostart::is_elevated_autostart_installed());
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        use tauri_plugin_autostart::ManagerExt;
-        #[cfg(target_os = "macos")]
-        {
-            use crate::infrastructure::macos_api::login_item;
-            if login_item::available() {
-                return Ok(login_item::is_enabled());
-            }
-        }
-        let autolaunch = app_handle.autolaunch();
-        Ok(autolaunch.is_enabled().unwrap_or(false))
-    }
 }
 
 #[tauri::command]
@@ -393,10 +193,6 @@ pub fn is_elevated_autostart_enabled() -> bool {
     #[cfg(target_os = "windows")]
     {
         crate::infrastructure::windows_api::elevated_autostart::is_elevated_autostart_installed()
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        false
     }
 }
 
@@ -427,13 +223,6 @@ pub fn toggle_elevated_autostart(enabled: bool) -> AppResult<()> {
             elevated_autostart::write_registry_run_entry().map_err(AppError::Internal)?;
         }
         Ok(())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = enabled;
-        Err(AppError::Internal(
-            "Elevated autostart is only supported on Windows".into(),
-        ))
     }
 }
 
@@ -508,11 +297,6 @@ pub fn set_windows_clipboard_history(enabled: bool) -> AppResult<()> {
         }
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = enabled;
-        Ok(())
-    }
 }
 
 #[tauri::command]
@@ -542,10 +326,6 @@ pub fn get_windows_clipboard_history() -> AppResult<bool> {
             Err(_) => true,
         };
         Ok(history_enabled && !v_disabled)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(true)
     }
 }
 
@@ -628,11 +408,6 @@ pub fn trigger_registry_win_v_optimization(enable: bool) -> AppResult<bool> {
             }
         }
         Ok(changed)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = enable;
-        Ok(false)
     }
 }
 
@@ -735,13 +510,6 @@ pub fn restart_as_admin(app_handle: AppHandle) -> AppResult<()> {
         crate::app::light_mode::request_app_exit(&app_handle);
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app_handle;
-        Err(AppError::Internal(
-            "Restart as administrator is only supported on Windows".to_string(),
-        ))
-    }
 }
 
 #[tauri::command]
@@ -797,13 +565,6 @@ pub fn set_data_path(app_handle: AppHandle, new_path: String) -> AppResult<()> {
             "Selected path is not a directory".to_string(),
         ));
     }
-    #[cfg(target_os = "macos")]
-    if clean_path.to_ascii_lowercase().ends_with(".app") {
-        return Err(AppError::Validation(
-            "Cannot use a .app bundle as data directory. Please choose a normal folder."
-                .to_string(),
-        ));
-    }
 
     let old_path_buf = app_handle.state::<AppDataDir>().0.lock().unwrap().clone();
     if std::fs::canonicalize(&old_path_buf).ok() == std::fs::canonicalize(new_data_path).ok() {
@@ -826,7 +587,6 @@ pub fn set_data_path(app_handle: AppHandle, new_path: String) -> AppResult<()> {
             use std::io::Write;
             let mut options = std::fs::OpenOptions::new();
             options.write(true).create_new(true);
-            #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
             let mut output = options.open(&destination).map_err(AppError::from)?;
             output.write_all(&std::fs::read(&source).map_err(AppError::from)?).map_err(AppError::from)?;
             output.sync_all().map_err(AppError::from)?;
@@ -1183,81 +943,4 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::
         }
     }
     Ok(())
-}
-
-#[tauri::command]
-pub fn check_macos_permissions() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        return crate::infrastructure::macos_api::permissions::has_accessibility_permission();
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        true
-    }
-}
-
-#[tauri::command]
-pub fn request_macos_permissions() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        return crate::infrastructure::macos_api::permissions::request_accessibility_permission();
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        true
-    }
-}
-
-#[tauri::command]
-pub fn get_macos_accessibility_binary_path() -> String {
-    #[cfg(target_os = "macos")]
-    {
-        return std::env::current_exe()
-            .ok()
-            .and_then(|path| path.into_os_string().into_string().ok())
-            .unwrap_or_else(|| "tiez-app".to_string());
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        String::new()
-    }
-}
-
-#[tauri::command]
-pub fn open_macos_accessibility_settings() -> AppResult<()> {
-    #[cfg(target_os = "macos")]
-    {
-        use std::process::Command;
-        const URLS: &[&str] = &[
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-            "x-apple.systempreferences:com.apple.preference.security",
-        ];
-        for url in URLS {
-            if Command::new("open")
-                .arg(url)
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false)
-            {
-                return Ok(());
-            }
-        }
-        if Command::new("open")
-            .args(["-b", "com.apple.systempreferences"])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-        {
-            return Ok(());
-        }
-        return Err(AppError::Internal(
-            "请手动打开系统「辅助功能」设置。".to_string(),
-        ));
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(())
-    }
 }

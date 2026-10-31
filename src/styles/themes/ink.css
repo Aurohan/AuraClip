@@ -5,23 +5,6 @@
 /* Component adjustments for this theme, kept ahead of the theme's own rules
    (they used to sit in the component stylesheets). */
 
-/* ---- From components/ai.css ---- */
-
-.theme-ink .ai-action-btn {
-  border: 1px solid var(--border-dark);
-  border-radius: var(--radius-2xs);
-}
-
-/* ---- From components/file-transfer.css ---- */
-
-.theme-ink .wt-chat-view {
-  --im-canvas: var(--bg-window);
-  --im-canvas-shade: color-mix(in srgb, var(--bg-window) 88%, transparent);
-  --im-incoming: var(--bg-element);
-  --im-bubble-border: var(--line-soft);
-}
-
-
 :root.theme-ink,
 body.theme-ink {
   --font-main: "Songti SC", "STSong", "Noto Serif SC", "Georgia", "SimSun", serif;
@@ -161,9 +144,6 @@ body.theme-ink {
   --compact-card-radius: 0;
   --compact-media-radius: 0;
   --card-shadow: none;
-  --card-hover-shadow: none;
-  --card-hover-transform: none;
-  --card-hover-border-color: transparent;
   --card-selected-background: var(--ink-mist);
   --card-selected-border-color: var(--ink-seal);
   --card-selected-shadow: none;
@@ -189,10 +169,7 @@ body.theme-ink {
   --menu-item-hover-background: var(--ink-seal);
   --menu-item-hover-color: #fff8f0;
 
-  --scrollbar-size: 6px;
-  --scrollbar-radius: 0;
   --scrollbar-thumb-color: rgba(26, 26, 26, 0.18);
-  --scrollbar-thumb-hover-color: var(--ink-seal);
 }
 
 body.theme-ink #root {
@@ -277,7 +254,6 @@ body.dark-mode.theme-ink {
 
   --menu-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
   --scrollbar-thumb-color: rgba(228, 221, 209, 0.14);
-  --scrollbar-thumb-hover-color: var(--ink-seal);
 }
 
 body.dark-mode.theme-ink #root {

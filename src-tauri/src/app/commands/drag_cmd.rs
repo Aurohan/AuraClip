@@ -25,17 +25,8 @@ pub struct NativeDragRequest {
 /// the `native-drag-ended` event. Elsewhere the page keeps its own drag.
 #[tauri::command]
 pub fn start_native_drag(window: WebviewWindow, request: NativeDragRequest) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        crate::infrastructure::macos_api::native_drag::start(&window, request)
-    }
     #[cfg(target_os = "windows")]
     {
         crate::infrastructure::windows_api::native_drag::start(&window, request)
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        let _ = (window, request);
-        Err("native drag is not available here".to_string())
     }
 }

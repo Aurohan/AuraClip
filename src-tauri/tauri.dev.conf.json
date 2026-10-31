@@ -1,5 +1,5 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "TieZ Dev",
-  "identifier": "com.tiez.dev"
+  "productName": "AuraClip Dev",
+  "identifier": "com.auradesk.auraclip.dev"
 }

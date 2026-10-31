@@ -4,7 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { RefObject } from "react";
 import { matchesHotkey } from "./useHotkeyMatching";
-import { isMacPlatform } from "../lib/platform";
 import { isTauriRuntime } from "../lib/tauriRuntime";
 import { notePointerPick } from "../lib/pointerPick";
 import type { ClipboardEntry } from "../types";
@@ -19,8 +18,6 @@ interface UseKeyboardNavigationOptions {
   setIsKeyboardMode: (val: boolean | ((prev: boolean) => boolean)) => void;
   showSettings: boolean;
   showTagManager: boolean;
-  showEmojiPanel: boolean;
-  chatMode: boolean;
   editingTagsId: number | null;
   editingNoteId: number | null;
   arrowKeySelection: boolean;
@@ -58,8 +55,6 @@ export const useKeyboardNavigation = ({
   setIsKeyboardMode,
   showSettings,
   showTagManager,
-  showEmojiPanel,
-  chatMode,
   editingTagsId,
   editingNoteId,
   arrowKeySelection,
@@ -78,8 +73,6 @@ export const useKeyboardNavigation = ({
   const isKeyboardModeRef = useRef(isKeyboardMode);
   const showSettingsRef = useRef(showSettings);
   const showTagManagerRef = useRef(showTagManager);
-  const showEmojiPanelRef = useRef(showEmojiPanel);
-  const chatModeRef = useRef(chatMode);
   const editingTagsIdRef = useRef(editingTagsId);
   const editingNoteIdRef = useRef(editingNoteId);
   const arrowKeySelectionRef = useRef(arrowKeySelection);
@@ -92,8 +85,6 @@ export const useKeyboardNavigation = ({
   isKeyboardModeRef.current = isKeyboardMode;
   showSettingsRef.current = showSettings;
   showTagManagerRef.current = showTagManager;
-  showEmojiPanelRef.current = showEmojiPanel;
-  chatModeRef.current = chatMode;
   editingTagsIdRef.current = editingTagsId;
   editingNoteIdRef.current = editingNoteId;
   arrowKeySelectionRef.current = arrowKeySelection;
@@ -109,10 +100,8 @@ export const useKeyboardNavigation = ({
       null;
   }, [selectedIndex, selectedItemId]);
 
-  // macOS NSPanel is non-key on show; arrow DOM navigation works after make_key_window.
-  // Native HID navigation is only needed on Windows (and legacy Mac non-key panels).
   const usesNativeNavigation = () =>
-    isTauriRuntime() && arrowKeySelectionRef.current && !isMacPlatform();
+    isTauriRuntime() && arrowKeySelectionRef.current;
 
   const applySelection = (index: number, enableKeyboard = true) => {
     const history = filteredHistoryRef.current;
@@ -192,18 +181,14 @@ export const useKeyboardNavigation = ({
     }
   };
 
-  // Delete (any platform) or Command+Backspace (macOS, as in Finder). In the
-  // search box only when it can't mean text editing: Delete with the caret at
-  // the end, Command+Backspace with the box empty. Plain Backspace never
-  // deletes an entry: it is how people correct the search.
+  // Delete removes the entry. In the search box only with the caret at the
+  // end, where it can't mean text editing. Plain Backspace never deletes an
+  // entry: it is how people correct the search.
   const isDeleteKey = (e: KeyboardEvent, target: HTMLElement) => {
-    const isForwardDelete = e.key === "Delete" && !e.metaKey && !e.ctrlKey && !e.altKey;
-    const isCommandBackspace = isMacPlatform() && e.metaKey && e.key === "Backspace";
-    if (!isForwardDelete && !isCommandBackspace) return false;
+    if (e.key !== "Delete" || e.metaKey || e.ctrlKey || e.altKey) return false;
     if (!(target instanceof HTMLInputElement)) return true;
     const { value, selectionStart, selectionEnd } = target;
-    if (isForwardDelete) return selectionStart === value.length && selectionEnd === value.length;
-    return value.length === 0;
+    return selectionStart === value.length && selectionEnd === value.length;
   };
 
   const copyInFlightRef = useRef(false);
@@ -230,7 +215,6 @@ export const useKeyboardNavigation = ({
   // Other fields, and any open dialog or menu, keep their normal Tab focus.
   const isCategoryTab = (e: KeyboardEvent, target: HTMLElement, isEditable: boolean) => {
     if (e.key !== "Tab" || e.ctrlKey || e.altKey || e.metaKey) return false;
-    if (showEmojiPanelRef.current) return false;
     if (isEditable && !target.classList.contains("search-input")) return false;
     if (document.querySelector("[aria-modal='true']")) return false;
     return !target.closest("[role='dialog'], [role='menu'], [role='listbox']");
@@ -309,7 +293,6 @@ export const useKeyboardNavigation = ({
       if (
         showSettingsRef.current ||
         showTagManagerRef.current ||
-        chatModeRef.current ||
         editingTagsIdRef.current !== null ||
         editingNoteIdRef.current !== null
       ) {
@@ -466,7 +449,7 @@ export const useKeyboardNavigation = ({
       }
       if (!windowLooksOpen) return;
 
-      if (showSettingsRef.current || showTagManagerRef.current || chatModeRef.current || editingTagsIdRef.current !== null || editingNoteIdRef.current !== null) {
+      if (showSettingsRef.current || showTagManagerRef.current || editingTagsIdRef.current !== null || editingNoteIdRef.current !== null) {
         return;
       }
 

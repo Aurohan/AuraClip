@@ -10,10 +10,6 @@ use std::sync::atomic::Ordering;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
-#[cfg(target_os = "macos")]
-fn get_platform_clipboard_html() -> Option<String> {
-    crate::infrastructure::macos_api::clipboard::get_clipboard_html()
-}
 
 #[cfg(target_os = "windows")]
 fn get_platform_clipboard_html() -> Option<String> {
@@ -23,17 +19,10 @@ fn get_platform_clipboard_html() -> Option<String> {
     .and_then(|raw| utils::parse_cf_html(&raw))
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-fn get_platform_clipboard_html() -> Option<String> {
-    None
-}
 
-#[cfg(target_os = "macos")]
-const MAX_MACOS_TEXT_BYTES: usize = 8 * 1024 * 1024;
 /// Larger clipboard images are not recorded: they would be held, hashed and
 /// re-encoded on the listener thread and stall later copies.
 const MAX_CAPTURE_IMAGE_BYTES: usize = 64 * 1024 * 1024;
-const MAX_CAPTURE_IMAGE_PIXELS: usize = 60_000_000;
 #[cfg(target_os = "windows")]
 const RICH_TEXT_RETRY_DELAYS_MS: [u64; 7] = [0, 40, 80, 140, 220, 360, 560];
 #[cfg(target_os = "windows")]
@@ -359,20 +348,14 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             return;
         }
         // TieZ put the user's previous clipboard back (transient paste).
-        #[cfg(target_os = "macos")]
-        if crate::infrastructure::macos_api::clipboard::is_own_change() {
-            return;
-        }
 
         // Nothing was written since the last capture: an event that queued up
         // while a slow capture ran. (A 2 s same-content window used to be the
         // only guard, so a capture longer than that was processed twice.)
-        #[cfg(target_os = "macos")]
-        let sequence = crate::infrastructure::macos_api::clipboard::change_count() as i64;
         #[cfg(target_os = "windows")]
         let sequence =
             unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() } as i64;
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(target_os = "windows")]
         {
             if sequence == monitor_state.last_sequence {
                 return;
@@ -393,19 +376,12 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
         // Snapshot file URLs immediately. Finder can replace the pasteboard
         // again while we wait for richer text formats, making an earlier file
         // event otherwise observe a later file and lose the intermediate one.
-        #[cfg(target_os = "macos")]
-        let clipboard_files_snapshot =
-            crate::infrastructure::macos_api::clipboard::get_clipboard_files();
         #[cfg(target_os = "windows")]
         let mut clipboard_files_snapshot =
             unsafe { crate::infrastructure::windows_api::win_clipboard::get_clipboard_files() };
 
         // Give source apps (especially Excel) a brief moment to finish writing
         // non-file payloads. File URLs are already complete in the event snapshot.
-        #[cfg(target_os = "macos")]
-        if clipboard_files_snapshot.is_none() {
-            std::thread::sleep(std::time::Duration::from_millis(8));
-        }
         #[cfg(target_os = "windows")]
         if clipboard_files_snapshot.is_none() {
             let delay_ms = if is_snipping_tool_source(&source_snapshot) {
@@ -419,52 +395,24 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             clipboard_files_snapshot =
                 unsafe { crate::infrastructure::windows_api::win_clipboard::get_clipboard_files() };
         }
-        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-        std::thread::sleep(std::time::Duration::from_millis(20));
 
         // Passwords copied from password managers are marked private; never record them.
         // Checked after the settle delay so markers written alongside the text are visible.
-        #[cfg(target_os = "macos")]
-        if crate::infrastructure::macos_api::clipboard::is_clipboard_marked_private() {
-            return;
-        }
         #[cfg(target_os = "windows")]
         if crate::infrastructure::windows_api::win_clipboard::is_clipboard_marked_private() {
             return;
         }
 
         // Initialize clipboard for this thread
-        #[cfg(not(target_os = "macos"))]
         let mut clipboard = match Clipboard::new() {
             Ok(cb) => cb,
             Err(_) => return,
         };
-        #[cfg(target_os = "macos")]
-        let mut clipboard = Clipboard::new().ok();
-        #[cfg(target_os = "macos")]
-        let text_from_clipboard = crate::infrastructure::macos_api::clipboard::get_clipboard_text();
 
         // The image in its original encoding (GIF, PNG…); see
         // get_clipboard_image_bytes. Not read for file copies.
-        #[cfg(target_os = "macos")]
-        let macos_raw_image = if clipboard_files_snapshot.is_none() {
-            crate::infrastructure::macos_api::clipboard::get_clipboard_image_bytes()
-                .filter(|(bytes, _)| bytes.len() <= MAX_CAPTURE_IMAGE_BYTES)
-        } else {
-            None
-        };
         // Decoding the TIFF only when nothing better is there: it flattens GIFs
         // and costs a full decode, and for file copies it's just the file icon.
-        #[cfg(target_os = "macos")]
-        let clipboard_image = if clipboard_files_snapshot.is_none() && macos_raw_image.is_none() {
-            clipboard
-                .as_mut()
-                .and_then(|cb| cb.get_image().ok())
-                .filter(|image| image.width * image.height <= MAX_CAPTURE_IMAGE_PIXELS)
-        } else {
-            None
-        };
-        #[cfg(not(target_os = "macos"))]
         let clipboard_image = clipboard.get_image().ok();
         #[cfg(target_os = "windows")]
         let native_clipboard_image =
@@ -480,30 +428,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
 
             // Hash text content if available
-            #[cfg(target_os = "macos")]
-            {
-                if let Some(file_paths) = clipboard_files_snapshot.as_ref() {
-                    file_paths.hash(&mut hasher);
-                }
-                if let Some(text) = &text_from_clipboard {
-                    if text.len() > MAX_MACOS_TEXT_BYTES {
-                        "__TEXT_TOO_LARGE__".hash(&mut hasher);
-                    } else {
-                        text.hash(&mut hasher);
-                    }
-                }
-                if let Some(html) = get_platform_clipboard_html() {
-                    if html.len() > MAX_MACOS_TEXT_BYTES {
-                        "__HTML_TOO_LARGE__".hash(&mut hasher);
-                    } else {
-                        html.hash(&mut hasher);
-                    }
-                } else if crate::infrastructure::macos_api::clipboard::get_clipboard_rtf().is_some()
-                {
-                    "__RTF__".hash(&mut hasher);
-                }
-            }
-            #[cfg(not(target_os = "macos"))]
             {
                 #[cfg(target_os = "windows")]
                 if let Some(file_paths) = clipboard_files_snapshot.as_ref() {
@@ -536,10 +460,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             if let Some(image) = &clipboard_image {
                 image.bytes.hash(&mut hasher);
             }
-            #[cfg(target_os = "macos")]
-            if let Some((bytes, _)) = &macos_raw_image {
-                bytes.hash(&mut hasher);
-            }
             #[cfg(target_os = "windows")]
             if let Some((_, hash)) = &native_clipboard_image {
                 hash.hash(&mut hasher);
@@ -550,20 +470,8 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
 
         // The clipboard image as a data URL for rich-text fallbacks: its original
         // bytes when we have them (a GIF stays animated), else the bitmap as PNG.
-        #[cfg(target_os = "macos")]
-        let has_clipboard_image = clipboard_image.is_some() || macos_raw_image.is_some();
-        #[cfg(not(target_os = "macos"))]
         let has_clipboard_image = clipboard_image.is_some();
         let rich_image_fallback_url = || -> Option<String> {
-            #[cfg(target_os = "macos")]
-            if let Some((bytes, extension)) = macos_raw_image.as_ref() {
-                let mime = if *extension == "jpg" { "jpeg" } else { extension };
-                return Some(format!(
-                    "data:image/{};base64,{}",
-                    mime,
-                    base64::engine::general_purpose::STANDARD.encode(bytes)
-                ));
-            }
             clipboard_image.as_ref().and_then(|image| {
                 build_rich_image_fallback_data_url(image.width, image.height, &image.bytes)
             })
@@ -590,39 +498,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
         // --- Core processing logic (same as before) ---
 
         // 1. Check Files (macOS)
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(file_paths) = clipboard_files_snapshot {
-                let file_content = file_paths.join("\n");
-                let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                use std::hash::{Hash, Hasher};
-                utils::normalize_clipboard_line_endings(&file_content).hash(&mut hasher);
-                let current_hash = hasher.finish();
-
-                let last_app_hash = crate::LAST_APP_SET_HASH.load(Ordering::SeqCst);
-                let last_app_time = crate::LAST_APP_SET_TIMESTAMP.load(Ordering::SeqCst);
-                let now_secs = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-
-                if (last_app_hash != 0 && current_hash == last_app_hash)
-                    && (now_secs - last_app_time) < 10
-                {
-                    return;
-                }
-
-                let settings = app.state::<SettingsState>();
-                if settings.capture_files.load(Ordering::Relaxed) {
-                    process_new_entry(&app, ClipboardData::Files(file_paths), None);
-                } else if let Some((bytes, extension)) = single_image_file(&file_paths) {
-                    process_new_entry(&app, ClipboardData::Image { bytes, extension }, None);
-                }
-                // Whether we captured or skipped, we MUST mark as handled so the file
-                // icon (image) and filename (text) are NOT captured.
-                return;
-            }
-        }
 
         // Explorer publishes copied files as CF_HDROP. Handle this before
         // arboard's text/image fallbacks so a file copy is not mistaken for
@@ -677,32 +552,7 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             }
         }
 
-        #[cfg(target_os = "macos")]
-        let clipboard_html_snapshot = {
-            let settings = app.state::<SettingsState>();
-            if settings.capture_rich_text.load(Ordering::Relaxed) {
-                let mut html = get_platform_clipboard_html();
-                if html
-                    .as_ref()
-                    .map(|value| value.trim().is_empty())
-                    .unwrap_or(true)
-                {
-                    if let Some(rtf) =
-                        crate::infrastructure::macos_api::clipboard::get_clipboard_rtf()
-                    {
-                        html =
-                            crate::infrastructure::macos_api::clipboard::convert_rtf_to_html(&rtf);
-                    }
-                }
-                html
-            } else {
-                None
-            }
-        };
 
-        #[cfg(target_os = "macos")]
-        let clipboard_rtf_snapshot =
-            crate::infrastructure::macos_api::clipboard::get_clipboard_rtf();
 
         // Office/WPS publish HTML, RTF and private formats in several clipboard updates.
         // Probe those formats before the bitmap fallback, including HTML-only payloads.
@@ -843,20 +693,9 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
         if !handled {
             let settings = app.state::<SettingsState>();
             let rich_text_enabled = settings.capture_rich_text.load(Ordering::Relaxed);
-            #[cfg(not(target_os = "macos"))]
             let has_text = clipboard.get_text().map(|t| !t.is_empty()).unwrap_or(false);
             // HTML that only wraps the copied picture (browsers' "Copy image")
             // isn't rich text: record the image itself.
-            #[cfg(target_os = "macos")]
-            let has_rich_html = rich_text_enabled
-                && clipboard_html_snapshot
-                    .as_ref()
-                    .map(|html| {
-                        !html.trim().is_empty()
-                            && !(has_clipboard_image && utils::html_is_image_only(html))
-                    })
-                    .unwrap_or(false);
-            #[cfg(not(target_os = "macos"))]
             let has_rich_html = if rich_text_enabled && has_text {
                 get_platform_clipboard_html()
                     .map(|html| !html.trim().is_empty())
@@ -867,29 +706,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
 
             // Rich text wins over image when rich HTML exists; image remains fallback for pure image content.
             if !has_rich_html {
-                #[cfg(target_os = "macos")]
-                if !handled {
-                    if let Some((bytes, extension)) = macos_raw_image.as_ref() {
-                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                        use std::hash::{Hash, Hasher};
-                        bytes.hash(&mut hasher);
-                        let hash = hasher.finish();
-                        if !monitor_state.is_repeat_image(hash, now_ms) {
-                            if !recent_app_write(hash) {
-                                process_new_entry(
-                                    &app,
-                                    ClipboardData::Image {
-                                        bytes: bytes.clone(),
-                                        extension: extension.to_string(),
-                                    },
-                                    None,
-                                );
-                                handled = true;
-                            }
-                            monitor_state.remember_image(hash, now_ms);
-                        }
-                    }
-                }
                 if !handled {
                     if let Some(image) = clipboard_image.as_ref() {
                         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -913,15 +729,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
                                         extension: "png".to_string(),
                                     },
                                     source_snapshot.clone(),
-                                );
-                                #[cfg(not(target_os = "windows"))]
-                                process_new_entry(
-                                    &app,
-                                    ClipboardData::Image {
-                                        bytes: png_bytes,
-                                        extension: "png".to_string(),
-                                    },
-                                    None,
                                 );
                                 handled = true;
                             }
@@ -953,100 +760,7 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
         }
 
         if !handled {
-            #[cfg(target_os = "macos")]
-            {
-                let settings = app.state::<SettingsState>();
-                let rich_text_enabled = settings.capture_rich_text.load(Ordering::Relaxed);
-                let active_app =
-                    crate::infrastructure::macos_api::window::get_active_app_snapshot();
 
-                let resolved = utils::resolve_clipboard_text_capture(
-                    text_from_clipboard.as_deref(),
-                    clipboard_html_snapshot.as_deref(),
-                    None,
-                    rich_text_enabled,
-                    &active_app.app_name,
-                    active_app.process_path.as_deref(),
-                );
-
-                if let Some(payload) = resolved {
-                    let text = payload.text;
-                    if text.len() > MAX_MACOS_TEXT_BYTES {
-                        eprintln!(
-                            ">>> [CLIPBOARD] Skip capture: text exceeds {} bytes",
-                            MAX_MACOS_TEXT_BYTES
-                        );
-                        return;
-                    }
-
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    use std::hash::{Hash, Hasher};
-                    utils::normalize_clipboard_line_endings(&text).hash(&mut hasher);
-                    let current_hash = hasher.finish();
-
-                    let last_app_hash = crate::LAST_APP_SET_HASH.load(Ordering::SeqCst);
-                    let last_app_time = crate::LAST_APP_SET_TIMESTAMP.load(Ordering::SeqCst);
-                    let now_secs = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-
-                    if (last_app_hash != 0
-                        && (current_hash == last_app_hash
-                            || current_hash == crate::LAST_APP_SET_HASH_ALT.load(Ordering::SeqCst)))
-                        && (now_secs - last_app_time) < 10
-                    {
-                        return;
-                    }
-
-                    if rich_text_enabled {
-                        if let Some(mut html) = payload.html {
-                            if !html.trim().is_empty() {
-                                if has_clipboard_image {
-                                    if utils::should_attach_rich_image_fallback_on_capture(
-                                        &active_app.app_name,
-                                        active_app.process_path.as_deref(),
-                                    ) {
-                                        if let Some(data_url) = rich_image_fallback_url() {
-                                            html =
-                                                utils::attach_rich_image_fallback(&html, &data_url);
-                                        }
-                                    }
-                                }
-
-                                if let Some(rtf_bytes) = clipboard_rtf_snapshot.clone() {
-                                    html = utils::attach_rich_named_formats(
-                                        &html,
-                                        &[crate::infrastructure::windows_api::win_clipboard::NamedClipboardFormat {
-                                            name: "Rich Text Format".to_string(),
-                                            data: rtf_bytes,
-                                        }],
-                                    );
-                                }
-
-                                process_new_entry(
-                                    &app,
-                                    ClipboardData::RichText {
-                                        text: text.clone(),
-                                        html,
-                                    },
-                                    None,
-                                );
-                                handled = true;
-                            }
-                        }
-                    }
-
-                    if !handled {
-                        if last_app_hash != 0 {
-                            crate::LAST_APP_SET_HASH.store(0, Ordering::SeqCst);
-                        }
-                        process_new_entry(&app, ClipboardData::Text(text), None);
-                    }
-                }
-            }
-
-            #[cfg(not(target_os = "macos"))]
             if let Ok(text) = clipboard.get_text() {
                 if !text.is_empty() {
                     let settings = app.state::<SettingsState>();
@@ -1080,11 +794,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
                                         let info = crate::infrastructure::windows_api::window_tracker::get_clipboard_source_app_info();
                                         (info.app_name, info.process_path)
                                     };
-                                    #[cfg(not(target_os = "windows"))]
-                                    let capture_source = (
-                                        crate::global_state::get_last_active_app_name(),
-                                        None::<String>,
-                                    );
                                     if utils::should_attach_rich_image_fallback_on_capture(
                                         &capture_source.0,
                                         capture_source.1.as_deref(),
@@ -1105,15 +814,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
                                     },
                                     source_snapshot.clone(),
                                 );
-                                #[cfg(not(target_os = "windows"))]
-                                process_new_entry(
-                                    &app,
-                                    ClipboardData::RichText {
-                                        text: text.clone(),
-                                        html,
-                                    },
-                                    None,
-                                );
                                 handled = true;
                             }
                         }
@@ -1129,8 +829,6 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
                             ClipboardData::Text(text),
                             source_snapshot.clone(),
                         );
-                        #[cfg(not(target_os = "windows"))]
-                        process_new_entry(&app, ClipboardData::Text(text), None);
                     }
                 }
             }
@@ -1219,12 +917,6 @@ pub fn capture_preserved_named_formats_from_clipboard(
     Vec::new()
 }
 
-#[cfg(not(target_os = "windows"))]
-pub fn capture_preserved_named_formats_from_clipboard(
-    _source_snapshot: Option<&crate::infrastructure::windows_api::window_tracker::ActiveAppInfo>,
-) -> Vec<crate::infrastructure::windows_api::win_clipboard::NamedClipboardFormat> {
-    vec![]
-}
 
 #[cfg(target_os = "windows")]
 pub fn clipboard_image_fallback_data_url() -> Option<String> {
@@ -1304,10 +996,6 @@ pub fn clipboard_image_fallback_data_url() -> Option<String> {
     None
 }
 
-#[cfg(not(target_os = "windows"))]
-pub fn clipboard_image_fallback_data_url() -> Option<String> {
-    None
-}
 
 pub use pipeline::{ClipboardData, ClipboardPipeline, PipelineContext};
 pub use utils::{
@@ -1384,7 +1072,7 @@ fn process_new_entry_with_source(
     ClipboardPipeline::new().execute(&mut ctx);
 }
 
-#[cfg(all(test, target_os = "windows"))]
+#[cfg(test)]
 mod named_format_tests {
     use super::is_ignored_named_clipboard_format;
 

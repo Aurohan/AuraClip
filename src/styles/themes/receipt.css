@@ -5,23 +5,6 @@
 /* Component adjustments for this theme, kept ahead of the theme's own rules
    (they used to sit in the component stylesheets). */
 
-/* ---- From components/ai.css ---- */
-
-.theme-receipt .ai-action-btn {
-  border: 1px solid var(--border-dark);
-  border-radius: 0;
-}
-
-/* ---- From components/file-transfer.css ---- */
-
-.theme-receipt .wt-chat-view {
-  --im-canvas: var(--bg-window);
-  --im-canvas-shade: color-mix(in srgb, var(--bg-window) 88%, transparent);
-  --im-incoming: var(--bg-element);
-  --im-bubble-border: var(--line-soft);
-}
-
-
 :root.theme-receipt,
 body.theme-receipt {
   color-scheme: light;
@@ -165,8 +148,6 @@ body.theme-receipt {
   --compact-card-radius: 0;
   --compact-media-radius: 0;
   --card-shadow: none;
-  --card-hover-shadow: none;
-  --card-hover-transform: none;
   --card-selected-background: rgba(0, 0, 0, 0.05);
   --card-selected-border-color: var(--rc-ink);
   --card-selected-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
@@ -191,10 +172,7 @@ body.theme-receipt {
   --menu-radius: 0;
   --menu-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 
-  --scrollbar-size: 6px;
-  --scrollbar-radius: 0;
   --scrollbar-thumb-color: rgba(0, 0, 0, 0.22);
-  --scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.38);
 }
 
 body.theme-receipt #root {
@@ -203,8 +181,6 @@ body.theme-receipt #root {
   -webkit-backdrop-filter: none;
   overflow: hidden;
 }
-
-
 
 html.theme-receipt,
 body.theme-receipt {
@@ -270,10 +246,7 @@ body.dark-mode.theme-receipt {
   --menu-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
   --menu-item-hover-color: #1c1c1c;
   --scrollbar-thumb-color: rgba(255, 255, 255, 0.22);
-  --scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.38);
 }
-
-
 
 body.theme-receipt,
 body.theme-receipt .search-input,

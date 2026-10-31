@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { getTagColor, getTagTextColor } from "./utils.ts";
 
 test("generated tag colors remain stable", () => {
-  assert.equal(getTagColor("密码", "acrylic"), getTagColor("密码", "macos"));
+  assert.equal(getTagColor("密码", "acrylic"), getTagColor("密码", "mica"));
 });
 
 test("tag text uses the same hue family instead of black or white", () => {

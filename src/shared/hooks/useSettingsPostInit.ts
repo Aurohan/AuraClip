@@ -1,14 +1,8 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { MutableRefObject } from "react";
-import type { AiProfile, AppCleanupPolicy } from "../../features/settings/types";
-import { LEGACY_PRESET_IDS, PRESET_AI_PROFILES, resolveTaskProfile, restoreAiProfiles } from "../../features/settings/aiPresets";
-import type {
-  ClipboardSortMode,
-  QuickPasteModifier,
-  CloudSyncContentPrefs
-} from "../../features/app/types";
-import { DEFAULT_CLOUD_SYNC_CONTENT_PREFS } from "../../features/app/types";
+import type { AppCleanupPolicy } from "../../features/settings/types";
+import type { ClipboardSortMode, QuickPasteModifier } from "../../features/app/types";
 
 const QUICK_PASTE_MODIFIERS = new Set<QuickPasteModifier>([
   "disabled",
@@ -84,7 +78,6 @@ interface UseSettingsPostInitOptions {
   setMoveToTopAfterPaste: (val: boolean) => void;
   setClickCopyOnly: (val: boolean) => void;
   setHideTrayIcon: (val: boolean) => void;
-  setHideDockIcon: (val: boolean) => void;
   setEdgeDocking: (val: boolean) => void;
   setSearchBoxPinned: (val: boolean) => void;
   setShowSearchBox: (val: boolean) => void;
@@ -101,44 +94,15 @@ interface UseSettingsPostInitOptions {
   setMqttProtocol: (val: string) => void;
   setMqttWsPath: (val: string) => void;
   setMqttNotificationEnabled: (val: boolean) => void;
-  setCloudSyncEnabled: (val: boolean) => void;
-  setCloudSyncAuto: (val: boolean) => void;
-  setCloudSyncProvider: (val: "http" | "webdav") => void;
-  setCloudSyncServer: (val: string) => void;
-  setCloudSyncApiKey: (val: string) => void;
-  setCloudSyncIntervalSec: (val: string) => void;
-  setCloudSyncSnapshotIntervalMin: (val: string) => void;
-  setCloudSyncWebdavUrl: (val: string) => void;
-  setCloudSyncWebdavUsername: (val: string) => void;
-  setCloudSyncWebdavPassword: (val: string) => void;
-  setCloudSyncWebdavBasePath: (val: string) => void;
-  setCloudSyncContentPrefs: (val: CloudSyncContentPrefs) => void;
-  setFileServerAutoClose: (val: boolean) => void;
-  setFileTransferAutoOpen: (val: boolean) => void;
-  setFileTransferAutoCopy: (val: boolean) => void;
-  setFileServerPort: (val: string) => void;
-  setSequentialHotkey: (val: string) => void;
-  setPlainPasteHotkey: (val: string) => void;
-  setSearchHotkey: (val: string) => void;
   setQuickPasteModifier: (val: QuickPasteModifier) => void;
   setSequentialModeState: (val: boolean) => void;
   setSoundEnabled: (val: boolean) => void;
-  setPasteSoundEnabled: (val: boolean) => void;
   setSoundVolume: (val: number) => void;
-  setAiEnabled: (val: boolean) => void;
-  setAiTargetLang: (val: string) => void;
   setIsWindowPinned: (val: boolean) => void;
-  setAiProfiles: (val: AiProfile[]) => void;
-  setAiAssignedProfileTask: (val: string) => void;
-  setAiAssignedProfileMouthpiece: (val: string) => void;
-  setAiAssignedProfileTranslate: (val: string) => void;
   setSettingsLoaded: (val: boolean) => void;
   setClipboardItemFontSize: (val: number) => void;
   setClipboardTagFontSize: (val: number) => void;
-  setEmojiPanelEnabled: (val: boolean) => void;
   setTagManagerEnabled: (val: boolean) => void;
-  setEmojiPanelTab: (val: "emoji" | "favorites") => void;
-  setEmojiFavorites: (val: string[]) => void;
 }
 
 export const useSettingsPostInit = ({
@@ -177,7 +141,6 @@ export const useSettingsPostInit = ({
   setMoveToTopAfterPaste,
   setClickCopyOnly,
   setHideTrayIcon,
-  setHideDockIcon,
   setEdgeDocking,
   setSearchBoxPinned,
   setShowSearchBox,
@@ -194,44 +157,15 @@ export const useSettingsPostInit = ({
   setMqttProtocol,
   setMqttWsPath,
   setMqttNotificationEnabled,
-  setCloudSyncEnabled,
-  setCloudSyncAuto,
-  setCloudSyncProvider,
-  setCloudSyncServer,
-  setCloudSyncApiKey,
-  setCloudSyncIntervalSec,
-  setCloudSyncSnapshotIntervalMin,
-  setCloudSyncWebdavUrl,
-  setCloudSyncWebdavUsername,
-  setCloudSyncWebdavPassword,
-  setCloudSyncWebdavBasePath,
-  setCloudSyncContentPrefs,
-  setFileServerAutoClose,
-  setFileTransferAutoOpen,
-  setFileTransferAutoCopy,
-  setFileServerPort,
-  setSequentialHotkey,
-  setPlainPasteHotkey,
-  setSearchHotkey,
   setQuickPasteModifier,
   setSequentialModeState,
   setSoundEnabled,
-  setPasteSoundEnabled,
   setSoundVolume,
-  setAiEnabled,
-  setAiTargetLang,
   setIsWindowPinned,
-  setAiProfiles,
-  setAiAssignedProfileTask,
-  setAiAssignedProfileMouthpiece,
-  setAiAssignedProfileTranslate,
   setSettingsLoaded,
   setClipboardItemFontSize,
   setClipboardTagFontSize,
-  setEmojiPanelEnabled,
   setTagManagerEnabled,
-  setEmojiPanelTab,
-  setEmojiFavorites
 }: UseSettingsPostInitOptions) => {
   useEffect(() => {
     if (!settings) return;
@@ -266,24 +200,8 @@ export const useSettingsPostInit = ({
       const next = parseInt(settings["app.clipboard_tag_font_size"]);
       if (Number.isFinite(next)) setClipboardTagFontSize(next);
     }
-    if (settings["app.emoji_panel_enabled"] !== undefined) {
-      setEmojiPanelEnabled(settings["app.emoji_panel_enabled"] === "true");
-    }
     if (settings["app.tag_manager_enabled"] !== undefined) {
       setTagManagerEnabled(settings["app.tag_manager_enabled"] !== "false");
-    }
-    if (settings["app.emoji_panel_tab"] === "favorites" || settings["app.emoji_panel_tab"] === "emoji") {
-      setEmojiPanelTab(settings["app.emoji_panel_tab"] as "emoji" | "favorites");
-    }
-    if (settings["app.emoji_favorites"]) {
-      try {
-        const parsed = JSON.parse(settings["app.emoji_favorites"]);
-        if (Array.isArray(parsed)) {
-          setEmojiFavorites(parsed.filter((p) => typeof p === "string"));
-        }
-      } catch (e) {
-        console.warn("Invalid emoji favorites:", e);
-      }
     }
 
     // Fix: explicitly handle both true and false cases for all boolean settings
@@ -364,7 +282,6 @@ export const useSettingsPostInit = ({
     setMoveToTopAfterPaste(settings["app.move_to_top_after_paste"] === "true");
     setClickCopyOnly(settings["app.click_copy_only"] === "true");
     setHideTrayIcon(settings["app.hide_tray_icon"] === "true");
-    setHideDockIcon(settings["app.hide_dock_icon"] === "true");
     const edgeDockingEnabled = settings["app.edge_docking"] === "true";
     setEdgeDocking(edgeDockingEnabled);
 
@@ -390,7 +307,7 @@ export const useSettingsPostInit = ({
       setMqttTopic(settings["mqtt_topic"]);
     } else {
       // Same shape as the topic the MQTT client creates (128 random bits),
-      // saved now so the pairing QR shows the topic the client will use.
+      // saved now so the phone and the client agree on it.
       const bytes = crypto.getRandomValues(new Uint8Array(16));
       const topic = `tiez/tiez_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
       setMqttTopic(topic);
@@ -399,50 +316,12 @@ export const useSettingsPostInit = ({
     setMqttProtocol(settings["mqtt_protocol"] || "mqtt://");
     setMqttWsPath(settings["mqtt_ws_path"] || "/mqtt");
     setMqttNotificationEnabled(settings["mqtt_notification_enabled"] !== "false");
-    setCloudSyncEnabled(settings["cloud_sync_enabled"] === "true");
-    setCloudSyncAuto(settings["cloud_sync_auto"] !== "false");
-    setCloudSyncProvider(settings["cloud_sync_provider"] === "http" ? "http" : "webdav");
-    setCloudSyncServer(settings["cloud_sync_server"] || "");
-    setCloudSyncApiKey(settings["cloud_sync_api_key"] || "");
-    setCloudSyncIntervalSec(settings["cloud_sync_interval_sec"] || "120");
-    setCloudSyncSnapshotIntervalMin(settings["cloud_sync_snapshot_interval_min"] || "720");
-    setCloudSyncWebdavUrl(settings["cloud_sync_webdav_url"] || "");
-    setCloudSyncWebdavUsername(settings["cloud_sync_webdav_username"] || "");
-    setCloudSyncWebdavPassword(settings["cloud_sync_webdav_password"] || "");
-    setCloudSyncWebdavBasePath(settings["cloud_sync_webdav_base_path"] || "auraclip-sync");
-
-    try {
-      const raw = settings["cloud_sync_content_prefs"];
-      if (raw !== undefined && String(raw).trim() !== "") {
-        const parsed = JSON.parse(String(raw)) as Record<string, unknown>;
-        setCloudSyncContentPrefs({
-          text: parsed.text !== false,
-          image: parsed.image !== false,
-          file_path: parsed.file_path !== false,
-          emoji: parsed.emoji !== false
-        });
-      } else {
-        setCloudSyncContentPrefs({ ...DEFAULT_CLOUD_SYNC_CONTENT_PREFS });
-      }
-    } catch {
-      setCloudSyncContentPrefs({ ...DEFAULT_CLOUD_SYNC_CONTENT_PREFS });
-    }
-    setFileServerAutoClose(settings["file_transfer_auto_close"] === "true");
-    setFileTransferAutoOpen(settings["file_transfer_auto_open"] === "true");
-    setFileTransferAutoCopy(settings["file_transfer_auto_copy"] === "true");
-    if (settings["file_server_port"]) setFileServerPort(settings["file_server_port"]);
-    if (settings["app.sequential_hotkey"] !== undefined) setSequentialHotkey(settings["app.sequential_hotkey"]);
-    if (settings["app.plain_paste_hotkey"] !== undefined) setPlainPasteHotkey(settings["app.plain_paste_hotkey"]);
-    if (settings["app.search_hotkey"] !== undefined) setSearchHotkey(settings["app.search_hotkey"]);
     setQuickPasteModifier(normalizeQuickPasteModifier(settings["app.quick_paste_modifier"]));
     if (settings["app.sequential_mode"] === "true") setSequentialModeState(true);
     const soundOn = settings["app.sound_enabled"] !== "false";
     setSoundEnabled(soundOn);
     invoke("set_sound_enabled", { enabled: soundOn }).catch(console.error);
 
-    const pasteSoundOn = settings["app.sound_paste_enabled"] !== "false";
-    setPasteSoundEnabled(pasteSoundOn);
-    invoke("set_paste_sound_enabled", { enabled: pasteSoundOn }).catch(console.error);
     if (settings["app.sound_volume"]) {
       // Windows 0.3.x stored 0-100; read anything above 1 as a percentage.
       const volume = parseFloat(settings["app.sound_volume"]);
@@ -450,84 +329,9 @@ export const useSettingsPostInit = ({
         setSoundVolume(Math.max(0, volume > 1 ? Math.min(volume, 100) / 100 : volume));
       }
     }
-    if (settings["ai_enabled"]) setAiEnabled(settings["ai_enabled"] === "true");
-    if (settings["ai_target_lang"]) setAiTargetLang(settings["ai_target_lang"]);
     if (settings["app.window_pinned"] === "true") {
       setIsWindowPinned(true);
       invoke("set_window_pinned", { pinned: true }).catch(console.error);
-    }
-
-    // 1. PRESETS
-    const recommended = PRESET_AI_PROFILES;
-
-    // 2. LOAD OR INIT
-    let finalProfiles: AiProfile[] = recommended;
-    if (settings["ai_profiles"]) {
-      try {
-        const parsed = JSON.parse(settings["ai_profiles"]);
-        if (Array.isArray(parsed)) {
-          finalProfiles = restoreAiProfiles(parsed);
-          // The thinking budget used to be one global setting; carry it into each profile.
-          const legacyBudget = Number(settings["ai_thinking_budget"]);
-          if (legacyBudget > 0) {
-            finalProfiles = finalProfiles.map((profile) =>
-              profile.thinkingBudget ? profile : { ...profile, thinkingBudget: legacyBudget }
-            );
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      // First time initialization
-      invoke("save_setting", {
-        key: "ai_profiles",
-        value: JSON.stringify(recommended)
-      }).catch(console.error);
-    }
-    if (settings["ai_profiles"]) {
-      invoke("save_setting", {
-        key: "ai_profiles",
-        value: JSON.stringify(finalProfiles)
-      }).catch(console.error);
-    }
-    setAiProfiles(finalProfiles);
-
-    // 3. ASSIGNMENTS
-    // Legacy LongCat ids map to their DeepSeek successors; a task stranded on a
-    // keyless preset or a deleted model moves to the user's own keyed model.
-    const migrateAssignedProfile = (value: string | undefined, fallback: string) => {
-      const id = !value
-        ? fallback
-        : LEGACY_PRESET_IDS.has(value)
-          ? (value === "lc_flash_v1" ? "ds_flash_v1" : "ds_v4_pro_v1")
-          : value;
-      return resolveTaskProfile(id, finalProfiles);
-    };
-
-    const getP = (m: string) =>
-      finalProfiles.find((p) => p.model === m)?.id || finalProfiles[0]?.id || "default";
-
-    const taskProfile = migrateAssignedProfile(settings["ai_assigned_profile_task"], getP("deepseek-flash"));
-    const mouthpieceProfile = migrateAssignedProfile(
-      settings["ai_assigned_profile_mouthpiece"],
-      getP("deepseek-v4-pro")
-    );
-    const translateProfile = migrateAssignedProfile(
-      settings["ai_assigned_profile_translate"],
-      getP("deepseek-flash")
-    );
-    setAiAssignedProfileTask(taskProfile);
-    setAiAssignedProfileMouthpiece(mouthpieceProfile);
-    setAiAssignedProfileTranslate(translateProfile);
-    if (taskProfile !== settings["ai_assigned_profile_task"]) {
-      invoke("save_setting", { key: "ai_assigned_profile_task", value: taskProfile }).catch(console.error);
-    }
-    if (mouthpieceProfile !== settings["ai_assigned_profile_mouthpiece"]) {
-      invoke("save_setting", { key: "ai_assigned_profile_mouthpiece", value: mouthpieceProfile }).catch(console.error);
-    }
-    if (translateProfile !== settings["ai_assigned_profile_translate"]) {
-      invoke("save_setting", { key: "ai_assigned_profile_translate", value: translateProfile }).catch(console.error);
     }
 
     setSettingsLoaded(true);
@@ -564,7 +368,6 @@ export const useSettingsPostInit = ({
     setMoveToTopAfterPaste,
     setClickCopyOnly,
     setHideTrayIcon,
-    setHideDockIcon,
     setEdgeDocking,
     setSearchBoxPinned,
     setShowSearchBox,
@@ -581,43 +384,14 @@ export const useSettingsPostInit = ({
     setMqttProtocol,
     setMqttWsPath,
     setMqttNotificationEnabled,
-    setCloudSyncEnabled,
-    setCloudSyncAuto,
-    setCloudSyncProvider,
-    setCloudSyncServer,
-    setCloudSyncApiKey,
-    setCloudSyncIntervalSec,
-    setCloudSyncSnapshotIntervalMin,
-    setCloudSyncWebdavUrl,
-    setCloudSyncWebdavUsername,
-    setCloudSyncWebdavPassword,
-    setCloudSyncWebdavBasePath,
-    setCloudSyncContentPrefs,
-    setFileServerAutoClose,
-    setFileTransferAutoOpen,
-    setFileTransferAutoCopy,
-    setFileServerPort,
-    setSequentialHotkey,
-    setPlainPasteHotkey,
-    setSearchHotkey,
     setQuickPasteModifier,
     setSequentialModeState,
     setSoundEnabled,
-    setPasteSoundEnabled,
     setSoundVolume,
-    setAiEnabled,
-    setAiTargetLang,
     setIsWindowPinned,
-    setAiProfiles,
-    setAiAssignedProfileTask,
-    setAiAssignedProfileMouthpiece,
-    setAiAssignedProfileTranslate,
     setSettingsLoaded,
     setClipboardItemFontSize,
     setClipboardTagFontSize,
-    setEmojiPanelEnabled,
     setTagManagerEnabled,
-    setEmojiPanelTab,
-    setEmojiFavorites
   ]);
 };

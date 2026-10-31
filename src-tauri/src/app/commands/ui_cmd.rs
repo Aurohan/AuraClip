@@ -27,32 +27,11 @@ pub fn get_platform_info() -> PlatformInfo {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        PlatformInfo {
-            platform: "macos".to_string(),
-            is_windows_10: false,
-            is_windows_11: false,
-        }
-    }
 
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        PlatformInfo {
-            platform: std::env::consts::OS.to_string(),
-            is_windows_10: false,
-            is_windows_11: false,
-        }
-    }
 }
 
 #[tauri::command]
 pub fn configure_compact_preview_window(app: AppHandle) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        crate::infrastructure::macos_api::window::configure_compact_preview_window(&app)
-    }
-    #[cfg(not(target_os = "macos"))]
     {
         let _ = app;
         true
@@ -100,8 +79,6 @@ pub fn set_theme(
             .map(|value| value != "false")
         .unwrap_or(true)
     });
-    #[cfg(not(target_os = "windows"))]
-    let _ = show_app_border;
 
     if let Ok(mut guard) = state.theme.lock() {
         *guard = theme.clone();
@@ -179,10 +156,6 @@ pub fn set_theme(
         apply_dwm_frame(hwnd);
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        crate::app::window_manager::apply_macos_window_material(&window)?;
-    }
 
     let _ = window.emit("theme-changed", theme);
     Ok(())

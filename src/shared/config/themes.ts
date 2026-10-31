@@ -1,6 +1,5 @@
 import { getNativePaletteStyle, normalizeNativePalette } from "./nativePalettes";
 export { normalizeNativePalette } from "./nativePalettes";
-import { isMacPlatform } from "../lib/platform";
 
 export interface ThemeDefinition {
   id: string;
@@ -10,32 +9,19 @@ export interface ThemeDefinition {
 }
 
 export const WINDOWS_THEME_ID = "acrylic";
-export const MACOS_THEME_ID = "macos";
+/** The macOS theme lives in the macos-snapshot tag; a stored "macos" maps to acrylic. */
+const RETIRED_MACOS_THEME_ID = "macos";
 
-export const getDefaultTheme = (): string =>
-  isMacPlatform() ? MACOS_THEME_ID : WINDOWS_THEME_ID;
+export const getDefaultTheme = (): string => WINDOWS_THEME_ID;
 
 export const DEFAULT_THEME = getDefaultTheme();
 
-export const isThemeSelectable = (themeId: string): boolean => {
-  if (themeId === MACOS_THEME_ID) return isMacPlatform();
-  if (themeId === WINDOWS_THEME_ID) return !isMacPlatform();
-  return true;
-};
-
-export const getSelectableThemes = (): ThemeDefinition[] =>
-  THEMES.filter((theme) => isThemeSelectable(theme.id));
+export const getSelectableThemes = (): ThemeDefinition[] => THEMES;
 
 export const THEMES: ThemeDefinition[] = [
   {
     id: "mica",
     labelKey: "theme_name_mica",
-    supportsCustomBackground: true,
-    supportsSurfaceOpacity: true
-  },
-  {
-    id: "macos",
-    labelKey: "theme_name_macos",
     supportsCustomBackground: true,
     supportsSurfaceOpacity: true
   },
@@ -74,20 +60,19 @@ export const THEMES: ThemeDefinition[] = [
 const THEME_BY_ID = new Map(THEMES.map((theme) => [theme.id, theme]));
 
 // Clear the retired theme class too, including on windows opened before migration.
-export const THEME_CLASS_NAMES = [...THEMES.map((theme) => `theme-${theme.id}`), "theme-sakura"];
+export const THEME_CLASS_NAMES = [...THEMES.map((theme) => `theme-${theme.id}`), "theme-sakura", "theme-macos"];
 
 export const getThemeDefinition = (themeId: string): ThemeDefinition =>
   THEME_BY_ID.get(themeId) ?? THEME_BY_ID.get(getDefaultTheme())!;
 
 export const normalizeThemeId = (themeId: string): string => {
   if (/^store-[a-z0-9-]{3,50}$/.test(themeId)) return themeId;
-  if (themeId === MACOS_THEME_ID && !isMacPlatform()) return WINDOWS_THEME_ID;
-  if (themeId === WINDOWS_THEME_ID && isMacPlatform()) return MACOS_THEME_ID;
+  if (themeId === RETIRED_MACOS_THEME_ID) return WINDOWS_THEME_ID;
   return getThemeDefinition(themeId).id;
 };
 
 export const supportsNativePalette = (themeId: string): boolean =>
-  [MACOS_THEME_ID, WINDOWS_THEME_ID].includes(normalizeThemeId(themeId));
+  normalizeThemeId(themeId) === WINDOWS_THEME_ID;
 
 export const resolveThemeAppearance = (themeId: string, palette?: string) => ({
   theme: normalizeThemeId(themeId),

@@ -69,9 +69,6 @@ pub async fn import_clipboard_data(
     .map_err(|error| AppError::Internal(error.to_string()))??;
 
     let _ = app_handle.emit("clipboard-changed", ());
-    if report.imported > 0 {
-        crate::services::cloud_sync::request_cloud_sync(app_handle);
-    }
     Ok(report)
 }
 
@@ -383,7 +380,6 @@ pub fn delete_clipboard_entry(
         state.repo.delete(id, Some(&data_dir))?;
     }
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(())
 }
 
@@ -404,7 +400,6 @@ pub fn clear_clipboard_history(
     let data_dir = app_data.0.lock().unwrap();
     state.repo.clear(Some(&data_dir)).map_err(AppError::from)?;
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(())
 }
 
@@ -544,7 +539,6 @@ pub fn update_pinned_order(
         .update_pinned_order(orders)
         .map_err(AppError::from)?;
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
     Ok(())
 }
 

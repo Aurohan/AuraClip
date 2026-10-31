@@ -4,16 +4,14 @@ import type { ClipboardEntry, Locale } from "../../../shared/types";
 import type {
   AppState,
   ClipboardSortMode,
-  CloudSyncContentPrefs,
   DefaultAppsMap,
   InstalledAppOption,
   QuickPasteModifier,
   SettingsSubpage
 } from "../types";
-import { DEFAULT_CLOUD_SYNC_CONTENT_PREFS } from "../types";
-import type { AiProfile, AppCleanupPolicy } from "../../settings/types";
+import type { AppCleanupPolicy } from "../../settings/types";
+import { defaultHotkeys, type HotkeyActionId, type Hotkeys } from "../../../shared/lib/hotkeyActions";
 import { DEFAULT_COLLAPSED_GROUPS } from "../../settings/types";
-import { PRESET_AI_PROFILES } from "../../settings/aiPresets";
 
 export const useAppState = (): AppState => {
   const [showSettings, setShowSettings] = useState(false);
@@ -29,9 +27,6 @@ export const useAppState = (): AppState => {
   const [searchIsFocused, setSearchIsFocused] = useState(false);
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [tagInput, setTagInput] = useState("");
-  const [showEmojiPanel, setShowEmojiPanel] = useState(false);
-  const [emojiFavorites, setEmojiFavorites] = useState<string[]>([]);
-  const [aiOptionsOpenId, setAiOptionsOpenId] = useState<number | null>(null);
   const [editingTagsId, setEditingTagsId] = useState<number | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [revealedIds, setRevealedIds] = useState<Set<number>>(new Set());
@@ -44,20 +39,13 @@ export const useAppState = (): AppState => {
   const [appSettings, setAppSettings] = useState<Record<string, string>>({});
   const [defaultApps, setDefaultApps] = useState<DefaultAppsMap>({});
   const [showAppSelector, setShowAppSelector] = useState<string | null>(null);
-  const [chatMode, setChatMode] = useState(false);
   const [installedApps, setInstalledApps] = useState<InstalledAppOption[]>([]);
   const [dataPath, setDataPath] = useState<string>("");
-  const [hotkey, setHotkey] = useState<string>("Alt+V");
-  const [sequentialHotkey, setSequentialHotkey] = useState<string>("Alt+Shift+S");
-  const [plainPasteHotkey, setPlainPasteHotkey] = useState<string>("Alt+Shift+V");
-  const [searchHotkey, setSearchHotkey] = useState<string>("Alt+F");
+  const [hotkeys, setHotkeys] = useState<Hotkeys>(defaultHotkeys);
   const [quickPasteModifier, setQuickPasteModifier] =
     useState<QuickPasteModifier>("disabled");
   const [sequentialMode, setSequentialModeState] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isRecordingSequential, setIsRecordingSequential] = useState(false);
-  const [isRecordingPlain, setIsRecordingPlain] = useState(false);
-  const [isRecordingSearch, setIsRecordingSearch] = useState(false);
+  const [recordingHotkey, setRecordingHotkey] = useState<HotkeyActionId | null>(null);
   const [deleteAfterPaste, setDeleteAfterPaste] = useState(false);
   const [moveToTopAfterPaste, setMoveToTopAfterPaste] = useState(false);
   const [clickCopyOnly, setClickCopyOnly] = useState(false);
@@ -94,10 +82,7 @@ export const useAppState = (): AppState => {
   const [splitViewEnabled, setSplitViewEnabled] = useState(false);
   const [clipboardItemFontSize, setClipboardItemFontSize] = useState(13);
   const [clipboardTagFontSize, setClipboardTagFontSize] = useState(10);
-  const [emojiPanelEnabled, setEmojiPanelEnabled] = useState(false);
-  const [emojiPanelTab, setEmojiPanelTab] = useState<"emoji" | "favorites">("emoji");
   const [showHotkeyHint, setShowHotkeyHint] = useState(false);
-  const [showAutoCloseHint, setShowAutoCloseHint] = useState(false);
   const [language, setLanguage] = useState<Locale>("zh");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [isWindowPinned, setIsWindowPinned] = useState(false);
@@ -110,7 +95,6 @@ export const useAppState = (): AppState => {
   const [lightModeEnabled, setLightModeEnabled] = useState(false);
   const [lightModeIdleMinutes, setLightModeIdleMinutes] = useState(15);
   const [hideTrayIcon, setHideTrayIcon] = useState(false);
-  const [hideDockIcon, setHideDockIcon] = useState(false);
   const [edgeDocking, setEdgeDocking] = useState(false);
   const [customBackground, setCustomBackground] = useState<string>("");
   const [customBackgroundOpacity, setCustomBackgroundOpacity] = useState(45);
@@ -130,40 +114,8 @@ export const useAppState = (): AppState => {
   const [mqttProtocol, setMqttProtocol] = useState("mqtt://");
   const [mqttWsPath, setMqttWsPath] = useState("/mqtt");
   const [mqttNotificationEnabled, setMqttNotificationEnabled] = useState(true);
-  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
-  const [cloudSyncAuto, setCloudSyncAuto] = useState(true);
-  const [cloudSyncProvider, setCloudSyncProvider] = useState<"http" | "webdav">("webdav");
-  const [cloudSyncServer, setCloudSyncServer] = useState("");
-  const [cloudSyncApiKey, setCloudSyncApiKey] = useState("");
-  const [cloudSyncIntervalSec, setCloudSyncIntervalSec] = useState("120");
-  const [cloudSyncSnapshotIntervalMin, setCloudSyncSnapshotIntervalMin] = useState("720");
-  const [cloudSyncWebdavUrl, setCloudSyncWebdavUrl] = useState("");
-  const [cloudSyncWebdavUsername, setCloudSyncWebdavUsername] = useState("");
-  const [cloudSyncWebdavPassword, setCloudSyncWebdavPassword] = useState("");
-  const [cloudSyncWebdavBasePath, setCloudSyncWebdavBasePath] = useState("auraclip-sync");
-  const [cloudSyncContentPrefs, setCloudSyncContentPrefs] =
-    useState<CloudSyncContentPrefs>(DEFAULT_CLOUD_SYNC_CONTENT_PREFS);
-  const [fileServerEnabled, setFileServerEnabled] = useState(false);
-  const [fileServerPort, setFileServerPort] = useState("28462");
-  const [localIp, setLocalIp] = useState("");
-  const [availableIps, setAvailableIps] = useState<string[]>([]);
-  const [actualPort, setActualPort] = useState("");
-  const [fileTransferAccessToken, setFileTransferAccessToken] = useState("");
-  const [fileTransferLanKey, setFileTransferLanKey] = useState("");
-  const [fileTransferPath, setFileTransferPath] = useState("");
-  const [fileTransferAutoOpen, setFileTransferAutoOpen] = useState(false);
-  const [fileTransferAutoCopy, setFileTransferAutoCopy] = useState(false);
-  const [fileServerAutoClose, setFileServerAutoClose] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [pasteSoundEnabled, setPasteSoundEnabled] = useState(true);
   const [soundVolume, setSoundVolume] = useState(1.0);
-  const [aiEnabled, setAiEnabled] = useState(true);
-  const [aiTargetLang, setAiTargetLang] = useState("zh");
-  const [aiProfiles, setAiProfiles] = useState<AiProfile[]>(PRESET_AI_PROFILES);
-  const [aiAssignedProfileTask, setAiAssignedProfileTask] = useState("default");
-  const [aiAssignedProfileMouthpiece, setAiAssignedProfileMouthpiece] = useState("default");
-  const [aiAssignedProfileTranslate, setAiAssignedProfileTranslate] = useState("default");
-  const [processingAiId, setProcessingAiId] = useState<number | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
   return {
@@ -191,12 +143,6 @@ export const useAppState = (): AppState => {
     setShowTagFilter,
     tagInput,
     setTagInput,
-    showEmojiPanel,
-    setShowEmojiPanel,
-    emojiFavorites,
-    setEmojiFavorites,
-    aiOptionsOpenId,
-    setAiOptionsOpenId,
     editingTagsId,
     setEditingTagsId,
     editingNoteId,
@@ -221,32 +167,18 @@ export const useAppState = (): AppState => {
     setDefaultApps,
     showAppSelector,
     setShowAppSelector,
-    chatMode,
-    setChatMode,
     installedApps,
     setInstalledApps,
     dataPath,
     setDataPath,
-    hotkey,
-    setHotkey,
-    sequentialHotkey,
-    setSequentialHotkey,
-    plainPasteHotkey,
-    setPlainPasteHotkey,
-    searchHotkey,
-    setSearchHotkey,
+    hotkeys,
+    setHotkeys,
     quickPasteModifier,
     setQuickPasteModifier,
     sequentialMode,
     setSequentialModeState,
-    isRecording,
-    setIsRecording,
-    isRecordingSequential,
-    setIsRecordingSequential,
-    isRecordingPlain,
-    setIsRecordingPlain,
-    isRecordingSearch,
-    setIsRecordingSearch,
+    recordingHotkey,
+    setRecordingHotkey,
     deleteAfterPaste,
     setDeleteAfterPaste,
     moveToTopAfterPaste,
@@ -308,14 +240,8 @@ export const useAppState = (): AppState => {
     setClipboardItemFontSize,
     clipboardTagFontSize,
     setClipboardTagFontSize,
-    emojiPanelEnabled,
-    setEmojiPanelEnabled,
-    emojiPanelTab,
-    setEmojiPanelTab,
     showHotkeyHint,
     setShowHotkeyHint,
-    showAutoCloseHint,
-    setShowAutoCloseHint,
     language,
     setLanguage,
     settingsLoaded,
@@ -336,8 +262,6 @@ export const useAppState = (): AppState => {
     setLightModeIdleMinutes,
     hideTrayIcon,
     setHideTrayIcon,
-    hideDockIcon,
-    setHideDockIcon,
     edgeDocking,
     setEdgeDocking,
 
@@ -377,72 +301,10 @@ export const useAppState = (): AppState => {
     setMqttWsPath,
     mqttNotificationEnabled,
     setMqttNotificationEnabled,
-    cloudSyncEnabled,
-    setCloudSyncEnabled,
-    cloudSyncAuto,
-    setCloudSyncAuto,
-    cloudSyncProvider,
-    setCloudSyncProvider,
-    cloudSyncServer,
-    setCloudSyncServer,
-    cloudSyncApiKey,
-    setCloudSyncApiKey,
-    cloudSyncIntervalSec,
-    setCloudSyncIntervalSec,
-    cloudSyncSnapshotIntervalMin,
-    setCloudSyncSnapshotIntervalMin,
-    cloudSyncWebdavUrl,
-    setCloudSyncWebdavUrl,
-    cloudSyncWebdavUsername,
-    setCloudSyncWebdavUsername,
-    cloudSyncWebdavPassword,
-    setCloudSyncWebdavPassword,
-    cloudSyncWebdavBasePath,
-    setCloudSyncWebdavBasePath,
-    cloudSyncContentPrefs,
-    setCloudSyncContentPrefs,
-    fileServerEnabled,
-    setFileServerEnabled,
-    fileServerPort,
-    setFileServerPort,
-    localIp,
-    setLocalIp,
-    availableIps,
-    setAvailableIps,
-    actualPort,
-    setActualPort,
-    fileTransferAccessToken,
-    setFileTransferAccessToken,
-    fileTransferLanKey,
-    setFileTransferLanKey,
-    fileTransferPath,
-    setFileTransferPath,
-    fileTransferAutoOpen,
-    setFileTransferAutoOpen,
-    fileTransferAutoCopy,
-    setFileTransferAutoCopy,
-    fileServerAutoClose,
-    setFileServerAutoClose,
     soundEnabled,
     setSoundEnabled,
-    pasteSoundEnabled,
-    setPasteSoundEnabled,
     soundVolume,
     setSoundVolume,
-    aiEnabled,
-    setAiEnabled,
-    aiTargetLang,
-    setAiTargetLang,
-    aiProfiles,
-    setAiProfiles,
-    aiAssignedProfileTask,
-    setAiAssignedProfileTask,
-    aiAssignedProfileMouthpiece,
-    setAiAssignedProfileMouthpiece,
-    aiAssignedProfileTranslate,
-    setAiAssignedProfileTranslate,
-    processingAiId,
-    setProcessingAiId,
     typeFilter,
     setTypeFilter
   };

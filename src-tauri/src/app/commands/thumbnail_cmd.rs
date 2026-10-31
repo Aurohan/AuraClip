@@ -168,50 +168,6 @@ fn build_video_thumbnail(path: &str, cache_dir: &Path) -> Result<String, AppErro
     Ok(final_path.to_string_lossy().into_owned())
 }
 
-/// QuickLook via `qlmanage`, which ships with every macOS. It writes
-/// `<file name>.png` into the output folder.
-#[cfg(target_os = "macos")]
-fn system_video_frame(path: &Path, cache_dir: &Path, key: &str) -> Result<DynamicImage, AppError> {
-    use std::process::{Command, Stdio};
-    use std::time::{Duration, Instant};
-
-    let out_dir = cache_dir.join(format!(".ql-{}", key));
-    let _ = fs::remove_dir_all(&out_dir);
-    fs::create_dir_all(&out_dir)?;
-    let result = (|| {
-        let mut child = Command::new("/usr/bin/qlmanage")
-            .arg("-t")
-            .args(["-s", &(THUMBNAIL_MAX_SIDE * 2).to_string()])
-            .arg("-o")
-            .arg(&out_dir)
-            .arg(path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| AppError::Internal(format!("qlmanage failed to start: {}", e)))?;
-        // QuickLook can stall on odd files; don't hold a worker thread forever.
-        let deadline = Instant::now() + Duration::from_secs(6);
-        loop {
-            if child.try_wait()?.is_some() {
-                break;
-            }
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(AppError::Internal("qlmanage timed out".to_string()));
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        let png = fs::read_dir(&out_dir)?
-            .flatten()
-            .map(|entry| entry.path())
-            .find(|p| p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("png")))
-            .ok_or_else(|| AppError::Internal("QuickLook made no thumbnail".to_string()))?;
-        image::open(&png).map_err(|_| decode_error())
-    })();
-    let _ = fs::remove_dir_all(&out_dir);
-    result
-}
 
 /// The shell's IShellItemImageFactory: the same thumbnails Explorer shows,
 /// including codecs installed system-wide.
@@ -295,10 +251,6 @@ fn system_video_frame(path: &Path, _cache_dir: &Path, _key: &str) -> Result<Dyna
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn system_video_frame(_path: &Path, _cache_dir: &Path, _key: &str) -> Result<DynamicImage, AppError> {
-    Err(AppError::Internal("no system video thumbnailer".to_string()))
-}
 
 /// Target size that keeps the aspect ratio with the longest side <= `max_side`.
 /// `None` means the image already fits and should be used as-is.
