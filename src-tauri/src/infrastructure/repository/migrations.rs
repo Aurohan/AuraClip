@@ -500,6 +500,31 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO schema_migrations (version) VALUES (22)", [])?;
     }
 
+    // Migration 23: drop settings of removed features (AI, WebDAV sync + e2e,
+    // LAN file transfer, emoji favorites, updater ping, macOS-only switches),
+    // including their stored credentials.
+    if current_version < 23 {
+        let has_settings: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings')",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_settings {
+            conn.execute(
+                r"DELETE FROM settings
+                  WHERE key LIKE 'ai\_%' ESCAPE '\'
+                     OR key LIKE 'cloud\_sync\_%' ESCAPE '\'
+                     OR key LIKE 'file\_server\_%' ESCAPE '\'
+                     OR key LIKE 'file\_transfer\_%' ESCAPE '\'
+                     OR key IN ('e2e_key', 'app.emoji_favorites', 'app.ping_id', 'app.last_ping_date',
+                                'app.notice_v028_shown', 'app.hide_dock_icon', 'app.sound_paste_enabled',
+                                'app.silent_start_mac_reset')",
+                [],
+            )?;
+        }
+        conn.execute("INSERT INTO schema_migrations (version) VALUES (23)", [])?;
+    }
+
     Ok(())
 }
 
@@ -518,6 +543,34 @@ fn has_column(conn: &Connection, table_name: &str, column_name: &str) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migration_23_drops_removed_feature_settings_and_keeps_the_rest() {
+        let conn = Connection::open_in_memory().expect("open database");
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP);
+             INSERT INTO schema_migrations(version) VALUES (22);
+             CREATE TABLE clipboard_history (id INTEGER PRIMARY KEY, note TEXT NOT NULL DEFAULT '');
+             CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO settings VALUES
+                 ('cloud_sync_webdav_password', 'enc1:x'), ('ai_profiles', '[]'),
+                 ('file_server_port', '28462'), ('file_transfer_auto_copy', 'false'),
+                 ('app.hide_dock_icon', 'false'), ('mqtt_password', 'enc1:y'),
+                 ('app.hotkey', 'Alt+V'), ('app.anon_id', 'abc'), ('aiming', 'kept');",
+        )
+        .expect("create version 22 fixture");
+
+        run_migrations(&conn).expect("run update migrations");
+
+        let keys: Vec<String> = conn
+            .prepare("SELECT key FROM settings ORDER BY key")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_>>()
+            .unwrap();
+        assert_eq!(keys, ["aiming", "app.anon_id", "app.hotkey", "mqtt_password"]);
+    }
 
     #[test]
     fn migration_14_preserves_existing_order_and_backfills_creation_time() {

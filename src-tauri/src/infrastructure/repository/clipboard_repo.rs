@@ -205,6 +205,13 @@ pub fn set_edited_ids_for_sync(
     Ok(())
 }
 
+/// Entries the history limit may delete: not pinned, and not tagged by the
+/// user. The `sensitive` tag is added automatically by privacy protection, so
+/// an entry carrying only that tag still counts; otherwise every detected
+/// phone number or key would be kept forever.
+const LIMITED_ENTRY: &str =
+    "is_pinned = 0 AND (tags IS NULL OR tags IN ('', '[]', '[\"sensitive\"]'))";
+
 pub struct SqliteClipboardRepository {
     conn: Arc<Mutex<Connection>>,
 }
@@ -1088,9 +1095,8 @@ impl SqliteClipboardRepository {
         if let Ok(Some(limit_str)) = SqliteSettingsRepository::get_raw(conn, "app.persistent_limit")
         {
             if let Ok(limit) = limit_str.parse::<i32>() {
-                // Count non-pinned entries
                 let count: i32 = conn.query_row(
-                    "SELECT COUNT(*) FROM clipboard_history WHERE is_pinned = 0 AND (tags = '[]' OR tags IS NULL)",
+                    &format!("SELECT COUNT(*) FROM clipboard_history WHERE {LIMITED_ENTRY}"),
                     [],
                     |row| row.get(0)
                 ).map_err(|e| e.to_string())?;
@@ -1100,12 +1106,9 @@ impl SqliteClipboardRepository {
                     let to_delete = count - limit;
                     let deleted_ids: Vec<i64> = {
                         let mut stmt = conn
-                            .prepare(
-                                "SELECT id FROM clipboard_history 
-                             WHERE is_pinned = 0 AND (tags = '[]' OR tags IS NULL)
-                             ORDER BY sort_at ASC
-                             LIMIT ?",
-                            )
+                            .prepare(&format!(
+                                "SELECT id FROM clipboard_history WHERE {LIMITED_ENTRY} ORDER BY sort_at ASC LIMIT ?"
+                            ))
                             .map_err(|e| e.to_string())?;
 
                         let rows = stmt
@@ -1954,6 +1957,20 @@ mod tests {
 
         repo.delete_with_conn(&conn, 2, None).unwrap();
         assert_eq!(tombstones(&conn), 1, "a deletion by the user still syncs");
+    }
+
+    #[test]
+    fn the_history_limit_counts_auto_sensitive_entries_but_keeps_user_tags() {
+        let repo = search_repository(
+            r#"INSERT INTO settings (key, value) VALUES ('app.persistent_limit_enabled', 'true'), ('app.persistent_limit', '1');
+             INSERT INTO clipboard_history (id, content_type, content, source_app, timestamp, sort_at, preview, tags, is_pinned)
+             VALUES (1, 'text', 'sensitive old', 'App', 1, 1, '', '["sensitive"]', 0),
+                    (2, 'text', 'user tagged', 'App', 2, 2, '', '["work","sensitive"]', 0),
+                    (3, 'text', 'pinned', 'App', 3, 3, '', '[]', 1),
+                    (4, 'text', 'newest', 'App', 4, 4, '', '[]', 0);"#,
+        );
+        let conn = repo.conn.lock().unwrap();
+        assert_eq!(repo.enforce_limit_with_conn(&conn, None).unwrap(), vec![1]);
     }
 
     #[test]

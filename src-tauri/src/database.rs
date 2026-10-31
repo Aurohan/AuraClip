@@ -25,10 +25,6 @@ pub struct DbState {
 const SENSITIVE_KEYS: &[&str] = &[
     "mqtt_password",
     "mqtt_username",
-    "ai_profiles",
-    "cloud_sync_api_key",
-    "cloud_sync_webdav_password",
-    "e2e_key",
 ];
 
 pub const SENSITIVE_TAGS: &[&str] = &["sensitive", "密码", "password"];
@@ -272,7 +268,7 @@ pub(crate) const CHANGED_DEFAULTS: &[(&str, &str, &str)] = &[
     ("app.persistent", "true", "false"),
     ("app.arrow_key_selection", "true", "false"),
     ("app.move_to_top_after_paste", "false", "true"),
-    ("app.privacy_protection", "false", "true"),
+    ("app.privacy_protection", "true", "true"),
     ("app.follow_mouse", "false", "true"),
 ];
 
@@ -425,31 +421,6 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.surface_opacity', '50')",
         [],
     );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.notice_v028_shown', 'true')",
-        [],
-    );
-
-    // File transfer settings
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('file_transfer_auto_close', 'false')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('file_transfer_auto_copy', 'false')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('file_server_enabled', 'false')",
-        [],
-    );
-    let _ = conn.execute(
-        // 12345 is NetBus's port, so port scans name TieZ a trojan (#157).
-        // Only new installs get the new one; saved ports (and phones that
-        // bookmarked them) stay as they are.
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('file_server_port', '28462')",
-        [],
-    );
 
     // MQTT settings
     let _ = conn.execute(
@@ -518,106 +489,6 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
          WHERE key = 'mqtt_password'
            AND value = 'tiezmessage'
            AND COALESCE((SELECT value FROM settings WHERE key = 'mqtt_enabled'), 'false') = 'false'",
-        [],
-    );
-
-    // Cloud sync settings
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_enabled', 'false')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_auto', 'true')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_provider', 'webdav')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_server', '')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_api_key', '')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_interval_sec', '120')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_snapshot_interval_min', '720')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_cursor', '0')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_settings_applied_at', '0')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_url', '')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_username', '')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_password', '')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_base_path', 'auraclip-sync')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_content_prefs', '{\"text\":true,\"image\":true,\"file_path\":true,\"emoji\":true}')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_local_seq', '0')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_op_cursor_map', '{}')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_blob_cache', '{}')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_last_snapshot_push_at', '0')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_last_snapshot_pull_at', '0')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_sync_webdav_last_head_rebuild_at', '0')",
-        [],
-    );
-
-    // AI settings
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('ai_enabled', 'false')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('ai_target_lang', 'zh')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('ai_enable_thinking', 'false')",
-        [],
-    );
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('ai_thinking_budget', '1024')",
         [],
     );
 

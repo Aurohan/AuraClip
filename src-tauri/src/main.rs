@@ -22,6 +22,14 @@ use crate::error::AppResult;
 use crate::global_state::*;
 
 fn main() -> AppResult<()> {
+    // Release builds abort on panic; log where it happened first, so a crash
+    // leaves a trace in auraclip.log.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        error!(">>> [PANIC] {info}");
+        default_hook(info);
+    }));
+
     // Install rustls crypto provider explicitly because rumqttc is built with
     // `use-rustls-no-provider` and will panic if no provider is registered.
     let _ = rustls::crypto::ring::default_provider().install_default();

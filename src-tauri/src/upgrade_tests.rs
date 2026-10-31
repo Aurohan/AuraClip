@@ -61,7 +61,13 @@ const USER_SETTINGS: &[(&str, &str)] = &[
     ("app.persistent", "true"),
     ("app.persistent_limit", "2000"),
     ("mqtt_password", "mqtt-secret"),
+];
+
+/// Settings of removed features (WebDAV sync, LAN transfer, AI); migration 23
+/// deletes them, credentials included.
+const REMOVED_SETTINGS: &[(&str, &str)] = &[
     ("cloud_sync_webdav_password", "dav-secret"),
+    ("ai_profiles", "[]"),
 ];
 
 /// encryption::init is process-wide (OnceLock); give it one throwaway dir.
@@ -90,7 +96,7 @@ fn write_legacy_db(path: &Path, migrate: Migrate, settings_sql: &str) {
     let conn = Connection::open(path).unwrap();
     migrate(&conn).unwrap();
     conn.execute_batch(settings_sql).unwrap();
-    for (key, value) in USER_SETTINGS {
+    for (key, value) in USER_SETTINGS.iter().chain(REMOVED_SETTINGS) {
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)", [key, value]).unwrap();
     }
     for s in SAMPLES {
@@ -186,7 +192,10 @@ fn check_upgrade(release: &str, migrate: Migrate, settings_sql: &str) {
     for (key, value) in USER_SETTINGS {
         assert_eq!(settings.get(key).unwrap().as_deref(), Some(*value), "{}", ctx(&format!("setting {key}")));
     }
-    for key in ["mqtt_password", "cloud_sync_webdav_password"] {
+    for (key, _) in REMOVED_SETTINGS {
+        assert_eq!(settings.get(key).unwrap(), None, "{}", ctx(&format!("removed setting {key}")));
+    }
+    for key in ["mqtt_password"] {
         let raw: String = conn.lock().unwrap()
             .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).unwrap();
         assert!(encryption::is_modern_ciphertext(&raw), "{}", ctx(&format!("{key} encrypted at rest")));
@@ -194,12 +203,7 @@ fn check_upgrade(release: &str, migrate: Migrate, settings_sql: &str) {
     assert!(settings.get("app.arrow_key_selection").unwrap().is_some(), "{}", ctx("new defaults seeded"));
 
     // Decided policy: upgraders keep the defaults they were installed with,
-    // even where new installs get a different one (old port 12345 stays).
-    for key in ["file_server_port", "cloud_sync_snapshot_interval_min"] {
-        if let Some(old) = legacy_default(settings_sql, key) {
-            assert_eq!(settings.get(key).unwrap().as_deref(), Some(old.as_str()), "{}", ctx(&format!("{key} keeps the old default")));
-        }
-    }
+    // even where new installs get a different one.
     for (key, _, existing) in database::CHANGED_DEFAULTS {
         if USER_SETTINGS.iter().any(|(k, _)| k == key) {
             continue;
@@ -236,8 +240,8 @@ fn new_install_gets_new_defaults_and_launches_at_login() {
         assert_eq!(get(key).as_deref(), Some(*new_install), "{key}");
     }
     assert_eq!(get(database::AUTOSTART_PENDING_KEY).as_deref(), Some("true"));
-    assert_eq!(get("file_server_port").as_deref(), Some("28462"));
-    assert_eq!(get("cloud_sync_snapshot_interval_min").as_deref(), Some("720"));
+    assert_eq!(get("file_server_port"), None);
+    assert_eq!(get("cloud_sync_snapshot_interval_min"), None);
     // Restarting is not a new install.
     drop(conn);
     let conn = upgrade(&path);

@@ -7,7 +7,8 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 use std::time::Duration;
 
-const TASK_NAME: &str = r"AuraClip\ElevatedAutostart";
+// Kept from the TieZ era: installed tasks live under this name.
+const TASK_NAME: &str = r"TieZ\ElevatedAutostart";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Passed by the task, so an instance it started never hands off to it again.
 pub const TASK_ARG: &str = "--elevated-autostart";

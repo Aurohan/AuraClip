@@ -218,7 +218,6 @@ pub struct StartupSettings {
     pub capture_rich_text: bool,
     pub rich_text_snapshot_preview: bool,
     pub deduplicate: bool,
-    pub auto_copy_file: bool,
     pub silent_start: bool,
     pub delete_after_paste: bool,
     pub privacy_protection: bool,
@@ -240,7 +239,6 @@ pub struct StartupSettings {
     pub arrow_key_selection: bool,
     pub light_mode_enabled: bool,
     pub light_mode_idle_minutes: u64,
-    pub auto_close_server: bool,
     pub sound_volume: f64,
 }
 
@@ -275,11 +273,6 @@ pub(crate) fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .unwrap_or(Some("true".to_string()))
             .map(|v| v == "true")
             .unwrap_or(true),
-        auto_copy_file: repo
-            .get("file_transfer_auto_copy")
-            .unwrap_or(Some("false".to_string()))
-            .map(|v| v == "true")
-            .unwrap_or(false),
         silent_start: repo
             .get("app.silent_start")
             .unwrap_or(Some("true".to_string()))
@@ -376,11 +369,6 @@ pub(crate) fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .and_then(|v| v.parse::<u64>().ok())
             .map(|v| v.clamp(1, 240))
             .unwrap_or(15),
-        auto_close_server: repo
-            .get("file_transfer_auto_close")
-            .unwrap_or(Some("false".to_string()))
-            .map(|v| v == "true")
-            .unwrap_or(false),
         sound_volume: repo
             .get("app.sound_volume")
             .unwrap_or(Some("1.0".to_string()))
@@ -423,12 +411,10 @@ pub(crate) fn settings_state_from(s: &StartupSettings) -> SettingsState {
     SettingsState {
         deduplicate: AtomicBool::new(s.deduplicate),
         persistent: AtomicBool::new(s.persistent),
-        file_server_auto_close: AtomicBool::new(s.auto_close_server),
         theme: std::sync::Mutex::new(s.theme.clone()),
         capture_files: AtomicBool::new(s.capture_files),
         capture_rich_text: AtomicBool::new(s.capture_rich_text),
         rich_text_snapshot_preview: AtomicBool::new(s.rich_text_snapshot_preview),
-        auto_copy_file: AtomicBool::new(s.auto_copy_file),
         silent_start: AtomicBool::new(s.silent_start),
         delete_after_paste: AtomicBool::new(s.delete_after_paste),
         privacy_protection: AtomicBool::new(s.privacy_protection),
