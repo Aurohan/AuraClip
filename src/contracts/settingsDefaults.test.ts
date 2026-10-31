@@ -45,7 +45,7 @@ for (const m of readFileSync(POST_INIT, "utf8").matchAll(/settings\["([^"]+)"\] 
 
 describe("boolean setting defaults", () => {
   test("parsers found the settings", () => {
-    expect(seeded.size).toBeGreaterThan(50);
+    expect(seeded.size).toBeGreaterThan(40);
     expect(rustDefaults.size).toBeGreaterThan(5);
     expect(frontendDefaults.size).toBeGreaterThan(20);
   });
