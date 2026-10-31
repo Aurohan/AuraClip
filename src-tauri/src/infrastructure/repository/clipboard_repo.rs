@@ -1975,7 +1975,7 @@ mod tests {
 
     #[test]
     fn saving_a_session_image_copies_it_out_of_session_storage() {
-        let data_dir = std::env::temp_dir().join(format!("tiez-session-save-{}", std::process::id()));
+        let data_dir = std::env::temp_dir().join(format!("auraclip-session-save-{}", std::process::id()));
         let session_dir = data_dir.join("session").join("attachments");
         std::fs::create_dir_all(&session_dir).unwrap();
         let png = b"\x89PNG\r\n\x1a\nnot really an image";
@@ -2013,7 +2013,7 @@ mod tests {
 
     #[test]
     fn an_edited_image_is_not_found_as_its_original() {
-        let dir = std::env::temp_dir().join(format!("tiez-image-edit-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("auraclip-image-edit-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let original = dir.join("original.png");
         let edited = dir.join("edited.png");

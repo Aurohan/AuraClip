@@ -9,11 +9,24 @@
       // Immediate theme application to prevent flash
       (function() {
         try {
+          // Migrate localStorage keys from pre-rename tiez_* to auraclip_*
+          (function() {
+            var keys = ['theme', 'native_palette', 'native_palette_tokens', 'color_mode', 'compact_mode', 'compact_show_time', 'language', 'tag_manager_view_mode'];
+            for (var i = 0; i < keys.length; i++) {
+              var oldValue = localStorage.getItem('tiez_' + keys[i]);
+              if (oldValue === null) continue;
+              if (localStorage.getItem('auraclip_' + keys[i]) === null) {
+                localStorage.setItem('auraclip_' + keys[i], oldValue);
+              }
+              localStorage.removeItem('tiez_' + keys[i]);
+            }
+          })();
+
           var isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent) || /Mac/i.test(navigator.platform);
-          var theme = localStorage.getItem('tiez_theme') || (isMac ? 'macos' : 'mica');
+          var theme = localStorage.getItem('auraclip_theme') || (isMac ? 'macos' : 'mica');
           if (!isMac && theme === 'macos') theme = 'mica';
           if (isMac && theme === 'mica') theme = 'macos';
-          var nativePalette = theme === 'sakura' ? 'sakura' : localStorage.getItem('tiez_native_palette');
+          var nativePalette = theme === 'sakura' ? 'sakura' : localStorage.getItem('auraclip_native_palette');
           if (theme === 'sakura') theme = isMac ? 'macos' : 'mica';
           if (theme === 'macos' || theme === 'mica') {
             document.documentElement.setAttribute('data-native-palette', nativePalette || 'default');
@@ -21,7 +34,7 @@
             if (['mint', 'lavender', 'amber'].indexOf(nativePalette) !== -1 || /^custom:#[0-9a-f]{6}$/i.test(nativePalette || '')) {
               document.documentElement.classList.add('native-palette-color');
               var paletteCache = {};
-              try { paletteCache = JSON.parse(localStorage.getItem('tiez_native_palette_tokens') || '{}'); } catch (e) {}
+              try { paletteCache = JSON.parse(localStorage.getItem('auraclip_native_palette_tokens') || '{}'); } catch (e) {}
               if (paletteCache.palette === nativePalette && paletteCache.styles) {
                 Object.keys(paletteCache.styles).forEach(function(key) {
                   if (/^--native-palette-(light|dark)-[a-z-]+$/.test(key)) {
@@ -31,8 +44,8 @@
               }
             }
           }
-          var colorMode = localStorage.getItem('tiez_color_mode') || 'system';
-          var compactMode = localStorage.getItem('tiez_compact_mode') === 'true';
+          var colorMode = localStorage.getItem('auraclip_color_mode') || 'system';
+          var compactMode = localStorage.getItem('auraclip_compact_mode') === 'true';
 
           document.documentElement.classList.add(isMac ? 'platform-macos' : 'platform-windows');
           

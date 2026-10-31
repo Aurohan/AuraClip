@@ -538,7 +538,7 @@ pub async fn paste_text_directly(app_handle: tauri::AppHandle, content: String) 
 }
 
 /// Copies a secret, the LAN transfer pairing link, marked so that clipboard
-/// history tools (TieZ itself, Windows' history, password-manager-aware apps)
+/// history tools (AuraClip itself, Windows' history, password-manager-aware apps)
 /// leave it out.
 #[tauri::command]
 pub fn copy_private_text(text: String) -> Result<(), String> {
@@ -737,7 +737,7 @@ async fn handle_window_focus_for_paste(app_handle: &tauri::AppHandle) -> AppResu
         tokio::time::sleep(std::time::Duration::from_millis(60))
         .await;
     } else {
-        // When TieZ never took focus, only wait for the hide animation and hotkey key-up to settle.
+        // When AuraClip never took focus, only wait for the hide animation and hotkey key-up to settle.
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 
@@ -824,7 +824,7 @@ async fn copy_content_to_system_clipboard(
                     crate::LAST_APP_SET_HASH_ALT.store(primary_hash, Ordering::SeqCst);
                 } else {
                     // Paste the files that still exist. A missing one made
-                    // Explorer/Finder abort or error while TieZ said it worked.
+                    // Explorer/Finder abort or error while AuraClip said it worked.
                     let total = file_paths.len();
                     let file_paths: Vec<String> = file_paths
                         .into_iter()
@@ -991,7 +991,7 @@ fn copy_rich_paste_image(bytes: &[u8]) -> AppResult<u64> {
 fn write_temp_image_path(bytes: &[u8]) -> AppResult<String> {
     let ext = image_extension_for_bytes(bytes);
     let filename = format!(
-        "TieZ_IMG_{}.{}",
+        "AuraClip_IMG_{}.{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -1836,14 +1836,14 @@ mod tests {
 
     #[test]
     fn an_image_saved_under_a_moved_data_folder_pastes_from_this_one() {
-        let root = std::env::temp_dir().join(format!("tiez-paste-file-{}", uuid::Uuid::new_v4()));
-        let data_dir = root.join("com.tiez");
+        let root = std::env::temp_dir().join(format!("auraclip-paste-file-{}", uuid::Uuid::new_v4()));
+        let data_dir = root.join("com.auradesk.auraclip");
         std::fs::create_dir_all(data_dir.join("attachments")).unwrap();
         let moved = data_dir.join("attachments").join("img_1.png");
         std::fs::write(&moved, b"png").unwrap();
         let old_path = root
             .join("Application Support")
-            .join("com.tiez.app")
+            .join("com.auradesk.auraclip")
             .join("attachments")
             .join("img_1.png");
         let old_path = old_path.to_string_lossy();

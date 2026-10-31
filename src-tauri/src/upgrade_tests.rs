@@ -75,14 +75,14 @@ const REMOVED_SETTINGS: &[(&str, &str)] = &[
 fn init_encryption() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        let dir = std::env::temp_dir().join(format!("tiez-upgrade-tests-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("auraclip-upgrade-tests-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         encryption::init(&dir);
     });
 }
 
 fn temp_db(release: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("tiez-upgrade-{}-{}-{}", release, std::process::id(), rand_suffix()));
+    let dir = std::env::temp_dir().join(format!("auraclip-upgrade-{}-{}-{}", release, std::process::id(), rand_suffix()));
     std::fs::create_dir_all(&dir).unwrap();
     dir.join("clipboard.db")
 }

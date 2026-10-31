@@ -12,7 +12,6 @@ pub mod error;
 pub mod global_state;
 pub mod infrastructure;
 pub mod logger;
-pub mod migration;
 pub mod services;
 #[cfg(test)]
 mod upgrade_tests;
@@ -66,7 +65,7 @@ fn main() -> AppResult<()> {
 
     let context = tauri::generate_context!();
 
-    // A normal start while TieZ runs as administrator: the single-instance
+    // A normal start while AuraClip runs as administrator: the single-instance
     // plugin can't reach that instance (see single_instance.rs).
     #[cfg(target_os = "windows")]
     {
@@ -124,7 +123,7 @@ fn main() -> AppResult<()> {
 
 
     let app = builder
-        // Launching TieZ again brings the running instance forward: the way
+        // Launching AuraClip again brings the running instance forward: the way
         // back when the tray icon is hidden and the hotkey is forgotten.
         // Off the callback thread: on Windows it runs inside the second
         // process's WM_COPYDATA SendMessage, where rebuilding the WebView2

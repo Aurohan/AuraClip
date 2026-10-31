@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn reads_a_complete_theme_archive() {
         let archive_path =
-            std::env::temp_dir().join(format!("tiez-theme-package-test-{}.zip", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("auraclip-theme-package-test-{}.zip", Uuid::new_v4()));
         let file = File::create(&archive_path).unwrap();
         let mut archive = zip::ZipWriter::new(file);
         let options = zip::write::SimpleFileOptions::default();

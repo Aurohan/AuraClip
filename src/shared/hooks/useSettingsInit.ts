@@ -66,11 +66,11 @@ export const useSettingsInit = ({
           setCompactMode(result["app.compact_mode"] === "true");
 
           try {
-            localStorage.setItem("tiez_theme", loadedTheme);
-            localStorage.setItem("tiez_native_palette", nativePalette);
-            localStorage.setItem("tiez_color_mode", loadedColorMode);
+            localStorage.setItem("auraclip_theme", loadedTheme);
+            localStorage.setItem("auraclip_native_palette", nativePalette);
+            localStorage.setItem("auraclip_color_mode", loadedColorMode);
             localStorage.setItem(
-              "tiez_compact_mode",
+              "auraclip_compact_mode",
               result["app.compact_mode"] === "true" ? "true" : "false"
             );
           } catch {
@@ -80,7 +80,7 @@ export const useSettingsInit = ({
           if (result["app.language"]) {
             setLanguage(result["app.language"] as Locale);
             try {
-              localStorage.setItem("tiez_language", result["app.language"]);
+              localStorage.setItem("auraclip_language", result["app.language"]);
             } catch {
               // Ignore localStorage errors
             }

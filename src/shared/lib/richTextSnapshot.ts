@@ -447,7 +447,7 @@ const buildRichTextSnapshotDataUrl = (
     const svg = [
       `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
       `<foreignObject x="0" y="0" width="100%" height="100%">`,
-      `<div xmlns="http://www.w3.org/1999/xhtml" class="tiez-rich-snapshot-root${normalized.hasSourceStyles ? " has-source-styles" : ""}" style="`,
+      `<div xmlns="http://www.w3.org/1999/xhtml" class="auraclip-rich-snapshot-root${normalized.hasSourceStyles ? " has-source-styles" : ""}" style="`,
       snapshotStyle,
       '">',
       xmlSafeBodyHtml,
@@ -457,14 +457,14 @@ const buildRichTextSnapshotDataUrl = (
         font-size: inherit !important;
         line-height: inherit;
       }
-      .tiez-rich-snapshot-root > :first-child,
-      .tiez-rich-snapshot-root > style:first-child + * {
+      .auraclip-rich-snapshot-root > :first-child,
+      .auraclip-rich-snapshot-root > style:first-child + * {
         margin-block-start: 0 !important;
       }
-      .tiez-rich-snapshot-root > :nth-last-child(2) {
+      .auraclip-rich-snapshot-root > :nth-last-child(2) {
         margin-block-end: 0 !important;
       }
-      .tiez-rich-snapshot-root > :is(p, div):has(> br:only-child) {
+      .auraclip-rich-snapshot-root > :is(p, div):has(> br:only-child) {
         display: none !important;
       }
       p {
@@ -495,12 +495,12 @@ const buildRichTextSnapshotDataUrl = (
         margin: 0.5em 0 !important;
       }
       /* Styled tables on white paper, as in HtmlContent. */
-      .tiez-rich-snapshot-root.has-source-styles table {
+      .auraclip-rich-snapshot-root.has-source-styles table {
         background-color: #fff;
         color: #000;
       }
-      /* TieZ's table look only where the source brought none (see HtmlContent). */
-      .tiez-rich-snapshot-root:not(.has-source-styles) table {
+      /* AuraClip's table look only where the source brought none (see HtmlContent). */
+      .auraclip-rich-snapshot-root:not(.has-source-styles) table {
         width: 100% !important;
         border: 1px solid ${snapshotBorder} !important;
       }
@@ -522,15 +522,15 @@ const buildRichTextSnapshotDataUrl = (
         line-height: 1.35 !important;
         word-break: break-word;
       }
-      .tiez-rich-snapshot-root:not(.has-source-styles) td,
-      .tiez-rich-snapshot-root:not(.has-source-styles) th {
+      .auraclip-rich-snapshot-root:not(.has-source-styles) td,
+      .auraclip-rich-snapshot-root:not(.has-source-styles) th {
         border: 1px solid ${snapshotBorder} !important;
       }
-      .tiez-rich-snapshot-root:not(.has-source-styles) th {
+      .auraclip-rich-snapshot-root:not(.has-source-styles) th {
         font-weight: 600 !important;
         background-color: color-mix(in srgb, ${snapshotText} 8%, ${snapshotBackground});
       }
-      .tiez-rich-snapshot-root:not(.has-source-styles) tr:nth-child(even) td:not([style*="background"]):not([bgcolor]) {
+      .auraclip-rich-snapshot-root:not(.has-source-styles) tr:nth-child(even) td:not([style*="background"]):not([bgcolor]) {
         background-color: color-mix(in srgb, ${snapshotText} 4%, ${snapshotBackground});
       }
       ul, ol {

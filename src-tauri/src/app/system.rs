@@ -177,7 +177,7 @@ pub fn start_system_event_window() {
             return;
         };
         let instance = HINSTANCE(module.0);
-        let class_name = w!("TieZSystemEvents");
+        let class_name = w!("AuraClipSystemEvents");
         let class = WNDCLASSW {
             lpfnWndProc: Some(system_event_proc),
             hInstance: instance,
@@ -192,7 +192,7 @@ pub fn start_system_event_window() {
         let hwnd = match CreateWindowExW(
             WS_EX_TOOLWINDOW,
             class_name,
-            w!("TieZ system events"),
+            w!("AuraClip system events"),
             WS_POPUP,
             0,
             0,

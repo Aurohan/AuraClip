@@ -100,7 +100,7 @@ fn data_dir() -> Option<&'static PathBuf> {
     // before another calls init() cached "no key" for all of them.
     #[cfg(test)]
     return Some(DATA_DIR.get_or_init(|| {
-        std::env::temp_dir().join(format!("tiez-test-encryption-{}", std::process::id()))
+        std::env::temp_dir().join(format!("auraclip-test-encryption-{}", std::process::id()))
     }));
     #[cfg(not(test))]
     DATA_DIR.get()
@@ -548,7 +548,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn a_damaged_key_file_is_not_treated_as_from_another_install() {
-        let dir = std::env::temp_dir().join(format!("tiez-damaged-key-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("auraclip-damaged-key-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(DPAPI_KEY_FILE);
         std::fs::write(&path, b"not a DPAPI blob").unwrap();
@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn unreadable_key_files_are_set_aside_never_deleted() {
-        let dir = std::env::temp_dir().join(format!("tiez-unreadable-key-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("auraclip-unreadable-key-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("master.key.dpapi");
 
@@ -716,7 +716,7 @@ mod tests {
     #[test]
     fn modern_ciphertext_can_unwrap_a_legacy_dpapi_value() {
         let test_data_dir = std::env::temp_dir().join(format!(
-            "tiez-encryption-test-{}",
+            "auraclip-encryption-test-{}",
             std::process::id()
         ));
         init(&test_data_dir);

@@ -127,16 +127,13 @@ pub(crate) fn default_app_data_dir<R: tauri::Runtime>(
     paths: &tauri::path::PathResolver<R>,
 ) -> tauri::Result<std::path::PathBuf> {
     let dir = paths.app_data_dir()?;
-    // `npm run tauri:dev` already uses the com.tiez.dev identifier; only a
+    // `npm run tauri:dev` already uses the com.auradesk.auraclip.dev identifier; only a
     // debug build run with the release config still needs the suffix.
     Ok(dir)
 }
 
 fn resolve_data_dir(app: &App) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let default_app_dir = default_app_data_dir(app.path())?;
-
-    // Perform migration if needed
-    crate::migration::perform_migration_v028(&default_app_dir);
 
     // Cleanup temp files
     std::thread::spawn(|| {
@@ -145,8 +142,9 @@ fn resolve_data_dir(app: &App) -> Result<std::path::PathBuf, Box<dyn std::error:
             for entry in entries.flatten() {
                 if let Ok(name) = entry.file_name().into_string() {
                     // Clipboard temp files from earlier runs: pasted images
-                    // (TieZ_IMG_/TieZ_GIF_) were never removed and piled up.
-                    if ["TieZ_Clip_", "TieZ_IMG_", "TieZ_GIF_"]
+                    // (AuraClip_IMG_/AuraClip_GIF_) were never removed and piled up.
+                    // TieZ_* are leftovers from before the AuraClip rename.
+                    if ["AuraClip_Clip_", "AuraClip_IMG_", "AuraClip_GIF_", "TieZ_Clip_", "TieZ_IMG_", "TieZ_GIF_"]
                         .iter()
                         .any(|prefix| name.starts_with(prefix))
                     {
@@ -557,7 +555,7 @@ mod edge_tuck_tests {
 }
 
 /// Edge tuck and reveal change always-on-top while the user works in another
-/// app. On Windows that must not activate TieZ: a hover-reveal took focus from
+/// app. On Windows that must not activate AuraClip: a hover-reveal took focus from
 /// the app underneath, which closed an Explorer / Directory Opus rename box.
 /// Tauri's own flag is left as is, so it keeps tracking the user's pin.
 fn set_edge_dock_topmost(window: &tauri::WebviewWindow, topmost: bool) {
@@ -590,7 +588,7 @@ fn restore_pin_state_after_edge_expand(app_handle: &AppHandle, window: &tauri::W
 }
 
 /// The window-state plugin restores the last position, which is off-screen
-/// when TieZ quit while tucked into an edge, but nothing marked the window as
+/// when AuraClip quit while tucked into an edge, but nothing marked the window as
 /// tucked on Windows. The hotkey then hid and "showed" it out of sight, and
 /// only a tray click (which infers the dock from geometry) brought it back.
 /// Adopt such a position as a tuck. Returns true if it did.
@@ -743,7 +741,7 @@ fn setup_main_window(app: &App, s: &StartupSettings) {
         // macOS: Space flags before panel conversion.
 
         // Drop WebView2 browser accelerators (Ctrl+F find, F1 help, reload…) so
-        // they cannot collide with TieZ / third-party global hotkeys (#159).
+        // they cannot collide with AuraClip / third-party global hotkeys (#159).
         #[cfg(target_os = "windows")]
         crate::infrastructure::windows_api::webview_keys::disable_browser_accelerator_keys_for_window(
             &window,
@@ -844,7 +842,7 @@ fn enable_autostart_on_first_run(app_handle: &AppHandle, db_state: &DbState) {
     if is_autostart_enabled(app_handle.clone()).unwrap_or(false) {
         done();
     } else if login_item_switched_off() {
-        // Registered, but the user switched TieZ off in System Settings
+        // Registered, but the user switched AuraClip off in System Settings
         // before (a reinstall): their choice, and nothing left to retry.
         done();
     } else {

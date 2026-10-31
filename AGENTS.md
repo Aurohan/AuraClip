@@ -108,8 +108,8 @@ loads `http://localhost:1420`. The version lives in `versions.json`
 
 ## Paths
 
-- Source: `D:\!PROJECT\tiez-clipboard`; install: `D:\!SOFTWARE\AuraClip\auraclip.exe`
-  (also `maintenance\latest\`); autostart task `\TieZ\ElevatedAutostart`.
+- Source: `D:\!PROJECT\AuraClip`; install: `D:\!SOFTWARE\AuraClip\auraclip.exe`
+  (also `maintenance\latest\`); autostart task `\AuraClip\ElevatedAutostart`.
 - User data: `%APPDATA%\com.auradesk.auraclip\` — `clipboard.db` (+wal),
   `attachments\`, `master.key.dpapi`, `auraclip.log` (check `[HOTKEY]`, `[MQTT]`).
 - Source backup: `D:\!SOFTWARE\AuraClip\maintenance\backup_source.py`

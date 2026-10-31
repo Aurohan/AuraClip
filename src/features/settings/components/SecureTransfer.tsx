@@ -34,9 +34,9 @@ export default function SecureTransfer({ t, collapsed, onToggle }: SecureTransfe
     }
     setBusy(true);
     try {
-      const filters = [{ name: t("secure_transfer_file_filter"), extensions: ["tiezx"] }];
+      const filters = [{ name: t("secure_transfer_file_filter"), extensions: ["auraclipx", "tiezx"] }];
       const path = await withNativeDialog(
-        () => importing ? open({ filters, multiple: false }) : save({ filters, defaultPath: "TieZ.tiezx" }),
+        () => importing ? open({ filters, multiple: false }) : save({ filters, defaultPath: "AuraClip.auraclipx" }),
         "settings:secure-transfer"
       );
       if (!path || typeof path !== "string") return;

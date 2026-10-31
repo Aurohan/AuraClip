@@ -66,8 +66,13 @@ try {
     if (-not $NoRestart) {
         Step 'Starting AuraClip'
         # Prefer the elevated logon task so the app keeps admin rights.
-        & schtasks.exe /Run /TN '\TieZ\ElevatedAutostart' 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) { Start-Process -FilePath $installed -WorkingDirectory $InstallDir }
+        & schtasks.exe /Run /TN '\AuraClip\ElevatedAutostart' 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            & schtasks.exe /Run /TN '\TieZ\ElevatedAutostart' 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Start-Process -FilePath $installed -WorkingDirectory $InstallDir
+            }
+        }
     }
 
     $backupScript = Join-Path $InstallDir 'maintenance\backup_source.py'

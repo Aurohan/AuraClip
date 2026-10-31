@@ -113,13 +113,13 @@ pub fn request_app_exit(app: &AppHandle) {
     app.exit(0);
 }
 
-/// Bench override `TIEZ_LIGHT_MODE_IDLE_SECS=15`: light mode on, entered after
+/// Bench override `AURACLIP_LIGHT_MODE_IDLE_SECS=15`: light mode on, entered after
 /// 15 s instead of minutes. Debug builds only, so users can't trip it.
 fn bench_idle_secs() -> Option<u64> {
     if !cfg!(debug_assertions) {
         return None;
     }
-    std::env::var("TIEZ_LIGHT_MODE_IDLE_SECS").ok()?.parse().ok()
+    std::env::var("AURACLIP_LIGHT_MODE_IDLE_SECS").ok()?.parse().ok()
 }
 
 fn light_mode_enabled(app: &AppHandle) -> bool {

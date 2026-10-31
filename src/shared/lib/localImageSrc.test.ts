@@ -3,20 +3,20 @@ import { assetUrlToFilePath } from "./localImageSrc";
 
 describe("assetUrlToFilePath", () => {
   test("macOS / Linux asset URL", () => {
-    expect(assetUrlToFilePath(`asset://localhost/${encodeURIComponent("/Users/me/Library/TieZ/attachments/a b.png")}`))
-      .toBe("/Users/me/Library/TieZ/attachments/a b.png");
+    expect(assetUrlToFilePath(`asset://localhost/${encodeURIComponent("/Users/me/Library/AuraClip/attachments/a b.png")}`))
+      .toBe("/Users/me/Library/AuraClip/attachments/a b.png");
   });
 
   test("Windows asset URL (http and https schemes)", () => {
-    const encoded = encodeURIComponent("C:\\Users\\me\\AppData\\Roaming\\com.tiez.app\\attachments\\图片.png");
+    const encoded = encodeURIComponent("C:\\Users\\me\\AppData\\Roaming\\com.auradesk.auraclip\\attachments\\图片.png");
     expect(assetUrlToFilePath(`http://asset.localhost/${encoded}`))
-      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.tiez.app\\attachments\\图片.png");
+      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.auradesk.auraclip\\attachments\\图片.png");
     expect(assetUrlToFilePath(`https://asset.localhost/${encoded}`))
-      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.tiez.app\\attachments\\图片.png");
+      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.auradesk.auraclip\\attachments\\图片.png");
   });
 
   test("drops a cache-busting query", () => {
-    expect(assetUrlToFilePath(`asset://localhost/${encodeURIComponent("/tmp/x.png")}?tiez_rev=3`)).toBe("/tmp/x.png");
+    expect(assetUrlToFilePath(`asset://localhost/${encodeURIComponent("/tmp/x.png")}?auraclip_rev=3`)).toBe("/tmp/x.png");
   });
 
   test("plain local paths pass through; remote and data sources are not files", () => {

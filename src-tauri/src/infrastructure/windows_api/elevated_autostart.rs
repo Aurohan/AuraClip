@@ -7,8 +7,13 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 use std::time::Duration;
 
-// Kept from the TieZ era: installed tasks live under this name.
-const TASK_NAME: &str = r"TieZ\ElevatedAutostart";
+const TASK_NAME: &str = r"AuraClip\ElevatedAutostart";
+/// Where the task lived before the AuraClip rename. Moved to TASK_NAME the
+/// next time AuraClip runs elevated; until then it still starts this exe.
+const LEGACY_TASK_NAME: &str = r"TieZ\ElevatedAutostart";
+/// Registry Run value names: current first, then pre-rename ones.
+const RUN_VALUE: &str = "AuraClip";
+const LEGACY_RUN_VALUES: [&str; 2] = ["TieZ", "tie-z"];
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Passed by the task, so an instance it started never hands off to it again.
 pub const TASK_ARG: &str = "--elevated-autostart";
@@ -35,7 +40,7 @@ fn xml_escape(value: &str) -> String {
 
 /// The task as XML. `schtasks /Create /SC ONLOGON` keeps Task Scheduler's
 /// defaults, which broke "start as administrator": no start on battery (a
-/// laptop unplugged at logon never got an elevated TieZ, so users opened a
+/// laptop unplugged at logon never got an elevated AuraClip, so users opened a
 /// normal one), killed on unplugging or after 72 hours, below-normal priority.
 fn task_xml(exe: &str, user: &str) -> String {
     let exe = xml_escape(exe);
@@ -94,6 +99,27 @@ fn current_user() -> String {
     }
 }
 
+fn task_exists(name: &str) -> bool {
+    Command::new("schtasks")
+        .args(["/Query", "/TN", name])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn delete_task(name: &str) -> Result<(), String> {
+    let status = Command::new("schtasks")
+        .args(["/Delete", "/TN", name, "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .map_err(|e| format!("schtasks delete failed: {e}"))?;
+    if !status.success() {
+        return Err("Failed to remove elevated autostart task".into());
+    }
+    Ok(())
+}
+
 /// The installed task was made by this version (battery and time limits off).
 pub fn is_task_current() -> bool {
     let Ok(output) = Command::new("schtasks")
@@ -117,8 +143,10 @@ pub fn is_task_current() -> bool {
         .any(|xml| xml.contains(TASK_ARG))
 }
 
-/// Tasks made by older versions keep their bad defaults until rewritten,
-/// which needs admin rights: done whenever TieZ runs elevated.
+/// Tasks made by older versions keep their bad defaults (or their pre-rename
+/// name) until rewritten, which needs admin rights: done whenever AuraClip
+/// runs elevated. Deleting the legacy task does not stop this instance even
+/// when that task started it.
 pub fn refresh_outdated_task() {
     if is_elevated_autostart_installed() && !is_task_current() {
         if let Err(error) = install_elevated_autostart_task() {
@@ -127,7 +155,7 @@ pub fn refresh_outdated_task() {
     }
 }
 
-/// An admin whose TieZ is running with the limited token (UAC split token):
+/// An admin whose AuraClip is running with the limited token (UAC split token):
 /// the task can start an elevated one without a prompt.
 fn can_elevate_through_task() -> bool {
     use std::ffi::c_void;
@@ -157,7 +185,7 @@ fn can_elevate_through_task() -> bool {
     }
 }
 
-/// A login started TieZ without admin rights although "start as
+/// A login started AuraClip without admin rights although "start as
 /// administrator" is on (something else launched it first, or the old task
 /// didn't run): start the task instead and let this instance exit. Only with
 /// a task of this version, so the elevated start can't be blocked on battery,
@@ -178,12 +206,7 @@ pub fn hand_off_to_task(args: &[String]) -> bool {
 }
 
 pub fn is_elevated_autostart_installed() -> bool {
-    Command::new("schtasks")
-        .args(["/Query", "/TN", TASK_NAME])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    task_exists(TASK_NAME) || task_exists(LEGACY_TASK_NAME)
 }
 
 pub fn install_elevated_autostart_task() -> Result<(), String> {
@@ -191,7 +214,7 @@ pub fn install_elevated_autostart_task() -> Result<(), String> {
     // schtasks wants the file in the encoding the declaration names.
     let mut bytes = vec![0xFF, 0xFE];
     bytes.extend(xml.encode_utf16().flat_map(u16::to_le_bytes));
-    let xml_path = std::env::temp_dir().join(format!("tiez-autostart-{}.xml", std::process::id()));
+    let xml_path = std::env::temp_dir().join(format!("auraclip-autostart-{}.xml", std::process::id()));
     std::fs::write(&xml_path, bytes).map_err(|e| format!("writing the task failed: {e}"))?;
     let status = Command::new("schtasks")
         .args(["/Create", "/TN", TASK_NAME, "/XML"])
@@ -206,21 +229,18 @@ pub fn install_elevated_autostart_task() -> Result<(), String> {
             "Failed to create elevated autostart task (administrator rights required)".into(),
         );
     }
+    if task_exists(LEGACY_TASK_NAME) {
+        let _ = delete_task(LEGACY_TASK_NAME);
+    }
     clear_registry_run_entry()?;
     Ok(())
 }
 
 pub fn uninstall_elevated_autostart_task() -> Result<(), String> {
-    if !is_elevated_autostart_installed() {
-        return Ok(());
-    }
-    let status = Command::new("schtasks")
-        .args(["/Delete", "/TN", TASK_NAME, "/F"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()
-        .map_err(|e| format!("schtasks delete failed: {e}"))?;
-    if !status.success() {
-        return Err("Failed to remove elevated autostart task".into());
+    for name in [TASK_NAME, LEGACY_TASK_NAME] {
+        if task_exists(name) {
+            delete_task(name)?;
+        }
     }
     Ok(())
 }
@@ -235,8 +255,9 @@ pub fn clear_registry_run_entry() -> Result<(), String> {
             KEY_WRITE | KEY_READ,
         )
         .map_err(|e| e.to_string())?;
-    let _ = key.delete_value("TieZ");
-    let _ = key.delete_value("tie-z");
+    for name in std::iter::once(RUN_VALUE).chain(LEGACY_RUN_VALUES) {
+        let _ = key.delete_value(name);
+    }
     Ok(())
 }
 
@@ -251,7 +272,11 @@ pub fn write_registry_run_entry() -> Result<(), String> {
         )
         .map_err(|e| e.to_string())?;
     let cmd = task_command_line()?;
-    key.set_value("TieZ", &cmd).map_err(|e| e.to_string())
+    key.set_value(RUN_VALUE, &cmd).map_err(|e| e.to_string())?;
+    for name in LEGACY_RUN_VALUES {
+        let _ = key.delete_value(name);
+    }
+    Ok(())
 }
 
 pub fn registry_run_present() -> bool {
@@ -261,7 +286,9 @@ pub fn registry_run_present() -> bool {
     let Ok(key) = hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run") else {
         return false;
     };
-    key.get_value::<String, _>("TieZ").is_ok() || key.get_value::<String, _>("tie-z").is_ok()
+    std::iter::once(RUN_VALUE)
+        .chain(LEGACY_RUN_VALUES)
+        .any(|name| key.get_value::<String, _>(name).is_ok())
 }
 
 /// Relaunch this exe elevated to install/uninstall the task (one UAC prompt).
@@ -341,12 +368,12 @@ mod tests {
 
     #[test]
     fn task_runs_on_battery_without_time_limit() {
-        let xml = task_xml(r"C:\Program Files\R&D <TieZ>\tiez-app.exe", r"PC\User");
+        let xml = task_xml(r"C:\Program Files\R&D <AuraClip>\auraclip.exe", r"PC\User");
         assert!(xml.contains("<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>"));
         assert!(xml.contains("<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>"));
         assert!(xml.contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>"));
         assert!(xml.contains("<RunLevel>HighestAvailable</RunLevel>"));
-        assert!(xml.contains(r"<Command>C:\Program Files\R&amp;D &lt;TieZ&gt;\tiez-app.exe</Command>"));
+        assert!(xml.contains(r"<Command>C:\Program Files\R&amp;D &lt;AuraClip&gt;\auraclip.exe</Command>"));
         assert!(xml.contains(&format!("<Arguments>--minimized {TASK_ARG}</Arguments>")));
         assert!(xml.contains(r"<UserId>PC\User</UserId>"));
     }
@@ -355,7 +382,7 @@ mod tests {
     fn only_a_login_start_hands_off() {
         let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
         // A manual start or one the task made never hands off.
-        assert!(!hand_off_to_task(&args(&["tiez-app.exe"])));
-        assert!(!hand_off_to_task(&args(&["tiez-app.exe", "--minimized", TASK_ARG])));
+        assert!(!hand_off_to_task(&args(&["auraclip.exe"])));
+        assert!(!hand_off_to_task(&args(&["auraclip.exe", "--minimized", TASK_ARG])));
     }
 }

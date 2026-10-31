@@ -150,7 +150,7 @@ pub fn toggle_autostart(app_handle: AppHandle, enabled: bool) -> AppResult<()> {
     result
 }
 
-/// `toggle_autostart` without sending the user anywhere; for TieZ's own use.
+/// `toggle_autostart` without sending the user anywhere; for AuraClip's own use.
 pub(crate) fn apply_autostart(app_handle: &AppHandle, enabled: bool) -> AppResult<()> {
     #[cfg(target_os = "windows")]
     {

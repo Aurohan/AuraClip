@@ -186,7 +186,7 @@ const sanitizeHTML = (html: string, preview?: boolean) => {
   const doc = parser.parseFromString(processedHtml, "text/html");
 
   // Keep formatting styles, but remove active/embedded content. Author styles are
-  // rendered inside a ShadowRoot below, so their selectors cannot leak into TieZ.
+  // rendered inside a ShadowRoot below, so their selectors cannot leak into AuraClip.
   doc
     .querySelectorAll(
       "script, iframe, frame, object, embed, form, input, button, textarea, select, option, base, template, svg, math"
@@ -270,7 +270,7 @@ const sanitizeHTML = (html: string, preview?: boolean) => {
 
     // Handle local file images (including encoded file:// paths)
     if (el.tagName.toLowerCase() === 'img') {
-      // Sites that block hotlinking (WeChat, Zhihu, CSDN…) reject TieZ's own
+      // Sites that block hotlinking (WeChat, Zhihu, CSDN…) reject AuraClip's own
       // origin as referrer but allow none.
       el.setAttribute("referrerpolicy", "no-referrer");
       const resolvedSrc = resolveImgSource(el);
@@ -299,7 +299,7 @@ const sanitizeHTML = (html: string, preview?: boolean) => {
   );
 
   // A style sheet, or styling on rows and cells: a table that only sets its
-  // own width or outline still gets TieZ's cell look.
+  // own width or outline still gets AuraClip's cell look.
   const hasSourceStyles = !!doc.body.querySelector("style, tr[style], th[style], td[style], [bgcolor]");
 
   const result = { html: bodyHtml, hasRenderable, hasSourceStyles };
@@ -338,25 +338,25 @@ const SHADOW_BASE_STYLE = `
     font-size: var(--clipboard-item-font-size);
     line-height: 1.4;
   }
-  :host([data-clamp]) .tiez-rich-root {
+  :host([data-clamp]) .auraclip-rich-root {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: var(--rich-preview-lines, 4);
     overflow: hidden;
   }
-  :host([data-clamp]) .tiez-rich-root :is(h1, h2, h3, h4, h5, h6) {
+  :host([data-clamp]) .auraclip-rich-root :is(h1, h2, h3, h4, h5, h6) {
     font-size: 1em !important;
     margin: 0 !important;
   }
-  :host([data-clamp]) .tiez-rich-root :is(p, div, ul, ol, li, blockquote, pre, table) {
+  :host([data-clamp]) .auraclip-rich-root :is(p, div, ul, ol, li, blockquote, pre, table) {
     margin-top: 0 !important;
     margin-bottom: 0.15em !important;
   }
-  :host([data-clamp]) .tiez-rich-root :is(img, video) {
+  :host([data-clamp]) .auraclip-rich-root :is(img, video) {
     max-height: 4.2em;
     width: auto;
   }
-  .tiez-rich-root {
+  .auraclip-rich-root {
     color: inherit;
     font: inherit;
     line-height: inherit;
@@ -365,11 +365,11 @@ const SHADOW_BASE_STYLE = `
     overflow-wrap: anywhere;
     text-align: start;
   }
-  .tiez-rich-root *:not(table):not(thead):not(tbody):not(tfoot):not(tr):not(th):not(td):not(colgroup):not(col) {
+  .auraclip-rich-root *:not(table):not(thead):not(tbody):not(tfoot):not(tr):not(th):not(td):not(colgroup):not(col) {
     box-sizing: border-box;
     max-width: 100%;
   }
-  .tiez-rich-root img, .tiez-rich-root video { max-width: 100%; height: auto; }
+  .auraclip-rich-root img, .auraclip-rich-root video { max-width: 100%; height: auto; }
   /* Bare element selectors (the shadow root scopes them) so a source's own
      rules, such as Excel's td.xl65, win over these defaults. */
   table {
@@ -387,89 +387,89 @@ const SHADOW_BASE_STYLE = `
   /* A styled table sits on white paper, as in the app it came from (and in
      the image of it the list shows): its colors were picked for white, and
      black text or dark red on a dark card was unreadable. */
-  .tiez-rich-root.has-source-styles table {
+  .auraclip-rich-root.has-source-styles table {
     background-color: #fff;
     color: #000;
   }
-  /* TieZ's table look only for tables that bring no styling of their own:
+  /* AuraClip's table look only for tables that bring no styling of their own:
      it painted over the fills, borders and stripes a spreadsheet copied. */
-  .tiez-rich-root:not(.has-source-styles) table {
+  .auraclip-rich-root:not(.has-source-styles) table {
     width: 100%;
     border: 1px solid var(--line-strong, var(--border-dark));
     border-radius: var(--rich-preview-radius, 6px);
     overflow: hidden;
   }
-  .tiez-rich-root:not(.has-source-styles) th,
-  .tiez-rich-root:not(.has-source-styles) td {
+  .auraclip-rich-root:not(.has-source-styles) th,
+  .auraclip-rich-root:not(.has-source-styles) td {
     border: 1px solid var(--line-soft, var(--border-dark));
   }
-  .tiez-rich-root:not(.has-source-styles) th {
+  .auraclip-rich-root:not(.has-source-styles) th {
     background-color: var(--bg-button, var(--bg-element));
     font-weight: 600;
   }
-  .tiez-rich-root:not(.has-source-styles) td {
+  .auraclip-rich-root:not(.has-source-styles) td {
     background-color: var(--bg-element, transparent);
   }
-  .tiez-rich-root:not(.has-source-styles) tr:nth-child(even) td {
+  .auraclip-rich-root:not(.has-source-styles) tr:nth-child(even) td {
     background-color: color-mix(in srgb, var(--bg-element) 60%, transparent);
   }
 `;
 
 const SHADOW_PREVIEW_STYLE = `
-  .tiez-rich-root {
+  .auraclip-rich-root {
     color: var(--text-primary);
     line-height: var(--rich-preview-line-height, 1.5);
   }
-  .tiez-rich-root *:not(style) {
+  .auraclip-rich-root *:not(style) {
     font-size: inherit !important;
   }
-  .tiez-rich-root > :first-child,
-  .tiez-rich-root > style:first-child + * {
+  .auraclip-rich-root > :first-child,
+  .auraclip-rich-root > style:first-child + * {
     margin-block-start: 0 !important;
   }
-  .tiez-rich-root > :last-child {
+  .auraclip-rich-root > :last-child {
     margin-block-end: 0 !important;
   }
-  .tiez-rich-root > :is(p, div):has(> br:only-child) {
+  .auraclip-rich-root > :is(p, div):has(> br:only-child) {
     display: none !important;
   }
-  .tiez-rich-root p {
+  .auraclip-rich-root p {
     margin: 0 0 var(--rich-preview-block-gap, 0.5em) !important;
     padding: 0 !important;
     line-height: inherit;
     text-wrap: pretty;
   }
-  .tiez-rich-root h1,
-  .tiez-rich-root h2,
-  .tiez-rich-root h3,
-  .tiez-rich-root h4,
-  .tiez-rich-root h5,
-  .tiez-rich-root h6 {
+  .auraclip-rich-root h1,
+  .auraclip-rich-root h2,
+  .auraclip-rich-root h3,
+  .auraclip-rich-root h4,
+  .auraclip-rich-root h5,
+  .auraclip-rich-root h6 {
     margin: 0.62em 0 0.28em !important;
     line-height: 1.22 !important;
     font-weight: 700 !important;
     letter-spacing: -0.01em;
     text-wrap: balance;
   }
-  .tiez-rich-root h1 { font-size: 1.28em !important; }
-  .tiez-rich-root h2 { font-size: 1.18em !important; }
-  .tiez-rich-root h3 { font-size: 1.1em !important; }
-  .tiez-rich-root h4,
-  .tiez-rich-root h5,
-  .tiez-rich-root h6 { font-size: 1.03em !important; }
-  .tiez-rich-root strong,
-  .tiez-rich-root b {
+  .auraclip-rich-root h1 { font-size: 1.28em !important; }
+  .auraclip-rich-root h2 { font-size: 1.18em !important; }
+  .auraclip-rich-root h3 { font-size: 1.1em !important; }
+  .auraclip-rich-root h4,
+  .auraclip-rich-root h5,
+  .auraclip-rich-root h6 { font-size: 1.03em !important; }
+  .auraclip-rich-root strong,
+  .auraclip-rich-root b {
     font-weight: 700;
   }
-  .tiez-rich-root small {
+  .auraclip-rich-root small {
     font-size: 0.92em !important;
   }
-  .tiez-rich-root sub,
-  .tiez-rich-root sup {
+  .auraclip-rich-root sub,
+  .auraclip-rich-root sup {
     font-size: 0.78em !important;
     line-height: 0;
   }
-  .tiez-rich-root table {
+  .auraclip-rich-root table {
     width: 100% !important;
     border-collapse: collapse !important;
     table-layout: auto;
@@ -478,34 +478,34 @@ const SHADOW_PREVIEW_STYLE = `
     border-radius: var(--rich-preview-radius, 6px);
     overflow: hidden;
   }
-  .tiez-rich-root td, .tiez-rich-root th {
+  .auraclip-rich-root td, .auraclip-rich-root th {
     border: 1px solid var(--line-soft, var(--border-dark)) !important;
     padding: 0.36em 0.55em !important;
     font-size: 0.92em !important;
     line-height: 1.35 !important;
     word-break: break-word;
   }
-  .tiez-rich-root th {
+  .auraclip-rich-root th {
     background-color: var(--bg-button, var(--bg-element));
     font-weight: 600 !important;
   }
-  .tiez-rich-root td {
+  .auraclip-rich-root td {
     background-color: var(--bg-element, transparent);
   }
-  .tiez-rich-root tr:nth-child(even) td:not([style*="background"]):not([bgcolor]) {
+  .auraclip-rich-root tr:nth-child(even) td:not([style*="background"]):not([bgcolor]) {
     background-color: color-mix(in srgb, var(--bg-element) 68%, transparent);
   }
-  .tiez-rich-root ul,
-  .tiez-rich-root ol {
+  .auraclip-rich-root ul,
+  .auraclip-rich-root ol {
     margin: 0.2em 0 var(--rich-preview-block-gap, 0.5em) !important;
     padding-inline-start: 1.45em !important;
   }
-  .tiez-rich-root li {
+  .auraclip-rich-root li {
     margin: 0.12em 0;
     padding-inline-start: 0.08em;
     line-height: inherit;
   }
-  .tiez-rich-root blockquote {
+  .auraclip-rich-root blockquote {
     margin: 0.3em 0 var(--rich-preview-block-gap, 0.5em) !important;
     padding: 0.3em 0.68em !important;
     border-inline-start: 2px solid color-mix(in srgb, var(--accent-color) 72%, transparent);
@@ -513,7 +513,7 @@ const SHADOW_PREVIEW_STYLE = `
     background: color-mix(in srgb, var(--accent-color) 7%, transparent);
     color: var(--text-secondary);
   }
-  .tiez-rich-root pre {
+  .auraclip-rich-root pre {
     margin: 0.35em 0 var(--rich-preview-block-gap, 0.5em) !important;
     padding: 0.55em 0.68em !important;
     overflow: hidden;
@@ -525,48 +525,48 @@ const SHADOW_PREVIEW_STYLE = `
     white-space: pre-wrap !important;
     tab-size: 4;
   }
-  .tiez-rich-root code,
-  .tiez-rich-root kbd,
-  .tiez-rich-root samp {
+  .auraclip-rich-root code,
+  .auraclip-rich-root kbd,
+  .auraclip-rich-root samp {
     font-family: var(--font-mono) !important;
   }
-  .tiez-rich-root :not(pre) > code,
-  .tiez-rich-root kbd {
+  .auraclip-rich-root :not(pre) > code,
+  .auraclip-rich-root kbd {
     padding: 0.08em 0.3em;
     border: 1px solid var(--line-soft, var(--border-dark));
     border-radius: 4px;
     background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   }
-  .tiez-rich-root hr {
+  .auraclip-rich-root hr {
     height: 1px;
     margin: 0.65em 0 !important;
     border: 0;
     background: var(--line-soft, var(--border-dark));
   }
-  .tiez-rich-root mark {
+  .auraclip-rich-root mark {
     padding: 0 0.12em;
     border-radius: 3px;
     background: color-mix(in srgb, var(--accent-color) 18%, transparent);
     color: inherit;
   }
-  .tiez-rich-root a {
+  .auraclip-rich-root a {
     color: var(--accent-color) !important;
     text-decoration-line: underline;
     text-decoration-thickness: from-font;
     text-underline-offset: 0.14em;
     text-decoration-skip-ink: auto;
   }
-  .tiez-rich-root figure {
+  .auraclip-rich-root figure {
     margin: 0.3em 0 var(--rich-preview-block-gap, 0.5em) !important;
   }
-  .tiez-rich-root figcaption {
+  .auraclip-rich-root figcaption {
     margin-block-start: 0.25em;
     color: var(--text-secondary);
     font-size: 0.92em !important;
     line-height: 1.35 !important;
   }
-  .tiez-rich-root img,
-  .tiez-rich-root video {
+  .auraclip-rich-root img,
+  .auraclip-rich-root video {
     display: block;
     width: auto;
     max-width: 100% !important;
@@ -576,13 +576,13 @@ const SHADOW_PREVIEW_STYLE = `
     object-fit: contain;
     object-position: top left;
   }
-  .tiez-rich-root dl {
+  .auraclip-rich-root dl {
     margin: 0 0 var(--rich-preview-block-gap, 0.5em) !important;
   }
-  .tiez-rich-root dt {
+  .auraclip-rich-root dt {
     font-weight: 700;
   }
-  .tiez-rich-root dd {
+  .auraclip-rich-root dd {
     margin-inline-start: 1.25em;
   }
 `;
@@ -687,7 +687,7 @@ const repairUnreadableSourceColors = (root: ShadowRoot, host: HTMLElement) => {
   // Read everything first, then write: interleaving setProperty with
   // getComputedStyle forced a style recalculation per element.
   const fixes: Array<[HTMLElement, string]> = [];
-  root.querySelectorAll<HTMLElement>(".tiez-rich-root *").forEach((element) => {
+  root.querySelectorAll<HTMLElement>(".auraclip-rich-root *").forEach((element) => {
     if (!(element.textContent || "").trim()) return;
     const foreground = parseCssColor(getComputedStyle(element).color);
     if (!foreground) return;
@@ -713,7 +713,7 @@ const repairUnreadableSourceColors = (root: ShadowRoot, host: HTMLElement) => {
 };
 
 /** Holds an element's own inline colour while a readability fix replaces it. */
-const COLOR_FIX_ATTR = "data-tiez-color-fix";
+const COLOR_FIX_ATTR = "data-auraclip-color-fix";
 
 /**
  * Rendered rich text, re-checked for readability when the theme or light/dark
@@ -775,7 +775,7 @@ const HtmlContent = ({ htmlContent, fallbackText, className, style, preview, cla
     const host = contentRef.current;
     const scheduleRepair = () => {
       const root = host.shadowRoot;
-      if (!root || !root.querySelector(".tiez-rich-root *")) return;
+      if (!root || !root.querySelector(".auraclip-rich-root *")) return;
       mountedRichRoots.set(root, host);
       watchThemeChanges();
       const frame = requestAnimationFrame(() => repairUnreadableSourceColors(root, host));
@@ -795,12 +795,12 @@ const HtmlContent = ({ htmlContent, fallbackText, className, style, preview, cla
       shadowRoot.addEventListener("auxclick", preventLinkNavigation);
     }
     const renderedContent = !hasRenderable && fallbackText
-      ? `<div class="tiez-rich-root" dir="auto"></div>`
-      : `<div class="tiez-rich-root${hasSourceStyles ? " has-source-styles" : ""}" dir="auto">${cleanHTML}</div>`;
+      ? `<div class="auraclip-rich-root" dir="auto"></div>`
+      : `<div class="auraclip-rich-root${hasSourceStyles ? " has-source-styles" : ""}" dir="auto">${cleanHTML}</div>`;
     shadowRoot.innerHTML = `<style>${SHADOW_BASE_STYLE}${preview ? SHADOW_PREVIEW_STYLE : ""}</style>${renderedContent}`;
 
     if (!hasRenderable && fallbackText) {
-      const fallbackRoot = shadowRoot.querySelector(".tiez-rich-root");
+      const fallbackRoot = shadowRoot.querySelector(".auraclip-rich-root");
       if (fallbackRoot) fallbackRoot.textContent = fallbackText;
       mountedRichRoots.delete(shadowRoot);
       return;

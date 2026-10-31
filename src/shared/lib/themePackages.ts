@@ -15,7 +15,7 @@ export interface InstalledThemeDefinition {
   windowMaterial: "none" | "mica" | "acrylic";
 }
 
-const STYLE_ID_PREFIX = "tiez-installed-theme-";
+const STYLE_ID_PREFIX = "auraclip-installed-theme-";
 
 export const listInstalledThemes = async (): Promise<InstalledThemeDefinition[]> => {
   if (!isTauriRuntime()) return [];

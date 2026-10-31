@@ -63,15 +63,15 @@ pub async fn open_content(
     let app_path = get_app_path_for_content_type(&state, &content_type)?;
     let filename = if id != 0 {
         if id > 0 {
-            format!("TieZ_Clip_entry_{}", id)
+            format!("AuraClip_Clip_entry_{}", id)
         } else {
-            format!("TieZ_Clip_session_{}", id.abs())
+            format!("AuraClip_Clip_session_{}", id.abs())
         }
     } else {
         static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(1);
         let count = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
         format!(
-            "TieZ_Clip_temp_{}_{:x}",
+            "AuraClip_Clip_temp_{}_{:x}",
             chrono::Utc::now().format("%Y%m%d-%H%M%S"),
             count
         )
@@ -693,7 +693,7 @@ struct FileToOpen {
     is_original: bool,
 }
 
-/// TieZ's own image files (in its data folder: attachments, session images)
+/// AuraClip's own image files (in its data folder: attachments, session images)
 /// are named by their content and may be shared by several entries: edit a
 /// copy. Editing them in place changed what other entries (and later copies
 /// of the original image) show.
@@ -704,7 +704,7 @@ fn file_to_open(
 ) -> FileToOpen {
     if content_type == "image" && data_dir.is_some_and(|dir| path.starts_with(dir)) {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("image.png");
-        let copy = std::env::temp_dir().join(format!("TieZ_Clip_edit_{}", name));
+        let copy = std::env::temp_dir().join(format!("AuraClip_Clip_edit_{}", name));
         if std::fs::copy(&path, &copy).is_ok() {
             return FileToOpen { path: copy, is_original: false };
         }
@@ -739,7 +739,7 @@ mod tests {
 
     #[test]
     fn existing_file_paths_keeps_every_file_still_on_disk() {
-        let dir = std::env::temp_dir().join(format!("tiez-open-files-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("auraclip-open-files-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let a = dir.join("a.html");
         let b = dir.join("b.html");
@@ -765,10 +765,10 @@ mod tests {
     }
 
     #[test]
-    fn a_tiez_image_opens_as_a_copy_of_its_file() {
+    fn an_auraclip_image_opens_as_a_copy_of_its_file() {
         // The path has a space, as "Application Support" does on macOS.
-        let root = std::env::temp_dir().join(format!("tiez open {}", uuid::Uuid::new_v4()));
-        let data_dir = root.join("com.tiez");
+        let root = std::env::temp_dir().join(format!("auraclip open {}", uuid::Uuid::new_v4()));
+        let data_dir = root.join("com.auradesk.auraclip");
         std::fs::create_dir_all(data_dir.join("attachments")).unwrap();
         let saved = data_dir.join("attachments").join("img_open_copy.png");
         std::fs::write(&saved, b"png bytes").unwrap();

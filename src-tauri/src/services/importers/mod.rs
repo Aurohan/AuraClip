@@ -363,7 +363,7 @@ mod tests {
     #[test]
     fn imports_a_ditto_database_and_skips_duplicates() {
         let test_root =
-            std::env::temp_dir().join(format!("tiez-ditto-import-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("auraclip-ditto-import-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&test_root).expect("create test directory");
         let source_path = test_root.join("Ditto.db");
         let source = rusqlite::Connection::open(&source_path).expect("create source database");
@@ -401,13 +401,13 @@ mod tests {
         source
             .execute(
                 "INSERT INTO Main VALUES (
-                    2, 1700000000, 'Hello TieZ', 1, 0, 1, 9.5,
+                    2, 1700000000, 'Hello AuraClip', 1, 0, 1, 9.5,
                     'hello-alias', 833, 1, 1700000100
                 )",
                 [],
             )
             .expect("insert clip");
-        let text_blob = "Hello TieZ\0"
+        let text_blob = "Hello AuraClip\0"
             .encode_utf16()
             .flat_map(u16::to_le_bytes)
             .collect::<Vec<_>>();
@@ -421,7 +421,7 @@ mod tests {
 
         let destination_path = test_root.join("clipboard.db");
         let destination = crate::database::init_db(&destination_path.to_string_lossy())
-            .expect("create TieZ database");
+            .expect("create AuraClip database");
         let destination = Arc::new(Mutex::new(destination));
 
         let first = import_clipboard_data(destination.clone(), &test_root, &source_path)
@@ -434,7 +434,7 @@ mod tests {
         let repo = SqliteClipboardRepository::new(destination.clone());
         let history = repo.get_history(10, 0, None).expect("read imported item");
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0].content, "Hello TieZ");
+        assert_eq!(history[0].content, "Hello AuraClip");
         assert_eq!(history[0].timestamp, 1_700_000_000_000);
         assert_eq!(history[0].created_at, 1_700_000_000_000);
         assert_eq!(history[0].sort_at, 1_700_000_000_000);

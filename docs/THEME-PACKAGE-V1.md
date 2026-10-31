@@ -1,6 +1,6 @@
 # AuraClip Theme Package v1
 
-AuraClip theme packages are ZIP archives with the `.zip` or `.tiez-theme` extension.
+AuraClip theme packages are ZIP archives with the `.zip` or `.auraclip-theme` extension.
 All files must live at the archive root.
 
 ```text

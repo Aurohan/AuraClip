@@ -49,7 +49,7 @@ fn parse_env_truthy(key: &str) -> Option<bool> {
 
 #[cfg(feature = "devtools")]
 pub fn should_auto_open_devtools() -> bool {
-    parse_env_truthy("TIEZ_AUTO_OPEN_DEVTOOLS").unwrap_or(false)
+    parse_env_truthy("AURACLIP_AUTO_OPEN_DEVTOOLS").unwrap_or(false)
 }
 
 #[cfg(not(feature = "devtools"))]
@@ -778,7 +778,7 @@ pub fn activate_window_focus(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Native dialogs require TieZ to be the active application on macOS. Keep
+/// Native dialogs require AuraClip to be the active application on macOS. Keep
 /// this separate from editable WebView focus: activating the whole process for
 /// an input click can make the non-activating panel resign key mid-keystroke.
 #[tauri::command]

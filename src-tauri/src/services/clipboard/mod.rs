@@ -194,13 +194,13 @@ fn probe_rich_text_payload(
     None
 }
 
-/// A file TieZ itself wrote to the temp folder to paste an image.
+/// A file AuraClip itself wrote to the temp folder to paste an image.
 #[cfg(target_os = "windows")]
-fn is_tiez_temp_image(path: &str) -> bool {
+fn is_auraclip_temp_image(path: &str) -> bool {
     let path = std::path::Path::new(path);
     let in_temp = path.parent().is_some_and(|parent| parent == std::env::temp_dir().as_path());
     let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
-    in_temp && (name.starts_with("TieZ_IMG_") || name.starts_with("TieZ_GIF_"))
+    in_temp && (name.starts_with("AuraClip_IMG_") || name.starts_with("AuraClip_GIF_"))
 }
 
 /// With file capture off, a copy of exactly one image file (Finder/Explorer,
@@ -227,7 +227,7 @@ fn single_image_file(paths: &[String]) -> Option<(Vec<u8>, String)> {
     Some((bytes, extension))
 }
 
-/// Whether `hash` is what TieZ itself just put on the clipboard (a paste).
+/// Whether `hash` is what AuraClip itself just put on the clipboard (a paste).
 /// It stays true for the whole window, not just the first echo: WPS and Office
 /// write the pasted value back once more, with their own formats, after we
 /// already saw our write, and that copy must not become a new record.
@@ -347,7 +347,7 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
         if crate::CLIPBOARD_MONITOR_PAUSED.load(std::sync::atomic::Ordering::Relaxed) {
             return;
         }
-        // TieZ put the user's previous clipboard back (transient paste).
+        // AuraClip put the user's previous clipboard back (transient paste).
 
         // Nothing was written since the last capture: an event that queued up
         // while a slow capture ran. (A 2 s same-content window used to be the
@@ -363,7 +363,7 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             monitor_state.last_sequence = sequence;
         }
 
-        // TieZ is writing, or just wrote, the clipboard for a paste.
+        // AuraClip is writing, or just wrote, the clipboard for a paste.
         #[cfg(target_os = "windows")]
         if crate::infrastructure::windows_api::win_clipboard::is_own_write() {
             return;
@@ -518,10 +518,10 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
                     .unwrap_or_default()
                     .as_secs();
 
-                // A pasted image without a file of its own goes out as a TieZ
+                // A pasted image without a file of its own goes out as a AuraClip
                 // temp file; that is our paste, not a new copy (its path never
                 // matches the hash of the data the paste remembered).
-                let own_temp_image = file_paths.len() == 1 && is_tiez_temp_image(&file_paths[0]);
+                let own_temp_image = file_paths.len() == 1 && is_auraclip_temp_image(&file_paths[0]);
                 if ((last_app_hash != 0 && current_hash == last_app_hash) || own_temp_image)
                     && now_secs.saturating_sub(last_app_time) < 10
                 {

@@ -1636,7 +1636,7 @@ mod tests {
             .unwrap_or_default()
             .as_nanos();
         let dir =
-            std::env::temp_dir().join(format!("tiez_clip_utils_{}_{}", std::process::id(), unique));
+            std::env::temp_dir().join(format!("auraclip_clip_utils_{}_{}", std::process::id(), unique));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join(name);
         let bytes = base64::engine::general_purpose::STANDARD

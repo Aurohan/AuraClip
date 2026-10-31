@@ -1,7 +1,7 @@
 {
   "version": 1,
   "project": {
-    "name": "tiez-app",
+    "name": "auraclip-app",
     "productType": null,
     "stack": [
       "react",

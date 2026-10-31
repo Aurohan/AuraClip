@@ -112,7 +112,7 @@ pub fn write_attachment(dir: &std::path::Path, bytes: &[u8], ext: &str) -> Optio
 
 /// Stable cross-platform fingerprint used by the cloud-sync wire protocol.
 ///
-/// Keep this algorithm in sync with `tiez-mobile/src/lib/sync.ts`. Unlike
+/// Keep this algorithm in sync with `auraclip-mobile/src/lib/sync.ts`. Unlike
 /// `DefaultHasher`, FNV-1a 32-bit is deterministic across Rust/JavaScript and
 /// stays inside JavaScript's exact integer range.
 pub fn calc_sync_content_hash(content_type: &str, content: &str) -> i64 {
@@ -761,8 +761,8 @@ mod tests {
 
     #[test]
     fn entry_files_are_found_after_the_data_folder_moved() {
-        let root = std::env::temp_dir().join(format!("tiez-entry-file-{}", uuid::Uuid::new_v4()));
-        let data_dir = root.join("com.tiez");
+        let root = std::env::temp_dir().join(format!("auraclip-entry-file-{}", uuid::Uuid::new_v4()));
+        let data_dir = root.join("com.auradesk.auraclip");
         std::fs::create_dir_all(data_dir.join("attachments")).unwrap();
         let moved = data_dir.join("attachments").join("img_1.png");
         std::fs::write(&moved, b"png").unwrap();
@@ -773,10 +773,10 @@ mod tests {
         let stored = outside.to_string_lossy().to_string();
         assert_eq!(resolve_entry_file_path(&format!(" {stored} "), &data_dir), Some(outside));
         // Saved under the old data folder, now in this one.
-        let old_path = root.join("com.tiez.app").join("attachments").join("img_1.png");
+        let old_path = root.join("com.auradesk.auraclip").join("attachments").join("img_1.png");
         assert_eq!(resolve_entry_file_path(&old_path.to_string_lossy(), &data_dir), Some(moved));
         // Gone from both.
-        let gone = root.join("com.tiez.app").join("attachments").join("img_2.png");
+        let gone = root.join("com.auradesk.auraclip").join("attachments").join("img_2.png");
         assert_eq!(resolve_entry_file_path(&gone.to_string_lossy(), &data_dir), None);
         assert_eq!(resolve_entry_file_path("  ", &data_dir), None);
 
@@ -785,7 +785,7 @@ mod tests {
 
     #[test]
     fn image_sync_hash_matches_file_and_data_url_representations() {
-        let path = std::env::temp_dir().join(format!("tiez-sync-hash-{}.png", std::process::id()));
+        let path = std::env::temp_dir().join(format!("auraclip-sync-hash-{}.png", std::process::id()));
         let bytes = [0_u8, 1, 2, 3, 250, 251, 252];
         std::fs::write(&path, bytes).expect("write hash fixture");
         let data_url = format!(

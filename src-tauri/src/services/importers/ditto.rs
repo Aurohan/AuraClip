@@ -1131,11 +1131,11 @@ mod tests {
 
     #[test]
     fn decodes_unicode_text_and_trailing_nulls() {
-        let bytes = "你好 TieZ\0"
+        let bytes = "你好 AuraClip\0"
             .encode_utf16()
             .flat_map(u16::to_le_bytes)
             .collect::<Vec<_>>();
-        assert_eq!(decode_utf16_le(&bytes).as_deref(), Some("你好 TieZ"));
+        assert_eq!(decode_utf16_le(&bytes).as_deref(), Some("你好 AuraClip"));
     }
 
     #[test]
@@ -1163,8 +1163,8 @@ mod tests {
 
     #[test]
     fn extracts_unicode_text_from_rtf() {
-        let rtf = br"{\rtf1\ansi\uc1 Hello \u20320?\u22909?\par TieZ}";
-        assert_eq!(plain_text_from_rtf(rtf), "Hello 你好\nTieZ");
+        let rtf = br"{\rtf1\ansi\uc1 Hello \u20320?\u22909?\par AuraClip}";
+        assert_eq!(plain_text_from_rtf(rtf), "Hello 你好\nAuraClip");
     }
 
     #[test]
