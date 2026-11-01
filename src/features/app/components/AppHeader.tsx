@@ -205,56 +205,25 @@ const AppHeader = ({
               {setMainTab && (
                 <div
                   className="main-tabs-segmented"
-                  style={{
-                    display: "inline-flex",
-                    background: "rgba(128, 128, 128, 0.12)",
-                    padding: "2px",
-                    borderRadius: "8px",
-                    marginLeft: "8px",
-                    border: "1px solid rgba(128, 128, 128, 0.15)",
-                  }}
+                  role="tablist"
+                  data-active={mainTab === "phrases" ? "phrases" : "clipboard"}
                 >
+                  <span className="main-tabs-indicator" aria-hidden />
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={mainTab !== "phrases"}
+                    className={`main-tab${mainTab !== "phrases" ? " is-active" : ""}`}
                     onClick={() => setMainTab("clipboard")}
-                    style={{
-                      border: "none",
-                      background: (mainTab ?? "clipboard") === "clipboard"
-                        ? "var(--accent-color, #4f7dff)"
-                        : "transparent",
-                      color: (mainTab ?? "clipboard") === "clipboard" ? "#ffffff" : "inherit",
-                      fontSize: "12px",
-                      fontWeight: (mainTab ?? "clipboard") === "clipboard" ? 600 : 400,
-                      padding: "2px 10px",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      boxShadow: (mainTab ?? "clipboard") === "clipboard"
-                        ? "0 2px 6px rgba(79, 125, 255, 0.35)"
-                        : "none",
-                      transition: "all 0.15s ease",
-                    }}
                   >
                     {t("tab_history")}
                   </button>
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={mainTab === "phrases"}
+                    className={`main-tab${mainTab === "phrases" ? " is-active" : ""}`}
                     onClick={() => setMainTab("phrases")}
-                    style={{
-                      border: "none",
-                      background: mainTab === "phrases"
-                        ? "var(--accent-color, #4f7dff)"
-                        : "transparent",
-                      color: mainTab === "phrases" ? "#ffffff" : "inherit",
-                      fontSize: "12px",
-                      fontWeight: mainTab === "phrases" ? 600 : 400,
-                      padding: "2px 10px",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      boxShadow: mainTab === "phrases"
-                        ? "0 2px 6px rgba(79, 125, 255, 0.35)"
-                        : "none",
-                      transition: "all 0.15s ease",
-                    }}
                   >
                     {t("tab_quick_phrases")}
                   </button>
@@ -460,17 +429,9 @@ const AppHeader = ({
                   {TYPE_FILTERS.map(type => (
                     <button
                       key={type ?? 'all'}
-                      className={`btn-icon ${typeFilter === type ? 'active' : ''}`}
+                      className={`btn-icon type-filter-chip${typeFilter === type ? ' active' : ''}`}
                       onClick={() => setTypeFilter(type)}
-                      style={{
-                        width: 'auto',
-                        padding: '4px 8px',
-                        fontSize: 'var(--font-size-xs)',
-                        borderRadius: '4px',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        opacity: typeFilter === type ? 1 : 0.7
-                      }}
+                      aria-pressed={typeFilter === type}
                       title={type === null ? t('type_all') : getTypeName(type)}
                     >
                       {type === null ? t('type_all') : getTypeName(type)}

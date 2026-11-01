@@ -1,0 +1,634 @@
+/* Refined layout for the glass themes (acrylic, mica): fewer outlines, one
+   accent, content before metadata. Loaded after the theme files, and only
+   under .theme-acrylic / .theme-mica, so the styled themes (retro, paper,
+   terminal...) keep their own look. Hover and pressed fills derive from the
+   text colour, so light and dark mode need no separate values. */
+
+:is(body.theme-acrylic, body.theme-mica) {
+  --rf-hover: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --rf-press: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --rf-fill: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
+  --rf-selected: color-mix(in srgb, var(--accent-color) 11%, transparent);
+  --rf-hairline: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --rf-meta: color-mix(in srgb, var(--text-primary) 50%, transparent);
+  --rf-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---- Header ---- */
+
+:is(body.theme-acrylic, body.theme-mica) .header-actions .btn-icon {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .header-actions .btn-icon:hover {
+  background: var(--rf-hover);
+  color: var(--text-primary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .header-actions .btn-icon:active {
+  background: var(--rf-press);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .header-actions .btn-icon.active {
+  background: transparent;
+  color: var(--accent-color);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .header-back-btn {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .header-back-btn:hover {
+  background: var(--rf-hover);
+  color: var(--text-primary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .main-tabs-segmented {
+  border: none;
+  background: var(--rf-fill);
+  border-radius: var(--radius-md);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .main-tabs-indicator {
+  background: var(--segment-active-background);
+  box-shadow:
+    0 1px 2px rgba(var(--shadow-rgb), 0.12),
+    0 0 0 0.5px rgba(var(--shadow-rgb), 0.06);
+  transition: transform var(--duration-slow) var(--rf-ease);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .main-tab {
+  padding: 3px 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .main-tab.is-active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ---- Search ---- */
+
+:is(body.theme-acrylic, body.theme-mica) .search-input {
+  background: var(--rf-fill);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  transition:
+    background var(--duration-base) ease,
+    border-color var(--duration-base) ease,
+    box-shadow var(--duration-base) ease;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .search-input:hover {
+  background: var(--rf-hover);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .search-input:focus {
+  background: var(--bg-input);
+  border-color: color-mix(in srgb, var(--accent-color) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 14%, transparent);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .search-icon {
+  color: var(--rf-meta);
+}
+
+/* ---- Category filters: text pills, the active one tinted ---- */
+
+:is(body.theme-acrylic, body.theme-mica) .search-type-filters {
+  gap: 2px;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .search-type-filters .type-filter-chip {
+  opacity: 1;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition:
+    background var(--duration-base) ease,
+    color var(--duration-base) ease;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .search-type-filters .type-filter-chip:hover {
+  background: var(--rf-hover);
+  color: var(--text-primary);
+  transform: none;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .search-type-filters .type-filter-chip.active {
+  background: var(--rf-selected);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+/* ---- Clipboard entries ----
+   [tile] content (one or two lines)
+          source · time            [actions on hover]                    */
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) {
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 9px 12px 8px;
+  margin-bottom: 3px;
+  outline: none;
+  box-shadow: none;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact):hover:not(.selected, .keyboard-owns-list *, .list-pointer-selects *) {
+  outline: none;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--layout-item-background), var(--text-primary) 4%);
+  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.06);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact).selected {
+  outline: none;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--layout-item-background), var(--accent-color) 12%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 38%, transparent);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item.has-lead {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-areas:
+    "lead preview"
+    "lead meta"
+    ".    footer";
+  column-gap: 11px;
+  align-items: start;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item.has-lead > .item-lead { grid-area: lead; }
+:is(body.theme-acrylic, body.theme-mica) .history-item.has-lead > .content-preview-shell { grid-area: preview; }
+:is(body.theme-acrylic, body.theme-mica) .history-item.has-lead > .item-meta { grid-area: meta; }
+:is(body.theme-acrylic, body.theme-mica) .history-item.has-lead > .item-meta-footer { grid-area: footer; }
+
+/* Without a tile (images, files, videos) the preview still comes first. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .has-lead) {
+  display: flex;
+  flex-direction: column;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .has-lead) > .content-preview-shell { order: 1; }
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .has-lead) > .item-meta { order: 2; }
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .has-lead) > .item-meta-footer { order: 3; }
+
+/* The tile: the source app's icon, or a tinted glyph for its kind. */
+:is(body.theme-acrylic, body.theme-mica) .history-item .item-lead {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--rf-fill);
+  color: var(--text-secondary);
+  transition: transform var(--duration-slow) var(--rf-ease);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:hover .item-lead {
+  transform: scale(1.04);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .item-lead svg {
+  width: 16px;
+  height: 16px;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .item-lead-app {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item[data-lead="url"] .item-lead {
+  background: color-mix(in srgb, var(--kind-link) 13%, transparent);
+  color: var(--kind-link);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item[data-lead="code"] .item-lead {
+  background: color-mix(in srgb, var(--kind-code) 13%, transparent);
+  color: var(--kind-code);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item[data-lead="sms"] .item-lead {
+  background: color-mix(in srgb, var(--kind-sms) 14%, transparent);
+  color: var(--kind-sms);
+}
+
+/* Kind badge on an app icon: the corner of the tile, like a notification. */
+:is(body.theme-acrylic, body.theme-mica) .item-lead-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: var(--on-accent);
+  background: var(--text-secondary);
+  box-shadow: 0 0 0 2px var(--layout-item-background);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item[data-lead="url"] .item-lead-badge { background: var(--kind-link); }
+:is(body.theme-acrylic, body.theme-mica) .history-item[data-lead="code"] .item-lead-badge { background: var(--kind-code); }
+
+:is(body.theme-acrylic, body.theme-mica) .item-lead-badge svg {
+  width: 9px;
+  height: 9px;
+}
+
+/* Content leads: two lines of text, three of code. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .content-preview {
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item[data-lead="code"] .content-preview {
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, var(--font-mono), monospace;
+  font-size: var(--font-size-sm);
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* A verification code reads at a glance. */
+:is(body.theme-acrylic, body.theme-mica) .history-item.is-sms-code .content-preview {
+  font-family: "Cascadia Mono", Consolas, var(--font-mono), monospace;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  line-height: 1.3;
+}
+
+/* Meta line: "source · time", quiet. Actions sit over its right end. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-meta {
+  position: static;
+  margin: 3px 0 0;
+  padding: 0;
+  border: none;
+  min-height: 22px;
+  justify-content: flex-start;
+  gap: 6px;
+  color: var(--rf-meta);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  line-height: 1.2;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-meta-left {
+  flex: 0 1 auto;
+  transform: none;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .app-info {
+  flex: 0 1 auto;
+  gap: 4px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* The tile already shows the app; keep only the pin mark here. */
+:is(body.theme-acrylic, body.theme-mica) .history-item.has-lead .app-info > svg:not(.lucide-pin),
+:is(body.theme-acrylic, body.theme-mica) .history-item.has-lead .app-info > .source-app-icon {
+  display: none;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-meta-right {
+  display: contents;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-meta-right-info {
+  display: inline-flex;
+  gap: 6px;
+  color: var(--rf-meta);
+  font-size: var(--font-size-xs);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-compact-time::before {
+  content: "·";
+  margin-right: 6px;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .quick-paste-hint {
+  order: 2;
+  margin-left: 2px;
+  padding: 2px 6px;
+  background: var(--rf-fill);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Actions: hidden until the row is hovered or selected, then fade in on a
+   small glass pill at the top right, over the content's end. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  z-index: 30;
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--popover-background);
+  box-shadow:
+    0 1px 3px rgba(var(--shadow-rgb), 0.12),
+    0 0 0 0.5px rgba(var(--shadow-rgb), 0.08);
+  opacity: 0;
+  transform: translateY(-2px) scale(0.97);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) ease,
+    transform var(--duration-base) var(--rf-ease);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact):is(:hover, .selected, .editing-tags, .editing-note) .item-actions {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* hide_unselected_item_actions rules in clipboard-item.css also apply. */
+body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:not(.compact):is(:hover, .selected) .item-actions {
+  visibility: visible;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon:hover {
+  background: var(--rf-hover);
+  color: var(--text-primary);
+  transform: none;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon.active {
+  background: transparent;
+  color: var(--accent-color);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* A link is one line; its end is what tells links apart, so keep the start. */
+:is(body.theme-acrylic, body.theme-mica) .history-item[data-lead="url"] .content-preview {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  word-break: break-all;
+}
+
+/* Tags go under the content instead of over its last line. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .content-preview-shell.has-overlay-meta .item-meta-footer {
+  position: static;
+  margin-top: 5px;
+  justify-content: flex-start;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-meta-footer {
+  justify-content: flex-start;
+}
+
+/* Reorder grip: only while the row is hovered, without shifting the text. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .drag-handle {
+  margin-left: -2px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact):hover .drag-handle {
+  opacity: 0.6;
+}
+
+/* Images: a framed thumbnail of even height instead of a large card. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .image-preview-frame {
+  min-height: 0;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .image-preview {
+  max-height: 84px;
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px var(--rf-hairline), 0 1px 3px rgba(var(--shadow-rgb), 0.08);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .file-thumbnail-card,
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .video-thumbnail-card {
+  background: var(--rf-fill);
+  border-radius: var(--radius-md);
+}
+
+/* The grip floats in the row's left padding instead of taking line space. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .drag-handle {
+  position: absolute;
+  left: 1px;
+  top: 50%;
+  margin: 0;
+  transform: translateY(-50%);
+  z-index: 25;
+}
+
+/* Pinned rows: a small accent pin before the source name. */
+:is(body.theme-acrylic, body.theme-mica) .history-item.pinned:not(.compact) .app-info::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  flex: none;
+  background: var(--accent-color);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item.pinned:not(.compact) .app-info > .lucide-pin {
+  display: none;
+}
+
+/* Tags: a soft tint of the tag's colour with text in the same hue, not a
+   solid block. The colour comes inline as --tag-color. */
+:is(body.theme-acrylic, body.theme-mica) .history-item .tag-chip,
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card .tag-chip {
+  background: color-mix(in srgb, var(--tag-color, var(--accent-color)) 15%, transparent) !important; /* design-ok: beats the chip's inline solid colour */
+  color: color-mix(in srgb, var(--tag-color, var(--accent-color)) 72%, var(--text-primary)) !important; /* design-ok: beats the chip's inline text colour */
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-weight: 600;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+/* The header tabs keep their labels on one line at any window width. */
+:is(body.theme-acrylic, body.theme-mica) .main-tabs-segmented {
+  flex: 0 0 auto;
+}
+
+/* ---- Quick phrases: tag bar ---- */
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tagbar-scroll {
+  gap: 2px;
+  padding: 6px 10px 8px 12px;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter {
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter:hover {
+  background: var(--rf-hover);
+  color: var(--text-primary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter.is-active {
+  background: var(--rf-selected);
+  color: var(--accent-color);
+}
+
+/* A picked tag takes its own colour, not the accent. */
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter.is-active:has(.phrase-tag-filter-dot) {
+  background: color-mix(in srgb, var(--tag-color) 15%, transparent);
+  color: color-mix(in srgb, var(--tag-color) 72%, var(--text-primary));
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter.is-active .phrase-tag-filter-dot {
+  background: var(--tag-color);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter-dot {
+  width: 6px;
+  height: 6px;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-add {
+  border-color: var(--rf-hairline);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tagbar-side .phrase-tag-manage {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tagbar-side .phrase-tag-manage:hover {
+  background: var(--rf-hover);
+  color: var(--text-primary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .phrase-tag-rail-divider {
+  background: var(--rf-hairline);
+  margin: 0 12px;
+}
+
+/* ---- Quick phrases: cards, styled like clipboard entries ---- */
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card {
+  backdrop-filter: none;
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card.is-focused {
+  border: none;
+  background: color-mix(in srgb, var(--layout-item-background), var(--text-primary) 4%);
+  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.06);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card.is-copied {
+  background: color-mix(in srgb, var(--layout-item-background), var(--status-success) 12%);
+}
+
+/* Title names the phrase, so it leads; the stored value reads quieter. */
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-title {
+  color: var(--text-primary) !important; /* design-ok: beats the inline title colour */
+  font-size: var(--font-size-base) !important; /* design-ok: beats the inline title size */
+  letter-spacing: 0 !important; /* design-ok: beats the inline letter spacing */
+}
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-content {
+  color: var(--text-secondary) !important; /* design-ok: beats the inline content colour */
+  font-size: var(--font-size-sm) !important; /* design-ok: beats the inline content size */
+}
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-stats {
+  color: var(--rf-meta) !important; /* design-ok: beats the inline stats colour */
+  opacity: 1 !important; /* design-ok: beats the inline stats opacity */
+  font-size: var(--font-size-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Usage and date sit at the right end of the title row, where the action
+   buttons appear on hover; they trade places. */
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card .aurora-phrase-stats {
+  margin-left: auto;
+  transition: opacity var(--duration-fast) ease;
+}
+
+@media (hover: hover) {
+  :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card:is(:hover, :focus-within) .aurora-phrase-stats {
+    opacity: 0 !important; /* design-ok: beats the inline stats opacity */
+  }
+
+  :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card .aurora-phrase-actions {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+  }
+
+  /* 添加标签 only when the card is under the pointer. */
+  :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card:not(:hover, :focus-within) .aurora-add-tag {
+    opacity: 0;
+  }
+}
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-add-tag {
+  transition: opacity var(--duration-fast) ease, color var(--duration-base) ease;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-actions .btn-icon {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-actions .btn-icon:hover {
+  background: var(--rf-hover);
+  color: var(--text-primary);
+}
+
+/* ANIM */

@@ -47,8 +47,12 @@ try {
         # The logon task starts AuraClip elevated; a normal shell cannot stop
         # it, but ending the task can when the task started this instance.
         & cmd.exe /c 'schtasks /End /TN "\AuraClip\ElevatedAutostart" >nul 2>nul'
-        $running | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
-        $running = Get-Process -Name 'auraclip', 'auraclip-app' -ErrorAction SilentlyContinue
+        # Wait-Process cannot watch an elevated process; poll instead.
+        for ($i = 0; $i -lt 20; $i++) {
+            $running = Get-Process -Name 'auraclip', 'auraclip-app' -ErrorAction SilentlyContinue
+            if (-not $running) { break }
+            Start-Sleep -Milliseconds 250
+        }
     }
     if ($running) {
         try { $running | Stop-Process -Force -ErrorAction Stop }

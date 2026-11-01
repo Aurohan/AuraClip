@@ -23,6 +23,10 @@
   --status-warning: #f59e0b;
   --status-danger: #ef4444;
   --status-danger-rgb: 239, 68, 68;
+  /* Kind colours for clipboard entries (link / code / SMS tiles). */
+  --kind-link: #3b82f6;
+  --kind-code: #8b5cf6;
+  --kind-sms: #16a34a;
   --border-dark: #24364d;
   --shadow-color: rgba(24, 34, 53, 0.18);
 

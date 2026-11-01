@@ -148,8 +148,8 @@ const AppMainContent = ({
   if (mainTab === "phrases" && !showSettings && !showTagManager) {
     return (
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        className="main-pane-enter-right"
+        initial={false}
         style={{
           height: "100%",
           width: "100%",
@@ -230,7 +230,7 @@ const AppMainContent = ({
   return (
     <>
       {filteredHistory.length > 0 && (
-        <div className="history-list-container">
+        <div className="history-list-container main-pane-enter-left">
           <VirtualClipboardList
             ref={virtualListRef}
             items={unpinnedItems}

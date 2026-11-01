@@ -1,0 +1,175 @@
+/* Tag filter bar above the quick phrases. Built from theme tokens only, so
+   every theme gets it in its own colours (it used to hard-code a purple). */
+
+.phrase-tagbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.phrase-tagbar-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px 6px 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Fade the edge that has more tags beyond it. */
+.phrase-tagbar[data-scroll-end] .phrase-tagbar-scroll {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+
+.phrase-tagbar[data-scroll-start] .phrase-tagbar-scroll {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px);
+  mask-image: linear-gradient(90deg, transparent, #000 28px);
+}
+
+.phrase-tagbar[data-scroll-start][data-scroll-end] .phrase-tagbar-scroll {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+.phrase-tag-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  border: var(--button-border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-button);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--duration-base) ease,
+    color var(--duration-base) ease,
+    border-color var(--duration-base) ease,
+    transform var(--duration-fast) ease;
+}
+
+.phrase-tag-filter:hover {
+  background: var(--bg-input);
+}
+
+.phrase-tag-filter:active {
+  transform: scale(0.96);
+}
+
+.phrase-tag-filter.is-active {
+  border-color: transparent;
+  background: var(--accent-color);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.phrase-tag-filter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tag-color, var(--accent-color));
+  flex: none;
+}
+
+.phrase-tag-filter.is-active .phrase-tag-filter-dot {
+  background: currentColor;
+}
+
+.phrase-tag-filter-count {
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+
+.phrase-tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: color var(--duration-base) ease, border-color var(--duration-base) ease;
+}
+
+.phrase-tag-add:hover {
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.phrase-tagbar-side {
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  flex-shrink: 0;
+}
+
+.phrase-tagbar-side .phrase-tag-manage {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+
+/* Drag rail under the bar when tags overflow: a thin neutral line, the
+   thumb in the accent; thicker under the pointer. */
+.phrase-tag-rail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 12px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.phrase-tag-rail-track {
+  position: relative;
+  width: 100%;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  transition: height var(--duration-fast) ease;
+}
+
+.phrase-tag-rail:hover .phrase-tag-rail-track {
+  height: 5px;
+}
+
+.phrase-tag-rail-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 36px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-color) 55%, transparent);
+  cursor: pointer;
+  touch-action: none;
+  transition: background var(--duration-fast) ease;
+}
+
+.phrase-tag-rail:hover .phrase-tag-rail-thumb {
+  background: var(--accent-color);
+}
+
+.phrase-tag-rail-divider {
+  height: 1px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}

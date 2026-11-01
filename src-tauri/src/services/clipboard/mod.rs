@@ -194,6 +194,12 @@ fn probe_rich_text_payload(
     None
 }
 
+/// Bench override `AURACLIP_NO_CAPTURE=1`: record nothing, so a UI test
+/// instance never stores what the user copies meanwhile. Debug builds only.
+fn capture_disabled_for_bench() -> bool {
+    cfg!(debug_assertions) && std::env::var_os("AURACLIP_NO_CAPTURE").is_some()
+}
+
 /// A file AuraClip itself wrote to the temp folder to paste an image.
 #[cfg(target_os = "windows")]
 fn is_auraclip_temp_image(path: &str) -> bool {
@@ -344,7 +350,9 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
         let mut monitor_state = state_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // 1. Check for pause
-        if crate::CLIPBOARD_MONITOR_PAUSED.load(std::sync::atomic::Ordering::Relaxed) {
+        if crate::CLIPBOARD_MONITOR_PAUSED.load(std::sync::atomic::Ordering::Relaxed)
+            || capture_disabled_for_bench()
+        {
             return;
         }
         // AuraClip put the user's previous clipboard back (transient paste).

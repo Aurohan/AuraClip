@@ -687,6 +687,10 @@ const App = () => {
     const onClipboardShown = () => {
       onShown();
       setTypeFilter(null);
+      // Restart the small rise of the list (styles main-tabs.css).
+      document.body.classList.remove("just-shown");
+      void document.body.offsetWidth;
+      document.body.classList.add("just-shown");
     };
     const unlistenMainTab = listen<string>("open-main-tab", ({ payload }) => {
       if (payload !== "clipboard" && payload !== "phrases") return;

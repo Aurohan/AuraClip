@@ -1,0 +1,117 @@
+/* 剪贴板 / 常用短语 switch in the header. Two equal columns so the active
+   indicator can slide between them; themes restyle it through the tokens. */
+
+.main-tabs-segmented {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  margin-left: 8px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(var(--neutral-rgb), 0.15);
+  background: rgba(var(--neutral-rgb), 0.12);
+  isolation: isolate;
+}
+
+.main-tabs-indicator {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  border-radius: var(--radius-sm);
+  background: var(--accent-color);
+  box-shadow: 0 2px 6px rgba(var(--accent-color-rgb), 0.35);
+  transition: transform var(--duration-base) cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: -1;
+}
+
+.main-tabs-segmented[data-active="phrases"] .main-tabs-indicator {
+  transform: translateX(100%);
+}
+
+.main-tab {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--duration-base) ease;
+}
+
+.main-tab.is-active {
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+/* Category chips under the search box (were inline styles). */
+.search-type-filters .type-filter-chip {
+  width: auto;
+  padding: 4px 8px;
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.search-type-filters .type-filter-chip.active {
+  opacity: 1;
+}
+
+/* The left tile on clipboard entries is drawn only by the refined glass
+   themes (themes/refined.css); every other theme keeps its row layout. */
+.history-item .item-lead {
+  display: none;
+}
+
+/* Quick phrase card (moved from inline styles so themes can restyle it). */
+.aurora-phrase-card {
+  padding: var(--layout-item-padding);
+  border-radius: var(--card-radius);
+  background: var(--layout-item-background);
+  border: var(--card-border);
+}
+
+.aurora-phrase-card.is-focused {
+  background: var(--card-selected-background);
+  border: 1px solid var(--card-selected-border-color);
+}
+
+.aurora-phrase-card.is-copied {
+  background: rgba(var(--status-success-rgb), 0.12);
+}
+
+/* Switching tabs: the new pane slides in from its side and fades up.
+   Opening the window: the list rises a few pixels as the window fades in. */
+.main-pane-enter-left {
+  animation: main-pane-in-left var(--duration-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.main-pane-enter-right {
+  animation: main-pane-in-right var(--duration-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+body.just-shown .history-list-container,
+body.just-shown .quick-phrases-view {
+  animation: main-pane-rise var(--duration-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes main-pane-in-left {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes main-pane-in-right {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes main-pane-rise {
+  from { opacity: 0.4; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}

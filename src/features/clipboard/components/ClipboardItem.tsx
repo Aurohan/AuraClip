@@ -34,7 +34,8 @@ import {
     ImageOff,
     FileQuestion,
     GripVertical,
-    PictureInPicture2
+    PictureInPicture2,
+    MessageSquare
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { isItemInteractionActive } from "../lib/itemInteraction";
@@ -699,6 +700,16 @@ const getIcon = (type: string) => {
     }
 };
 
+/** A verification code forwarded from the phone (mqtt) shows as a code. */
+const isSmsCode = (item: Pick<ClipboardItemProps["item"], "source_app" | "content">) =>
+    item.source_app === "mqtt" && /^\s*\d{4,8}\s*$/.test(item.content);
+
+/** Source shown under an entry: no ".exe", and SMS instead of "mqtt". */
+const sourceLabel = (sourceApp: string, smsLabel: string) =>
+    sourceApp === "mqtt" ? smsLabel : sourceApp.replace(/\.exe$/i, "").replace(/_/g, " ");
+
+const LEAD_BADGE: Record<string, typeof LinkIcon> = { url: LinkIcon, code: Code, sms: MessageSquare };
+
 const renderSourceAppIcon = (iconSrc: string | null, contentType: string, sourceApp: string) => {
     if (!iconSrc) {
         return getIcon(contentType);
@@ -1173,6 +1184,16 @@ const ClipboardItem = ({
         () => getStandaloneColorValue(item.content_type, item.content),
         [item.content, item.content_type]
     );
+    // Text-like entries get a tile on the left (refined themes show it);
+    // images, files and videos already lead with their own preview.
+    const smsCode = isSmsCode(item);
+    const leadKind = compactMode || standaloneColorValue || useSnapshotPreviewImage
+        ? null
+        : smsCode ? "sms"
+        : item.content_type === "url" ? "url"
+        : item.content_type === "code" ? "code"
+        : item.content_type === "text" || item.content_type === "rich_text" ? "text"
+        : null;
 
     useEffect(() => {
         let cancelled = false;
@@ -1956,7 +1977,8 @@ const ClipboardItem = ({
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.1 }}
             draggable={!isEditingTags && !isEditingNote && !isReordering}
-            className={`history-item ${isInteractionActive ? "selected" : ""} ${isDetailFocused ? "detail-focused" : ""} ${compactMode ? "compact" : ""} ${item.is_pinned ? "pinned" : ""} ${isDragging ? "is-dragging" : ""} ${isEditingTags ? "editing-tags" : ""} ${isEditingNote ? "editing-note" : ""} ${className || ''}`}
+            data-lead={leadKind ?? undefined}
+            className={`history-item ${leadKind ? "has-lead" : ""} ${smsCode ? "is-sms-code" : ""} ${isInteractionActive ? "selected" : ""} ${isDetailFocused ? "detail-focused" : ""} ${compactMode ? "compact" : ""} ${item.is_pinned ? "pinned" : ""} ${isDragging ? "is-dragging" : ""} ${isEditingTags ? "editing-tags" : ""} ${isEditingNote ? "editing-note" : ""} ${className || ''}`}
             onPointerDownCapture={(e) => {
                 if (dragReleaseTimerRef.current) {
                     clearTimeout(dragReleaseTimerRef.current);
@@ -2278,6 +2300,21 @@ const ClipboardItem = ({
                 void hideCompactPreview();
             }}
         >
+            {leadKind && (
+                <div className="item-lead" aria-hidden>
+                    {sourceAppIcon && leadKind !== "sms" ? (
+                        <img src={sourceAppIcon} alt="" className="item-lead-app" loading="lazy" draggable={false} />
+                    ) : leadKind === "sms" ? (
+                        <MessageSquare size={16} />
+                    ) : (
+                        getIcon(item.content_type)
+                    )}
+                    {sourceAppIcon && LEAD_BADGE[leadKind] && (() => {
+                        const Badge = LEAD_BADGE[leadKind];
+                        return <span className="item-lead-badge"><Badge size={9} strokeWidth={2.6} /></span>;
+                    })()}
+                </div>
+            )}
             <div className="item-meta">
                 <div className="item-meta-left">
                     {dragControls && (
@@ -2309,7 +2346,7 @@ const ClipboardItem = ({
                         {showSourceAppIcon
                             ? renderSourceAppIcon(sourceAppIcon, item.content_type, item.source_app)
                             : getIcon(item.content_type)}
-                        <span>{item.source_app}</span>
+                        <span>{sourceLabel(item.source_app, t('source_sms'))}</span>
                     </div>
                 </div>
 

@@ -199,6 +199,12 @@ export default function QuickPhrasesView({
   }, [fetchPhrases, fetchAllTags]);
 
   // Extract all unique tags combining saved_tags and quick phrases
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    phrases.forEach((p) => p.tags?.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
+    return counts;
+  }, [phrases]);
+
   const allTags = useMemo(() => {
     const set = new Set<string>();
     savedTags.forEach((t) => {
@@ -479,14 +485,9 @@ export default function QuickPhrasesView({
       {/* 顶部标签筛选栏 (只保留分类胶囊与新建标签，彻底杜绝横向截断) */}
       {/* 顶部标签筛选栏整体容器 (左侧自适应可滑动标签栏 + 右侧固定标签管理按钮) */}
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          width: "100%",
-          paddingRight: "8px",
-          position: "relative",
-          flexShrink: 0,
-        }}
+        className="phrase-tagbar"
+        data-scroll-start={tagScrollProgress.canScroll && tagScrollProgress.thumbLeftRatio > 0.01 ? "" : undefined}
+        data-scroll-end={tagScrollProgress.canScroll && tagScrollProgress.thumbLeftRatio < 0.99 ? "" : undefined}
       >
         {/* 左侧可滚动标签区域 */}
         <div
@@ -496,44 +497,17 @@ export default function QuickPhrasesView({
           onPointerDown={handleBarPointerDown}
           onPointerMove={handleBarPointerMove}
           onPointerUp={handleBarPointerUp}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "8px 10px 6px 12px",
-            overflowX: "auto",
-            whiteSpace: "nowrap",
-            flex: 1,
-            minWidth: 0,
-            cursor: tagScrollProgress.canScroll ? "grab" : "default",
-            userSelect: "none",
-          }}
-          className="hide-scrollbar"
+          style={{ cursor: tagScrollProgress.canScroll ? "grab" : "default" }}
+          className="phrase-tagbar-scroll hide-scrollbar"
         >
           <button
             type="button"
             onClick={() => setSelectedTag(null)}
-            className={`btn-icon ${selectedTag === null ? "active" : ""}`}
-            style={{
-              padding: "3px 12px",
-              fontSize: "12px",
-              borderRadius: "14px",
-              height: "26px",
-              border: "none",
-              background:
-                selectedTag === null
-                  ? "linear-gradient(135deg, #818cf8 0%, #a78bfa 100%)"
-                  : "rgba(128, 128, 128, 0.1)",
-              color: selectedTag === null ? "#ffffff" : "inherit",
-              fontWeight: selectedTag === null ? 600 : 400,
-              boxShadow:
-                selectedTag === null ? "0 2px 6px rgba(129, 140, 248, 0.4)" : "none",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-              flexShrink: 0,
-            }}
+            className={`phrase-tag-filter${selectedTag === null ? " is-active" : ""}`}
+            aria-pressed={selectedTag === null}
           >
-            {t("phrase_all_tags")}
+            <span className="phrase-tag-filter-name">{t("phrase_all_tags")}</span>
+            <span className="phrase-tag-filter-count">{phrases.length}</span>
           </button>
 
           {allTags.map((tag) => {
@@ -543,7 +517,8 @@ export default function QuickPhrasesView({
             return (
               <button
                 key={tag}
-                className="aurora-filter-chip"
+                className={`aurora-filter-chip phrase-tag-filter${isSelected ? " is-active" : ""}`}
+                aria-pressed={isSelected}
                 type="button"
                 onClick={() => setSelectedTag(isSelected ? null : tag)}
                 onContextMenu={(e) => {
@@ -552,35 +527,11 @@ export default function QuickPhrasesView({
                   document.getElementById(`tag-color-input-${tag}`)?.click();
                 }}
                 title={`点击筛选 #${tag}，右键修改颜色`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  borderRadius: "14px",
-                  height: "28px",
-                  border: isSelected ? "none" : "1px solid rgba(147, 130, 245, 0.25)",
-                  background: isSelected ? "var(--accent-color, #657cf1)" : `color-mix(in srgb, ${bg} 16%, var(--bg-panel, #fff))`,
-                  color: isSelected ? "#ffffff" : "var(--text-primary, #334155)",
-                  boxShadow: isSelected ? "0 2px 6px rgba(129, 140, 248, 0.4)" : "none",
-                  padding: "0 12px",
-                  gap: "6px",
-                  transition: "all 0.15s ease",
-                  flexShrink: 0,
-                  cursor: "pointer",
-                }}
+                style={{ "--tag-color": bg } as React.CSSProperties}
               >
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "7px",
-                    height: "7px",
-                    borderRadius: "50%",
-                    background: isSelected ? "#ffffff" : bg,
-                    opacity: 0.8,
-                  }}
-                />
-                <span style={{ fontSize: "12px", fontWeight: isSelected ? 600 : 500 }}>
-                  #{tag}
-                </span>
+                <span className="phrase-tag-filter-dot" />
+                <span className="phrase-tag-filter-name">{tag}</span>
+                {tagCounts.get(tag) ? <span className="phrase-tag-filter-count">{tagCounts.get(tag)}</span> : null}
                 <input
                   type="color"
                   id={`tag-color-input-${tag}`}
@@ -626,7 +577,7 @@ export default function QuickPhrasesView({
                   fontSize: "12px",
                   borderRadius: "14px",
                   width: "110px",
-                  border: "1px solid var(--accent-color, #7c6dfa)",
+                  border: "1px solid var(--accent-color)",
                 }}
               />
             </div>
@@ -634,23 +585,8 @@ export default function QuickPhrasesView({
             <button
               type="button"
               onClick={() => setIsCreatingTag(true)}
-              className="btn-icon"
+              className="phrase-tag-add"
               title="新建分类标签"
-              style={{
-                padding: "3px 8px",
-                fontSize: "11px",
-                borderRadius: "14px",
-                height: "26px",
-                border: "1px dashed rgba(147, 130, 245, 0.4)",
-                background: "transparent",
-                color: "inherit",
-                opacity: 0.8,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "2px",
-                flexShrink: 0,
-              }}
             >
               <Plus size={12} />
               <span>标签</span>
@@ -660,33 +596,13 @@ export default function QuickPhrasesView({
 
         {/* 右侧常驻固定“标签管理”小图标 (类似于剪贴板顶栏的小标签图标，点击直达全屏标签管理) */}
         {onOpenTagManager && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              paddingLeft: "6px",
-              borderLeft: "1px solid rgba(147, 130, 245, 0.2)",
-              flexShrink: 0,
-            }}
-          >
+          <div className="phrase-tagbar-side">
             <button
               type="button"
-              className="btn-icon"
+              className="btn-icon phrase-tag-manage"
               onClick={onOpenTagManager}
               title="标签管理 (点击进入全屏标签管理，可自定义标签颜色、名称等)"
               aria-label="标签管理"
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "6px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "rgba(147, 130, 245, 0.15)",
-                color: "#7c6dfa",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
             >
               <TagIcon size={15} />
             </button>
@@ -700,30 +616,11 @@ export default function QuickPhrasesView({
           ref={trackRef}
           onClick={handleTrackClick}
           title="点击轨道或左右拖动滑块查看更多分类标签"
-          style={{
-            height: "14px",
-            padding: "4px 14px",
-            display: "flex",
-            alignItems: "center",
-            cursor: "pointer",
-            flexShrink: 0,
-            borderBottom: "1px solid rgba(147, 130, 245, 0.15)",
-            background: "transparent",
-            position: "relative",
-          }}
+          className="phrase-tag-rail"
         >
-          {/* 轨道背景槽 (极简半透明淡蓝紫底色) */}
-          <div
-            style={{
-              width: "100%",
-              height: "6px",
-              borderRadius: "6px",
-              background: "rgba(147, 130, 245, 0.15)",
-              position: "relative",
-            }}
-          >
-            {/* 可拖动滑块 (淡蓝紫色极光渐变，圆润灵敏) */}
+          <div className="phrase-tag-rail-track">
             <div
+              className="phrase-tag-rail-thumb"
               onPointerDown={handleThumbPointerDown}
               onPointerMove={handleThumbPointerMove}
               onPointerUp={handleThumbPointerUp}
@@ -733,19 +630,13 @@ export default function QuickPhrasesView({
                 bottom: 0,
                 left: `${tagScrollProgress.thumbLeftRatio * (100 - tagScrollProgress.thumbWidthRatio * 100)}%`,
                 width: `${tagScrollProgress.thumbWidthRatio * 100}%`,
-                minWidth: "36px",
-                borderRadius: "6px",
-                background: "linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #c084fc 100%)",
-                boxShadow: "none",
-                cursor: "pointer",
-                touchAction: "none",
-                transition: isDraggingThumbRef.current ? "none" : "box-shadow 0.15s ease",
+                transition: isDraggingThumbRef.current ? "none" : undefined,
               }}
             />
           </div>
         </div>
       ) : (
-        <div style={{ height: "1px", background: "rgba(128,128,128,0.12)", flexShrink: 0 }} />
+        <div className="phrase-tag-rail-divider" />
       )}
 
       {/* 常用语紧凑单列滚动列表 */}
@@ -800,7 +691,7 @@ export default function QuickPhrasesView({
               <div
                 key={phrase.id}
                 data-phrase-id={phrase.id}
-                className="aurora-phrase-card"
+                className={`aurora-phrase-card${isFocused ? " is-focused" : ""}${isJustCopied ? " is-copied" : ""}`}
                 onClick={(e) => {
                   if (!isEditingTag && !isEditingContent) {
                     handleCardClick(phrase, e.currentTarget);
@@ -810,10 +701,6 @@ export default function QuickPhrasesView({
                 title={isEditingTag || isEditingContent ? "" : "点击直接填入当前光标位置"}
                 style={{
                   gridColumn: "1 / -1",
-                  padding: "var(--layout-item-padding)",
-                  borderRadius: "var(--card-radius)",
-                  background: isJustCopied ? "rgba(16, 185, 129, 0.12)" : isFocused ? "var(--card-selected-background)" : "var(--layout-item-background)",
-                  border: isFocused ? "1px solid var(--card-selected-border-color)" : "var(--card-border)",
                   cursor: isEditingTag || isEditingContent ? "default" : "pointer",
                   display: isEditingTag || isEditingContent ? "flex" : "grid",
                   gridTemplateColumns: "minmax(0, 1fr) auto",
@@ -905,6 +792,7 @@ export default function QuickPhrasesView({
                           <Lock size={11} style={{ opacity: 0.65, flexShrink: 0, color: "var(--accent-color, #4f7dff)" }} />
                         )}
                         <span
+                          className="aurora-phrase-title"
                           style={{
                             fontWeight: 600,
                             fontSize: "var(--layout-meta-font-size)",
@@ -938,7 +826,7 @@ export default function QuickPhrasesView({
                         )}
                       </div>
 
-                      <span style={{ fontSize: "10px", color: "var(--text-secondary)", opacity: 0.72, whiteSpace: "nowrap" }}>
+                      <span className="aurora-phrase-stats" style={{ fontSize: "10px", color: "var(--text-secondary)", opacity: 0.72, whiteSpace: "nowrap" }}>
                         使用 {phrase.useCount || 0} 次 · {new Date(phrase.updatedAt || phrase.createdAt).toLocaleDateString()}
                       </span>
                       {/* 动作按钮区 */}
@@ -1018,6 +906,7 @@ export default function QuickPhrasesView({
 
                     {/* 内容预览 */}
                     <div
+                      className="aurora-phrase-content"
                       style={{
                         fontSize: "var(--clipboard-item-font-size)",
                         color: "var(--text-primary)",
@@ -1054,6 +943,7 @@ export default function QuickPhrasesView({
                             key={t}
                             className="tag-chip"
                             style={{
+                              "--tag-color": bg,
                               background: `color-mix(in srgb, ${bg} 17%, var(--bg-panel, #fff))`,
                               color: "var(--text-secondary, #536179)",
                               fontSize: "11px",
@@ -1062,7 +952,7 @@ export default function QuickPhrasesView({
                               display: "inline-flex",
                               alignItems: "center",
                               gap: "3px",
-                            }}
+                            } as React.CSSProperties}
                           >
                             #{t}
                             {isEditingTag && (

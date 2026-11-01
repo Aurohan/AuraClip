@@ -6,6 +6,8 @@
 @import "./empty-state.css";
 @import "./expandable-search.css";
 @import "./layout.css";
+@import "./main-tabs.css";
+@import "./phrase-tagbar.css";
 @import "./modal.css";
 @import "./pin-sticker.css";
 @import "./rich-text-preview.css";
