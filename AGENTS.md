@@ -52,6 +52,8 @@ src/
   shared/hooks/           settings init/sync, hotkeys, keyboard navigation, history fetch
   locales.ts              zh / en / zh-TW strings (tests check keys stay aligned)
   styles/                 tokens, themes, components (rules: docs/DESIGN-SYSTEM.md)
+                          themes/refined.css: the acrylic/mica look (loaded last, glass themes only);
+                          clipboard entry tile + hover action pill, phrase cards and tag bar
 ```
 
 ## Key flows
