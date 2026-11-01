@@ -5,6 +5,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import type { ClipboardEntry } from "../types";
 import type { VirtualClipboardListHandle } from "../../features/clipboard/types";
 import { reconcileHistoryTags } from "../lib/historyState";
+import { clipboardCard, showPasteConfirm } from "../lib/pasteFeedback";
 
 interface UseClipboardActionsOptions {
   t: (key: string) => string;
@@ -51,6 +52,9 @@ export const useClipboardActions = ({
         }
 
         const invokeContent = invokeContentFor(id, content, contentType);
+        // The check mark is the feedback that the click landed; the window
+        // hides right after it.
+        await showPasteConfirm(clipboardCard(id));
 
         if (clickCopyOnly) {
           await invoke("copy_to_clipboard", {
@@ -111,6 +115,7 @@ export const useClipboardActions = ({
   const copyWithoutPaste = useCallback(
     async ({ id, content, content_type }: ClipboardEntry) => {
       try {
+        void showPasteConfirm(clipboardCard(id));
         await invoke("copy_to_clipboard", {
           content: invokeContentFor(id, content, content_type),
           contentType: content_type,

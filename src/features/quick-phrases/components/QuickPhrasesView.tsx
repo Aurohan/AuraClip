@@ -23,6 +23,7 @@ import {
 import { usePhrasePins } from "../hooks/usePhrasePins";
 import type { QuickPhrase } from "../../../shared/types";
 import { getTagColor, getTagTextColor } from "../../../shared/lib/utils";
+import { showPasteConfirm } from "../../../shared/lib/pasteFeedback";
 
 interface QuickPhrasesViewProps {
   sortMode: ClipboardSortMode;
@@ -250,8 +251,9 @@ export default function QuickPhrasesView({
   };
 
   // 点击卡片直接：复制 + 关闭窗口 + 自动粘贴 (粘贴静音)
-  const handleCardClick = async (phrase: QuickPhrase) => {
+  const handleCardClick = async (phrase: QuickPhrase, card?: Element | null) => {
     try {
+      await showPasteConfirm(card ?? null);
       await invoke("paste_quick_phrase", { id: phrase.id });
     } catch (err) {
       console.error("Paste quick phrase error:", err);
@@ -445,7 +447,7 @@ export default function QuickPhrasesView({
         const item = filteredPhrases[focusedIndex];
         if (item) {
           e.preventDefault();
-          handleCardClick(item);
+          handleCardClick(item, document.querySelector(`[data-phrase-id="${item.id}"]`));
         }
       }
     };
@@ -797,10 +799,11 @@ export default function QuickPhrasesView({
             return (
               <div
                 key={phrase.id}
+                data-phrase-id={phrase.id}
                 className="aurora-phrase-card"
-                onClick={() => {
+                onClick={(e) => {
                   if (!isEditingTag && !isEditingContent) {
-                    handleCardClick(phrase);
+                    handleCardClick(phrase, e.currentTarget);
                   }
                 }}
                 onMouseEnter={() => setFocusedIndex(idx)}
@@ -818,9 +821,8 @@ export default function QuickPhrasesView({
                   columnGap: "8px",
                   rowGap: "2px",
                   flexDirection: "column",
-                  transition: "background var(--duration-base), border-color var(--duration-base)",
+                  transition: "background var(--duration-base), border-color var(--duration-base), box-shadow var(--duration-base), transform var(--duration-slow) cubic-bezier(0.34, 1.4, 0.64, 1)",
                   position: "relative",
-                  boxShadow: "var(--card-shadow)",
                   minWidth: 0,
                   boxSizing: "border-box",
                 }}

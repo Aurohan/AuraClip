@@ -1418,6 +1418,9 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             }
             api.prevent_close();
             let _ = window.app_handle().emit("force-hide-compact-preview", ());
+            if let Some(main) = window.app_handle().get_webview_window("main") {
+                crate::app::window_fade::reset(&main);
+            }
             let _ = window.hide();
             IS_HIDDEN.store(false, Ordering::Relaxed);
             CURRENT_DOCK.store(0, Ordering::Relaxed);
@@ -1512,10 +1515,19 @@ fn handle_blur(window: &tauri::Window) {
         if !down && !tucked_by_edge && matches!(w.is_focused(), Ok(false)) {
             if !is_blur_ignored() && !WINDOW_PINNED.load(Ordering::Relaxed) {
                 let _ = w.app_handle().emit("force-hide-compact-preview", ());
-                let _ = w.hide();
                 NAVIGATION_ENABLED.store(false, Ordering::SeqCst);
                 release_modifier_keys();
-                let _ = restore_previous_app_focus(w.app_handle().clone());
+                let app = w.app_handle().clone();
+                match app.get_webview_window("main") {
+                    Some(main) => crate::app::window_fade::fade_out_then(&main, move |main| {
+                        let _ = main.hide();
+                        let _ = restore_previous_app_focus(app.clone());
+                    }),
+                    None => {
+                        let _ = w.hide();
+                        let _ = restore_previous_app_focus(app.clone());
+                    }
+                }
             }
         }
     });

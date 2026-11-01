@@ -459,8 +459,11 @@ pub fn show_and_focus_main_window(app: &AppHandle) {
                     let _ = SetWindowLongPtrW(HWND(hwnd_raw.0), GWL_EXSTYLE, next);
                 }
                 let _ = window.set_focusable(true);
+                // Before unminimize, which shows a hidden window by itself.
+                crate::app::window_fade::prepare_show(&window);
                 let _ = window.unminimize();
                 let _ = window.show();
+                crate::app::window_fade::fade_in(&window);
                 let _ = window.set_focus();
                 WindowExt::force_focus_window(HWND(hwnd_raw.0));
                 let _ = app.emit("clipboard-shown", ());
@@ -478,7 +481,9 @@ pub fn toggle_window(app: &AppHandle) {
 /// Whether the clipboard window is currently on screen.
 pub fn is_main_window_shown(app: &AppHandle) -> bool {
     app.get_webview_window("main")
-        .map(|window| window.is_visible().unwrap_or(false))
+        .map(|window| {
+            window.is_visible().unwrap_or(false) && !crate::app::window_fade::is_fading_out()
+        })
         .unwrap_or(false)
 }
 
@@ -503,21 +508,23 @@ fn toggle_window_windows(app: &AppHandle) {
         #[cfg(windows)]
         let mut active_center: Option<(i32, i32)> = None;
         crate::app::setup::adopt_offscreen_tuck(app, &window);
-        let is_visible = window.is_visible().unwrap_or(false);
+        let is_visible = window.is_visible().unwrap_or(false)
+            && !crate::app::window_fade::is_fading_out();
         let is_hidden_by_edge = IS_HIDDEN.load(Ordering::Relaxed);
 
         if is_visible && !is_hidden_by_edge {
             #[cfg(target_os = "windows")]
             WindowExt::release_modifier_keys();
-            let _ = window.set_focusable(false);
-            let _ = window.hide();
-
-            let _ = restore_previous_app_focus(app.clone());
-
             IS_HIDDEN.store(false, Ordering::Relaxed);
             NAVIGATION_ENABLED.store(false, Ordering::SeqCst);
             NAVIGATION_MODE_ACTIVE.store(false, Ordering::SeqCst);
-            crate::app::light_mode::on_window_hidden();
+            let app = app.clone();
+            crate::app::window_fade::fade_out_then(&window, move |window| {
+                let _ = window.set_focusable(false);
+                let _ = window.hide();
+                let _ = restore_previous_app_focus(app.clone());
+                crate::app::light_mode::on_window_hidden();
+            });
             return;
         }
 
@@ -720,8 +727,11 @@ fn toggle_window_windows(app: &AppHandle) {
                     let next = ex_style & !(WS_EX_NOACTIVATE.0 as isize);
                     let _ = SetWindowLongPtrW(HWND(hwnd_raw.0), GWL_EXSTYLE, next);
                 }
+                // Before unminimize, which shows a hidden window by itself.
+                crate::app::window_fade::prepare_show(&window);
                 let _ = window.unminimize();
                 let _ = window.show();
+                crate::app::window_fade::fade_in(&window);
                 let _ = window.set_focus();
                 WindowExt::force_focus_window(HWND(hwnd_raw.0));
             } else {
@@ -797,14 +807,24 @@ fn hide_window(app_handle: AppHandle, restore_focus: bool) -> Result<(), String>
         WindowExt::release_modifier_keys();
         IS_HIDDEN.store(false, Ordering::Relaxed);
         CURRENT_DOCK.store(0, Ordering::Relaxed);
-        let pinned = WINDOW_PINNED.load(Ordering::Relaxed);
-        let _ = window.set_always_on_top(pinned);
-        let _ = window.hide();
         NAVIGATION_ENABLED.store(false, Ordering::SeqCst);
         NAVIGATION_MODE_ACTIVE.store(false, Ordering::SeqCst);
-        crate::app::light_mode::on_window_hidden();
+        let finish = move |window: &WebviewWindow| {
+            let pinned = WINDOW_PINNED.load(Ordering::Relaxed);
+            let _ = window.set_always_on_top(pinned);
+            let _ = window.hide();
+            crate::app::light_mode::on_window_hidden();
+            if restore_focus {
+                let _ = restore_previous_app_focus(app_handle.clone());
+            }
+        };
+        // A paste (restore_focus false) hides at once: the card's check mark
+        // was the feedback, and the paste must not wait for a fade.
         if restore_focus {
-            let _ = restore_previous_app_focus(app_handle.clone());
+            crate::app::window_fade::fade_out_then(&window, finish);
+        } else {
+            crate::app::window_fade::reset(&window);
+            finish(&window);
         }
     }
     Ok(())

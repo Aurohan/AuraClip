@@ -44,7 +44,13 @@ try {
     Step 'Stopping running AuraClip'
     $running = Get-Process -Name 'auraclip', 'auraclip-app' -ErrorAction SilentlyContinue
     if ($running) {
-        # The logon task starts AuraClip elevated; a normal shell cannot stop it.
+        # The logon task starts AuraClip elevated; a normal shell cannot stop
+        # it, but ending the task can when the task started this instance.
+        & cmd.exe /c 'schtasks /End /TN "\AuraClip\ElevatedAutostart" >nul 2>nul'
+        $running | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+        $running = Get-Process -Name 'auraclip', 'auraclip-app' -ErrorAction SilentlyContinue
+    }
+    if ($running) {
         try { $running | Stop-Process -Force -ErrorAction Stop }
         catch { throw 'AuraClip runs as administrator. Quit it from the tray menu (退出应用), then rerun with -SkipBuild.' }
         $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
