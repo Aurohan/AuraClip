@@ -768,7 +768,7 @@ mod tests {
     fn an_auraclip_image_opens_as_a_copy_of_its_file() {
         // The path has a space, as "Application Support" does on macOS.
         let root = std::env::temp_dir().join(format!("auraclip open {}", uuid::Uuid::new_v4()));
-        let data_dir = root.join("com.auradesk.auraclip");
+        let data_dir = root.join("com.auraclip.clipboard");
         std::fs::create_dir_all(data_dir.join("attachments")).unwrap();
         let saved = data_dir.join("attachments").join("img_open_copy.png");
         std::fs::write(&saved, b"png bytes").unwrap();

@@ -110,7 +110,7 @@ loads `http://localhost:1420`. The version lives in `versions.json`
 
 - Source: `D:\!PROJECT\AuraClip`; install: `D:\!SOFTWARE\AuraClip\auraclip.exe`
   (also `maintenance\latest\`); autostart task `\AuraClip\ElevatedAutostart`.
-- User data: `%APPDATA%\com.auradesk.auraclip\` — `clipboard.db` (+wal),
+- User data: `%APPDATA%\com.auraclip.clipboard\` — `clipboard.db` (+wal),
   `attachments\`, `master.key.dpapi`, `auraclip.log` (check `[HOTKEY]`, `[MQTT]`).
 - Source backup: `D:\!SOFTWARE\AuraClip\maintenance\backup_source.py`
   → `maintenance\backups\AuraClip-最新源码.zip`.
@@ -132,7 +132,7 @@ loads `http://localhost:1420`. The version lives in `versions.json`
 1. Install Node 24 + pnpm, Rust stable-msvc, VS 2022 C++ Build Tools, WebView2.
 2. Clone, `pnpm install`, `pnpm run deploy` (pass `-InstallDir` to
    `scripts/deploy.ps1` if `D:\!SOFTWARE\AuraClip` does not exist there).
-3. Copy `%APPDATA%\com.auradesk.auraclip\` from the old PC with AuraClip closed.
+3. Copy `%APPDATA%\com.auraclip.clipboard\` from the old PC with AuraClip closed.
    History and phrases carry over, but `master.key.dpapi` only opens on the
    Windows account that made it: re-enter the MQTT password and other
    encrypted settings. Encrypted (sensitive) history entries stay unreadable;

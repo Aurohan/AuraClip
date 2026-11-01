@@ -1,3 +1,4 @@
+pub mod data_dir_migration;
 mod edge_geometry;
 pub mod commands;
 pub mod hooks;

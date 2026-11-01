@@ -59,6 +59,7 @@ pub fn init(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     // 2. Logger Initialization
     crate::logger::init(app_dir.join("auraclip.log"));
     info!(">>> [STARTUP] AuraClip starting up...");
+    crate::app::data_dir_migration::log_report();
 
     // 2b. Local-at-rest encryption (AES-GCM + OS key store)
     crate::infrastructure::encryption::init(&app_dir);
@@ -127,9 +128,8 @@ pub(crate) fn default_app_data_dir<R: tauri::Runtime>(
     paths: &tauri::path::PathResolver<R>,
 ) -> tauri::Result<std::path::PathBuf> {
     let dir = paths.app_data_dir()?;
-    // `npm run tauri:dev` already uses the com.auradesk.auraclip.dev identifier; only a
-    // debug build run with the release config still needs the suffix.
-    Ok(dir)
+    // Data an earlier identifier left that could not be moved yet stays in use.
+    Ok(crate::app::data_dir_migration::unmigrated_data_dir(&dir).unwrap_or(dir))
 }
 
 fn resolve_data_dir(app: &App) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {

@@ -1837,7 +1837,7 @@ mod tests {
     #[test]
     fn an_image_saved_under_a_moved_data_folder_pastes_from_this_one() {
         let root = std::env::temp_dir().join(format!("auraclip-paste-file-{}", uuid::Uuid::new_v4()));
-        let data_dir = root.join("com.auradesk.auraclip");
+        let data_dir = root.join("com.auraclip.clipboard");
         std::fs::create_dir_all(data_dir.join("attachments")).unwrap();
         let moved = data_dir.join("attachments").join("img_1.png");
         std::fs::write(&moved, b"png").unwrap();

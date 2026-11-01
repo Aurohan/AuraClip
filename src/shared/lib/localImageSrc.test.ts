@@ -8,11 +8,11 @@ describe("assetUrlToFilePath", () => {
   });
 
   test("Windows asset URL (http and https schemes)", () => {
-    const encoded = encodeURIComponent("C:\\Users\\me\\AppData\\Roaming\\com.auradesk.auraclip\\attachments\\图片.png");
+    const encoded = encodeURIComponent("C:\\Users\\me\\AppData\\Roaming\\com.auraclip.clipboard\\attachments\\图片.png");
     expect(assetUrlToFilePath(`http://asset.localhost/${encoded}`))
-      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.auradesk.auraclip\\attachments\\图片.png");
+      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.auraclip.clipboard\\attachments\\图片.png");
     expect(assetUrlToFilePath(`https://asset.localhost/${encoded}`))
-      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.auradesk.auraclip\\attachments\\图片.png");
+      .toBe("C:\\Users\\me\\AppData\\Roaming\\com.auraclip.clipboard\\attachments\\图片.png");
   });
 
   test("drops a cache-busting query", () => {

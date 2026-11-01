@@ -43,7 +43,7 @@ pnpm run deploy     # 发布构建并安装到 D:\!SOFTWARE\AuraClip
 
 用 Cargo 直接构建发布版时必须加 `--features tauri/custom-protocol`，否则程序会去请求开发服务器 `localhost:1420`。
 
-用户数据位于 `%APPDATA%\com.auradesk.auraclip\`，与源码分开。维护说明见 [AGENTS.md](AGENTS.md)。
+用户数据位于 `%APPDATA%\com.auraclip.clipboard\`，与源码分开。维护说明见 [AGENTS.md](AGENTS.md)。
 
 ## 来源与许可
 

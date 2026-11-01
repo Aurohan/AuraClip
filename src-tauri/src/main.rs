@@ -76,6 +76,7 @@ fn main() -> AppResult<()> {
         ) {
             std::process::exit(0);
         }
+        crate::app::data_dir_migration::migrate(&context.config().identifier);
     }
 
     // Prefer overlay scrollbars (no classic Win32 arrows) in WebView2.

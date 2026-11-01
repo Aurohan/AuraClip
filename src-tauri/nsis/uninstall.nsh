@@ -63,8 +63,8 @@
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "tie-z"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "tiez-app"
   # 清理 NSIS 记录的上次安装路径，避免后续静默安装继续复用旧目录。
-  DeleteRegKey HKCU "Software\auradesk\AuraClip"
-  DeleteRegKey /ifempty HKCU "Software\auradesk"
+  DeleteRegKey HKCU "Software\AuraClip\AuraClip"
+  DeleteRegKey /ifempty HKCU "Software\AuraClip"
   DeleteRegKey HKCU "Software\tiez\TieZ"
   DeleteRegKey /ifempty HKCU "Software\tiez"
   

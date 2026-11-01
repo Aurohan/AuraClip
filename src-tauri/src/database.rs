@@ -762,7 +762,7 @@ mod tests {
     #[test]
     fn entry_files_are_found_after_the_data_folder_moved() {
         let root = std::env::temp_dir().join(format!("auraclip-entry-file-{}", uuid::Uuid::new_v4()));
-        let data_dir = root.join("com.auradesk.auraclip");
+        let data_dir = root.join("com.auraclip.clipboard");
         std::fs::create_dir_all(data_dir.join("attachments")).unwrap();
         let moved = data_dir.join("attachments").join("img_1.png");
         std::fs::write(&moved, b"png").unwrap();
