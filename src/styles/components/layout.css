@@ -64,26 +64,6 @@ header {
   letter-spacing: 0;
 }
 
-.brand-mark {
-  display: block;
-  height: 15px;
-  width: 42px;
-  margin-left: 2px;
-  flex: 0 0 auto;
-  background-color: var(--brand-mark-color, var(--accent-color));
-  /* Keep the brand color theme-aware, but slightly quieter than the accent
-     used for actions so the logo does not compete with the content. */
-  background-color: color-mix(
-    in srgb,
-    var(--brand-mark-color, var(--accent-color)) 88%,
-    rgb(var(--shadow-rgb)) 12%
-  );
-  -webkit-mask: url("../../assets/auraclip-wordmark.svg") left center / contain no-repeat;
-  mask: url("../../assets/auraclip-wordmark.svg") left center / contain no-repeat;
-  pointer-events: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
 
 .header-actions .windows-close-btn:hover {
   color: var(--on-accent);
@@ -181,10 +161,6 @@ header {
     max-width: 7.5em;
   }
 
-  .brand-mark {
-    height: 13px;
-    width: 36px;
-  }
 
   .header-drag-region {
     flex: 1 1 2px;

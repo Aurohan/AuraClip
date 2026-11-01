@@ -22,7 +22,6 @@ body.theme-sticky-note {
 
   --accent-color: #f0a70b;
   --accent-color-rgb: 240, 167, 11;
-  --brand-mark-color: var(--text-primary);
   --accent-hover: #df9100;
   --border-dark: #c7a35d;
   --shadow-color: rgba(93, 64, 55, 0.16);
