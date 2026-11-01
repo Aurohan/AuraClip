@@ -95,6 +95,7 @@ body.theme-paper {
 
   --segment-active-background: #ffffff;
   --segment-active-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  --tag-pill-shadow: var(--segment-active-shadow);
 
   --tags-border: 1px solid #d5c4a1;
   --tags-shadow: none;

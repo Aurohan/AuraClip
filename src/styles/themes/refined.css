@@ -492,49 +492,7 @@ body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:
   flex: 0 0 auto;
 }
 
-/* ---- Quick phrases: tag bar ---- */
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tagbar-scroll {
-  gap: 2px;
-  padding: 6px 10px 8px 12px;
-}
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter {
-  height: 26px;
-  padding: 0 10px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter:hover {
-  background: var(--rf-hover);
-  color: var(--text-primary);
-}
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter.is-active {
-  background: var(--rf-selected);
-  color: var(--accent-color);
-}
-
-/* A picked tag takes its own colour, not the accent. */
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter.is-active:has(.phrase-tag-filter-dot) {
-  background: color-mix(in srgb, var(--tag-color) 15%, transparent);
-  color: color-mix(in srgb, var(--tag-color) 72%, var(--text-primary));
-}
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter.is-active .phrase-tag-filter-dot {
-  background: var(--tag-color);
-}
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-filter-dot {
-  width: 6px;
-  height: 6px;
-}
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-add {
-  border-color: var(--rf-hairline);
-}
+/* ---- Quick phrases: tag bar (components/phrase-tagbar.css) ---- */
 
 :is(body.theme-acrylic, body.theme-mica) .phrase-tagbar-side .phrase-tag-manage {
   border: none;
@@ -546,11 +504,6 @@ body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:
 :is(body.theme-acrylic, body.theme-mica) .phrase-tagbar-side .phrase-tag-manage:hover {
   background: var(--rf-hover);
   color: var(--text-primary);
-}
-
-:is(body.theme-acrylic, body.theme-mica) .phrase-tag-rail-divider {
-  background: var(--rf-hairline);
-  margin: 0 12px;
 }
 
 /* ---- Quick phrases: cards, styled like clipboard entries ---- */

@@ -19,7 +19,10 @@ import {
   X,
   Lock,
   ArrowUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { usePhrasePins } from "../hooks/usePhrasePins";
 import type { QuickPhrase } from "../../../shared/types";
 import { getTagColor, getTagTextColor } from "../../../shared/lib/utils";
@@ -63,10 +66,17 @@ export default function QuickPhrasesView({
   const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const {
-    tagBarRef, trackRef, isDraggingThumbRef, tagScrollProgress, updateTagScrollMetrics,
+    tagBarRef, tagScrollProgress, updateTagScrollMetrics,
     handleTagBarWheel, handleBarPointerDown, handleBarPointerMove, handleBarPointerUp,
-    handleTrackClick, handleThumbPointerDown, handleThumbPointerMove, handleThumbPointerUp,
   } = usePhraseTagScroll();
+  const reduceMotion = useReducedMotion();
+  const pillTransition = reduceMotion
+    ? { duration: 0 }
+    : { type: "spring" as const, stiffness: 520, damping: 40, mass: 0.7 };
+  const scrollTagBar = (direction: 1 | -1) => {
+    const el = tagBarRef.current;
+    if (el) el.scrollBy({ left: direction * el.clientWidth * 0.7, behavior: "smooth" });
+  };
 
   useEffect(() => {
     if (isCreatingTag && tagBarRef.current) {
@@ -228,6 +238,16 @@ export default function QuickPhrasesView({
     ro.observe(el);
     return () => ro.disconnect();
   }, [allTags, updateTagScrollMetrics]);
+
+  useEffect(() => {
+    const el = tagBarRef.current;
+    const picked = el?.querySelector<HTMLElement>(".phrase-tag-filter.is-active");
+    if (!el || !picked) return;
+    const left = picked.offsetLeft - 28;
+    const right = picked.offsetLeft + picked.offsetWidth + 28 - el.clientWidth;
+    if (el.scrollLeft > left) el.scrollTo({ left, behavior: "smooth" });
+    else if (el.scrollLeft < right) el.scrollTo({ left: right, behavior: "smooth" });
+  }, [selectedTag, tagBarRef]);
 
   // Filtered by tag & search
   const filteredPhrases = useMemo(() => {
@@ -486,12 +506,15 @@ export default function QuickPhrasesView({
       {/* 顶部标签筛选栏整体容器 (左侧自适应可滑动标签栏 + 右侧固定标签管理按钮) */}
       <div
         className="phrase-tagbar"
-        data-scroll-start={tagScrollProgress.canScroll && tagScrollProgress.thumbLeftRatio > 0.01 ? "" : undefined}
-        data-scroll-end={tagScrollProgress.canScroll && tagScrollProgress.thumbLeftRatio < 0.99 ? "" : undefined}
+        data-scroll-start={tagScrollProgress.canScroll && (tagBarRef.current?.scrollLeft ?? 0) > 4 ? "" : undefined}
+        data-scroll-end={tagScrollProgress.canScroll && tagScrollProgress.thumbLeftRatio < 0.995 ? "" : undefined}
       >
-        {/* 左侧可滚动标签区域 */}
-        <div
+        <div className="phrase-tagbar-track">
+        <motion.div
+          layoutScroll
           ref={tagBarRef}
+          role="tablist"
+          aria-label={t("phrase_all_tags")}
           onScroll={updateTagScrollMetrics}
           onWheel={handleTagBarWheel}
           onPointerDown={handleBarPointerDown}
@@ -502,10 +525,14 @@ export default function QuickPhrasesView({
         >
           <button
             type="button"
+            role="tab"
             onClick={() => setSelectedTag(null)}
             className={`phrase-tag-filter${selectedTag === null ? " is-active" : ""}`}
-            aria-pressed={selectedTag === null}
+            aria-selected={selectedTag === null}
           >
+            {selectedTag === null && (
+              <motion.span layoutId="phrase-tag-pill" className="phrase-tag-pill" transition={pillTransition} />
+            )}
             <span className="phrase-tag-filter-name">{t("phrase_all_tags")}</span>
             <span className="phrase-tag-filter-count">{phrases.length}</span>
           </button>
@@ -517,8 +544,9 @@ export default function QuickPhrasesView({
             return (
               <button
                 key={tag}
-                className={`aurora-filter-chip phrase-tag-filter${isSelected ? " is-active" : ""}`}
-                aria-pressed={isSelected}
+                className={`phrase-tag-filter${isSelected ? " is-active" : ""}`}
+                role="tab"
+                aria-selected={isSelected}
                 type="button"
                 onClick={() => setSelectedTag(isSelected ? null : tag)}
                 onContextMenu={(e) => {
@@ -529,6 +557,9 @@ export default function QuickPhrasesView({
                 title={`点击筛选 #${tag}，右键修改颜色`}
                 style={{ "--tag-color": bg } as React.CSSProperties}
               >
+                {isSelected && (
+                  <motion.span layoutId="phrase-tag-pill" className="phrase-tag-pill" transition={pillTransition} />
+                )}
                 <span className="phrase-tag-filter-dot" />
                 <span className="phrase-tag-filter-name">{tag}</span>
                 {tagCounts.get(tag) ? <span className="phrase-tag-filter-count">{tagCounts.get(tag)}</span> : null}
@@ -592,6 +623,29 @@ export default function QuickPhrasesView({
               <span>标签</span>
             </button>
           )}
+        </motion.div>
+          {tagScrollProgress.canScroll && (
+            <>
+              <button
+                type="button"
+                className="phrase-tagbar-arrow is-start"
+                aria-label="向左"
+                tabIndex={-1}
+                onClick={() => scrollTagBar(-1)}
+              >
+                <ChevronLeft size={14} strokeWidth={2.4} />
+              </button>
+              <button
+                type="button"
+                className="phrase-tagbar-arrow is-end"
+                aria-label="向右"
+                tabIndex={-1}
+                onClick={() => scrollTagBar(1)}
+              >
+                <ChevronRight size={14} strokeWidth={2.4} />
+              </button>
+            </>
+          )}
         </div>
 
         {/* 右侧常驻固定“标签管理”小图标 (类似于剪贴板顶栏的小标签图标，点击直达全屏标签管理) */}
@@ -609,35 +663,6 @@ export default function QuickPhrasesView({
           </div>
         )}
       </div>
-
-      {/* 标签栏底部淡蓝紫色微型可拖拽滚动轨 (当标签溢出时出现) */}
-      {tagScrollProgress.canScroll ? (
-        <div
-          ref={trackRef}
-          onClick={handleTrackClick}
-          title="点击轨道或左右拖动滑块查看更多分类标签"
-          className="phrase-tag-rail"
-        >
-          <div className="phrase-tag-rail-track">
-            <div
-              className="phrase-tag-rail-thumb"
-              onPointerDown={handleThumbPointerDown}
-              onPointerMove={handleThumbPointerMove}
-              onPointerUp={handleThumbPointerUp}
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: `${tagScrollProgress.thumbLeftRatio * (100 - tagScrollProgress.thumbWidthRatio * 100)}%`,
-                width: `${tagScrollProgress.thumbWidthRatio * 100}%`,
-                transition: isDraggingThumbRef.current ? "none" : undefined,
-              }}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="phrase-tag-rail-divider" />
-      )}
 
       {/* 常用语紧凑单列滚动列表 */}
       <div

@@ -142,6 +142,7 @@ body.theme-receipt {
   --segment-active-background: rgba(0, 0, 0, 0.06);
   --segment-active-color: var(--rc-ink);
   --segment-active-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  --tag-pill-shadow: var(--segment-active-shadow);
 
   --card-border: none;
   --card-radius: 0;

@@ -1,95 +1,130 @@
-/* Tag filter bar above the quick phrases. Built from theme tokens only, so
-   every theme gets it in its own colours (it used to hard-code a purple). */
+/* Tag filter bar above the quick phrases: one soft track, the picked tag on
+   a raised pill that slides between tags (framer-motion layoutId), the
+   others as plain text. Built from theme tokens, so each theme draws it in
+   its own colours and borders. */
 
 .phrase-tagbar {
-  position: relative;
   display: flex;
   align-items: center;
+  gap: 6px;
   width: 100%;
-  padding-right: 8px;
+  padding: 4px 10px 8px 12px;
   flex-shrink: 0;
+}
+
+.phrase-tagbar-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 2px;
+  border-radius: var(--radius-lg);
+  /* The cards' surface, darkened a little: text keeps its contrast over
+     any desktop showing through glass themes. */
+  background: color-mix(in srgb, var(--layout-item-background), var(--text-primary) 5%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 
 .phrase-tagbar-scroll {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex: 1;
+  gap: 1px;
   min-width: 0;
-  padding: 8px 10px 6px 12px;
   overflow-x: auto;
   white-space: nowrap;
   user-select: none;
+  border-radius: var(--radius-md);
+  scroll-padding-inline: 28px;
 }
 
-/* Fade the edge that has more tags beyond it. */
+/* The edge with more tags beyond it fades out. */
 .phrase-tagbar[data-scroll-end] .phrase-tagbar-scroll {
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
 }
 
 .phrase-tagbar[data-scroll-start] .phrase-tagbar-scroll {
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px);
-  mask-image: linear-gradient(90deg, transparent, #000 28px);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px);
+  mask-image: linear-gradient(90deg, transparent, #000 24px);
 }
 
 .phrase-tagbar[data-scroll-start][data-scroll-end] .phrase-tagbar-scroll {
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent);
 }
 
 .phrase-tag-filter {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 26px;
   padding: 0 10px;
   flex-shrink: 0;
-  border: var(--button-border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-button);
-  color: var(--text-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background var(--duration-base) ease,
-    color var(--duration-base) ease,
-    border-color var(--duration-base) ease,
-    transform var(--duration-fast) ease;
+  isolation: isolate;
+  transition: color var(--duration-base) ease;
 }
 
 .phrase-tag-filter:hover {
-  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
-.phrase-tag-filter:active {
-  transform: scale(0.96);
-}
-
+/* Text on the pill uses the colour each theme pairs with its pill. */
 .phrase-tag-filter.is-active {
-  border-color: transparent;
-  background: var(--accent-color);
-  color: var(--on-accent);
+  color: var(--segment-active-color, var(--text-primary));
   font-weight: 600;
 }
 
+/* The raised pill behind the picked tag. */
+.phrase-tag-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-md);
+  background: var(--segment-active-background, var(--bg-input));
+  /* Themes whose pill has its own shadow (retro's offset, sticky's ring)
+     set --tag-pill-shadow to it. */
+  box-shadow: var(
+    --tag-pill-shadow,
+    0 1px 2px rgba(var(--shadow-rgb), 0.1),
+    0 2px 6px rgba(var(--shadow-rgb), 0.06),
+    0 0 0 0.5px rgba(var(--shadow-rgb), 0.06)
+  );
+}
+
 .phrase-tag-filter-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
+  flex: none;
   border-radius: 50%;
   background: var(--tag-color, var(--accent-color));
-  flex: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, var(--accent-color)) 18%, transparent);
+  transition: transform var(--duration-base) ease;
 }
 
 .phrase-tag-filter.is-active .phrase-tag-filter-dot {
-  background: currentColor;
+  transform: scale(1.15);
 }
 
 .phrase-tag-filter-count {
-  font-size: var(--font-size-xs);
+  min-width: 14px;
+  font-size: var(--font-size-2xs);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  opacity: 0.55;
+  text-align: center;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.phrase-tag-filter.is-active .phrase-tag-filter-count {
+  color: inherit;
+  opacity: 0.6;
 }
 
 .phrase-tag-add {
@@ -97,79 +132,71 @@
   align-items: center;
   gap: 2px;
   height: 26px;
+  margin-left: 2px;
   padding: 0 8px;
   flex-shrink: 0;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-pill);
+  border: none;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: var(--font-size-xs);
   cursor: pointer;
-  transition: color var(--duration-base) ease, border-color var(--duration-base) ease;
+  transition: color var(--duration-base) ease, background var(--duration-base) ease;
 }
 
 .phrase-tag-add:hover {
   color: var(--accent-color);
-  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 
-.phrase-tagbar-side {
-  display: flex;
-  align-items: center;
-  padding-left: 6px;
-  flex-shrink: 0;
+/* Arrows at an overflowing edge, shown while the bar is under the pointer. */
+.phrase-tagbar-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--popover-background, var(--bg-input));
+  color: var(--text-secondary);
+  box-shadow:
+    0 1px 3px rgba(var(--shadow-rgb), 0.16),
+    0 0 0 0.5px rgba(var(--shadow-rgb), 0.08);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.9);
+  transition:
+    opacity var(--duration-fast) ease,
+    transform var(--duration-base) ease,
+    color var(--duration-fast) ease;
+}
+
+.phrase-tagbar-arrow.is-start { left: 4px; }
+.phrase-tagbar-arrow.is-end { right: 4px; }
+
+.phrase-tagbar[data-scroll-start] .phrase-tagbar-track:hover .phrase-tagbar-arrow.is-start,
+.phrase-tagbar[data-scroll-end] .phrase-tagbar-track:hover .phrase-tagbar-arrow.is-end {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+.phrase-tagbar-arrow:hover {
+  color: var(--text-primary);
+}
+
+.phrase-tagbar-arrow:active {
+  transform: translateY(-50%) scale(0.92);
 }
 
 .phrase-tagbar-side .phrase-tag-manage {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border-radius: var(--radius-md);
-}
-
-/* Drag rail under the bar when tags overflow: a thin neutral line, the
-   thumb in the accent; thicker under the pointer. */
-.phrase-tag-rail {
-  position: relative;
-  display: flex;
-  align-items: center;
-  height: 12px;
-  padding: 0 12px;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-
-.phrase-tag-rail-track {
-  position: relative;
-  width: 100%;
-  height: 3px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  transition: height var(--duration-fast) ease;
-}
-
-.phrase-tag-rail:hover .phrase-tag-rail-track {
-  height: 5px;
-}
-
-.phrase-tag-rail-thumb {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  min-width: 36px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent-color) 55%, transparent);
-  cursor: pointer;
-  touch-action: none;
-  transition: background var(--duration-fast) ease;
-}
-
-.phrase-tag-rail:hover .phrase-tag-rail-thumb {
-  background: var(--accent-color);
-}
-
-.phrase-tag-rail-divider {
-  height: 1px;
-  flex-shrink: 0;
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
