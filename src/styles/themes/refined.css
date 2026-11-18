@@ -154,8 +154,8 @@
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) {
   border: var(--card-border);
   border-radius: var(--card-radius);
-  padding: 11px 14px 11px;
-  margin-bottom: 12px;
+  padding: 10px 12px 8px;
+  margin-bottom: 14px;
   outline: none;
   box-shadow: var(--card-shadow);
 }
@@ -311,7 +311,7 @@
 /* Meta line: "source · time", quiet. Actions sit over its right end. */
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-meta {
   position: static;
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   padding: 0;
   border: none;
   min-height: 22px;
