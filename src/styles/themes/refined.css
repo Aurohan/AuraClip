@@ -155,9 +155,25 @@
   border: var(--card-border);
   border-radius: var(--card-radius);
   padding: 10px 12px 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   outline: none;
   box-shadow: var(--card-shadow);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .selected)[data-lead="url"] {
+  box-shadow: var(--card-shadow), inset 2px 0 0 color-mix(in srgb, var(--kind-link) 62%, transparent);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .selected)[data-lead="code"] {
+  box-shadow: var(--card-shadow), inset 2px 0 0 color-mix(in srgb, var(--kind-code) 62%, transparent);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .selected)[data-lead="sms"] {
+  box-shadow: var(--card-shadow), inset 2px 0 0 color-mix(in srgb, var(--kind-sms) 68%, transparent);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .selected):is([data-kind="image"], [data-kind="video"]) {
+  box-shadow: var(--card-shadow), inset 2px 0 0 color-mix(in srgb, var(--accent-color) 42%, transparent);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact):hover:not(.selected, .keyboard-owns-list *, .list-pointer-selects *) {
@@ -295,7 +311,7 @@
 /* Meta line: "source · time", quiet. Actions sit over its right end. */
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-meta {
   position: static;
-  margin: 3px 0 0;
+  margin: 5px 0 0;
   padding: 0;
   border: none;
   min-height: 22px;
