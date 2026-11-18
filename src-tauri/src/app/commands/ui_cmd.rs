@@ -44,6 +44,62 @@ pub fn set_settings_view_active(active: bool) {
 }
 
 #[tauri::command]
+pub fn enter_settings_mode(window: WebviewWindow, db_state: State<'_, DbState>) -> AppResult<()> {
+    crate::app::setup::SETTINGS_VIEW_ACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
+
+    let saved_w = db_state
+        .settings_repo
+        .get("app.settings_window_width")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<u32>().ok());
+    let saved_h = db_state
+        .settings_repo
+        .get("app.settings_window_height")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<u32>().ok());
+
+    if let (Some(w), Some(h)) = (saved_w, saved_h) {
+        if w >= 360 && h >= 240 {
+            let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w, height: h }));
+            return Ok(());
+        }
+    }
+
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 920.0, height: 640.0 }));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn exit_settings_mode(window: WebviewWindow, db_state: State<'_, DbState>) -> AppResult<()> {
+    crate::app::setup::SETTINGS_VIEW_ACTIVE.store(false, std::sync::atomic::Ordering::SeqCst);
+
+    let saved_w = db_state
+        .settings_repo
+        .get("app.window_width")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<u32>().ok());
+    let saved_h = db_state
+        .settings_repo
+        .get("app.window_height")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<u32>().ok());
+
+    if let (Some(w), Some(h)) = (saved_w, saved_h) {
+        if w >= 360 && h >= 240 {
+            let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w, height: h }));
+            return Ok(());
+        }
+    }
+
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 440.0, height: 600.0 }));
+    Ok(())
+}
+
+#[tauri::command]
 pub fn send_system_notification(app: AppHandle, title: String, body: String) -> AppResult<()> {
     app.notification()
         .builder()

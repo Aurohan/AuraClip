@@ -71,7 +71,7 @@ import {
   warmupCompactPreviewWindow
 } from "./features/clipboard/lib/compactPreviewControls";
 import { isTauriRuntime } from "./shared/lib/tauriRuntime";
-import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import ClipboardDetailPane from "./features/clipboard/components/ClipboardDetailPane";
 import { useSplitView } from "./features/app/hooks/useSplitView";
 import { notePointerPick } from "./shared/lib/pointerPick";
@@ -339,78 +339,28 @@ const App = () => {
     }
   }, [setShowTagFilter, setSearchIsFocused, searchInputRef]);
 
-  const clipboardWindowSizeRef = useRef<{ w: number; h: number } | null>(null);
-
   const openSettings = useCallback(async () => {
     try {
       if (isTauriRuntime()) {
-        const win = getCurrentWindow();
-        const factor = await win.scaleFactor().catch(() => 1);
-        const innerPhysical = await win.innerSize().catch(() => ({ width: 420, height: 600 }));
-        const currentLogicalW = Math.round(innerPhysical.width / factor);
-        const currentLogicalH = Math.round(innerPhysical.height / factor);
-        clipboardWindowSizeRef.current = { w: currentLogicalW, h: currentLogicalH };
-
-        await invoke("set_settings_view_active", { active: true }).catch(() => {});
-
-        const rawSavedW = parseInt(appSettings["app.settings_window_width"] || "0", 10);
-        const rawSavedH = parseInt(appSettings["app.settings_window_height"] || "0", 10);
-        const savedSettingsLogicalW = rawSavedW > 1000 ? Math.round(rawSavedW / factor) : rawSavedW;
-        const savedSettingsLogicalH = rawSavedH > 800 ? Math.round(rawSavedH / factor) : rawSavedH;
-        const targetW = Math.max(savedSettingsLogicalW || 980, 960);
-        const targetH = Math.max(savedSettingsLogicalH || 660, 600);
-
-        const mon = await currentMonitor().catch(() => null);
-        const pos = await win.outerPosition().catch(() => null);
-        if (mon && pos) {
-          const monX = mon.position.x / factor;
-          const monY = mon.position.y / factor;
-          const monW = mon.size.width / factor;
-          const monH = mon.size.height / factor;
-
-          let curX = pos.x / factor;
-          let curY = pos.y / factor;
-
-          if (curX + targetW > monX + monW) {
-            curX = Math.max(monX, monX + monW - targetW - 20);
-          }
-          if (curY + targetH > monY + monH) {
-            curY = Math.max(monY, monY + monH - targetH - 20);
-          }
-
-          await win.setPosition(new LogicalPosition(Math.round(curX), Math.round(curY))).catch(() => {});
-        }
-
-        await win.setSize(new LogicalSize(targetW, targetH)).catch(() => {});
+        await invoke("enter_settings_mode").catch(console.error);
       }
     } catch (err) {
-      console.error("Failed to resize for settings:", err);
+      console.error("Failed to enter settings mode:", err);
     }
     rawSetShowSettings(true);
-  }, [appSettings, rawSetShowSettings]);
+  }, [rawSetShowSettings]);
 
   const closeSettings = useCallback(async () => {
     try {
       if (isTauriRuntime()) {
-        const win = getCurrentWindow();
-        const factor = await win.scaleFactor().catch(() => 1);
-        const rawSavedClipW = parseInt(appSettings["app.window_width"] || "0", 10);
-        const rawSavedClipH = parseInt(appSettings["app.window_height"] || "0", 10);
-        const savedClipLogicalW = rawSavedClipW > 800 ? Math.round(rawSavedClipW / factor) : rawSavedClipW;
-        const savedClipLogicalH = rawSavedClipH > 700 ? Math.round(rawSavedClipH / factor) : rawSavedClipH;
-
-        const targetW = clipboardWindowSizeRef.current?.w || savedClipLogicalW || 440;
-        const targetH = clipboardWindowSizeRef.current?.h || savedClipLogicalH || 600;
-
-        await win.setSize(new LogicalSize(targetW, targetH)).catch(() => {});
-        await invoke("set_settings_view_active", { active: false }).catch(() => {});
+        await invoke("exit_settings_mode").catch(console.error);
       }
     } catch (err) {
-      console.error("Failed to restore clipboard size:", err);
+      console.error("Failed to exit settings mode:", err);
     }
     rawSetShowSettings(false);
     setSettingsSubpage("home");
-  }, [appSettings, rawSetShowSettings, setSettingsSubpage]);
+  }, [rawSetShowSettings, setSettingsSubpage]);
 
   const showSettings = rawShowSettings;
   const setShowSettings = useCallback((val: boolean) => {
