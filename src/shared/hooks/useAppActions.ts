@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { clearCachedUiSettings } from "../lib/uiStateStorage";
 
 interface UseAppActionsOptions {
   t: (key: string) => string;
@@ -81,6 +82,7 @@ export const useAppActions = ({
       onConfirm: async () => {
         try {
           await invoke("reset_settings");
+          clearCachedUiSettings();
           window.location.reload();
         } catch (err) {
           const errorMsg = t("reset_failed") + (err?.toString() || "");

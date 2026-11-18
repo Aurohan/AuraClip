@@ -183,9 +183,24 @@ const getRelativeLuminance = ([r, g, b]: [number, number, number]) => {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 };
 
+// Semantic defaults ordered by importance & visual contrast so core system tags
+// never collide in similar green/brownish hashes when no custom color is stored.
+const CURATED_TAG_COLORS: Record<string, string> = {
+  "密钥": "hsl(38, 92%, 50%)",
+  "密码": "hsl(350, 89%, 60%)",
+  "sensitive": "hsl(350, 89%, 60%)",
+  "baseurl": "hsl(189, 94%, 43%)",
+  "手机": "hsl(160, 84%, 39%)",
+  "账号": "hsl(217, 91%, 60%)",
+  "邮箱": "hsl(258, 90%, 66%)",
+};
+
 // Generate one stable fallback color per tag. Theme styling may change the
 // chip's shape and decoration, but the tag identity must not change with it.
 export const getTagColor = (tag: string, _theme: string) => {
+  const curated = CURATED_TAG_COLORS[tag.trim().toLowerCase()];
+  if (curated) return curated;
+
   let hash = 0;
   for (let i = 0; i < tag.length; i++) {
     hash = tag.charCodeAt(i) + ((hash << 5) - hash);

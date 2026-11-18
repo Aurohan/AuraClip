@@ -6,6 +6,29 @@ test("generated tag colors remain stable", () => {
   assert.equal(getTagColor("密码", "acrylic"), getTagColor("密码", "mica"));
 });
 
+test("curated semantic tags assign distinct hues by priority without green/brownish collisions", () => {
+  const secretColor = getTagColor("密钥", "mica");
+  const passwordColor = getTagColor("密码", "mica");
+  const baseUrlColor = getTagColor("BaseURL", "mica");
+  const phoneColor = getTagColor("手机", "mica");
+  const accountColor = getTagColor("账号", "mica");
+  const emailColor = getTagColor("邮箱", "mica");
+
+  const distinct = new Set([
+    secretColor,
+    passwordColor,
+    baseUrlColor,
+    phoneColor,
+    accountColor,
+    emailColor,
+  ]);
+  assert.equal(distinct.size, 6);
+  for (const bg of distinct) {
+    assert.match(bg, /^hsl\(/);
+    assert.match(getTagTextColor(bg), /^hsl\(/);
+  }
+});
+
 test("tag text uses the same hue family instead of black or white", () => {
   const background = getTagColor("项目", "acrylic");
   const foreground = getTagTextColor(background, "acrylic");

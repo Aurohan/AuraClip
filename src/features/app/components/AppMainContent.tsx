@@ -24,6 +24,8 @@ type RenderItem = (
 
 interface AppMainContentProps {
   phraseSortMode: ClipboardSortMode;
+  appSettings?: Record<string, string>;
+  onPersistUiSetting?: (key: string, val: string) => void;
   quickPasteModifier?: QuickPasteModifier;
   clipboardPreviewText?: string;
   splitViewEnabled?: boolean;
@@ -104,6 +106,8 @@ const SortableItem = memo(({
 
 const AppMainContent = ({
   phraseSortMode,
+  appSettings,
+  onPersistUiSetting,
   quickPasteModifier,
   clipboardPreviewText,
   splitViewEnabled,
@@ -178,6 +182,8 @@ const AppMainContent = ({
         <Suspense fallback={null}>
           <QuickPhrasesView
             sortMode={phraseSortMode}
+            appSettings={appSettings}
+            onPersistUiSetting={onPersistUiSetting}
             t={t}
             theme={theme}
             search={search}

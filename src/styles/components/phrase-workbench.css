@@ -68,6 +68,97 @@
   }
 }
 
+/* Distinct Pinned Vault Showcase Zone */
+.phrase-pinned-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-inline: var(--layout-item-margin-x);
+  margin-top: 2px;
+  margin-bottom: 6px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 34%, var(--line-soft));
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--accent-color) 11%, var(--bg-panel)),
+    color-mix(in srgb, var(--accent-color) 4%, var(--bg-panel))
+  );
+  box-shadow:
+    inset 3px 0 0 0 var(--accent-color),
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 7%, transparent),
+    var(--shadow-sm);
+}
+
+.phrase-pinned-zone .phrase-vault-grid {
+  padding-inline: 0;
+}
+
+.phrase-pinned-zone .aurora-phrase-card {
+  margin-inline: 0;
+  border-color: color-mix(in srgb, var(--accent-color) 22%, var(--line-soft));
+  background: color-mix(in srgb, var(--layout-item-background) 88%, var(--accent-color) 12%);
+}
+
+.phrase-pinned-zone .aurora-phrase-card:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 48%, var(--line-strong));
+}
+
+.phrase-pinned-zone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-inline: 2px;
+}
+
+.phrase-pinned-zone-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.phrase-pinned-zone-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.phrase-pinned-zone-title {
+  font-size: var(--font-size-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-color);
+}
+
+.phrase-pinned-zone-hint {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 28%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  color: var(--accent-color);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+}
+
+.phrase-pinned-zone-count {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-color) 16%, transparent);
+  color: var(--accent-color);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-weight: 700;
+}
+
 /* Collapsible Tag Group Header */
 .phrase-group-header {
   appearance: none;

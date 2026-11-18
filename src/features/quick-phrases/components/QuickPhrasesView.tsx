@@ -7,6 +7,7 @@ import {
   FolderTree,
   LayoutGrid,
   MoreHorizontal,
+  Pin,
   Plus,
   Rows3,
   Sparkles,
@@ -37,9 +38,23 @@ import { showPasteConfirm } from "../../../shared/lib/pasteFeedback";
 import { matchesTextOrPinyin } from "../../../shared/lib/pinyinMatch";
 import { getTagColor } from "../../../shared/lib/utils";
 import { useWideWindow } from "../../../shared/hooks/useWideWindow";
+import {
+  UI_SETTING_KEYS,
+  parseBooleanFlag,
+  parseCollapsedGroups,
+  parsePhraseViewMode,
+  parseSelectedTag,
+  persistUiSetting,
+  readCachedUiSetting,
+  serializeCollapsedGroups,
+  writeCachedUiSetting,
+  type UiStateKey,
+} from "../../../shared/lib/uiStateStorage";
 
 interface QuickPhrasesViewProps {
   sortMode: ClipboardSortMode;
+  appSettings?: Record<string, string>;
+  onPersistUiSetting?: (key: string, val: string) => void;
   t: (key: string) => string;
   theme: string;
   search: string;
@@ -59,9 +74,6 @@ interface QuickPhrasesViewProps {
 }
 
 const QUICK_PASTE_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"] as const;
-const VIEW_MODE_STORAGE_KEY = "auraclip.phraseViewMode";
-const GROUP_BY_TAG_STORAGE_KEY = "auraclip.phraseGroupByTag";
-const COLLAPSED_GROUPS_STORAGE_KEY = "auraclip.phraseCollapsedGroups";
 
 const MODIFIER_LABELS: Record<Exclude<QuickPasteModifier, "disabled">, string> = {
   ctrl: "Ctrl+",
@@ -70,42 +82,10 @@ const MODIFIER_LABELS: Record<Exclude<QuickPasteModifier, "disabled">, string> =
   win: "Win+",
 };
 
-function readStoredViewMode(): PhraseViewMode {
-  try {
-    const raw = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
-    if (raw === "compact" || raw === "grid" || raw === "cards") return raw;
-  } catch {
-    // ignore storage errors
-  }
-  return "compact";
-}
-
-function readStoredGroupByTag(): boolean {
-  try {
-    const raw = localStorage.getItem(GROUP_BY_TAG_STORAGE_KEY);
-    if (raw === "false") return false;
-  } catch {
-    // ignore storage errors
-  }
-  return true;
-}
-
-function readStoredCollapsedGroups(): Set<string> {
-  try {
-    const raw = localStorage.getItem(COLLAPSED_GROUPS_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return new Set(parsed.filter((item): item is string => typeof item === "string"));
-    }
-  } catch {
-    // ignore storage errors
-  }
-  return new Set();
-}
-
 export default function QuickPhrasesView({
   sortMode,
+  appSettings,
+  onPersistUiSetting,
   t,
   theme,
   search,
@@ -124,13 +104,34 @@ export default function QuickPhrasesView({
 
   const [phrases, setPhrases] = useState<QuickPhrase[]>([]);
   const [savedTags, setSavedTags] = useState<string[]>([]);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [phrasesLoaded, setPhrasesLoaded] = useState(false);
+  const [tagsLoaded, setTagsLoaded] = useState(false);
 
-  const [viewMode, setViewMode] = useState<PhraseViewMode>(readStoredViewMode);
-  const [groupByTag, setGroupByTag] = useState<boolean>(readStoredGroupByTag);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readStoredCollapsedGroups);
-  const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<string | null>(() =>
+    parseSelectedTag(readCachedUiSetting("phraseSelectedTag"))
+  );
+  const [viewMode, setViewMode] = useState<PhraseViewMode>(() =>
+    parsePhraseViewMode(readCachedUiSetting("phraseViewMode"))
+  );
+  const [groupByTag, setGroupByTag] = useState<boolean>(() =>
+    parseBooleanFlag(readCachedUiSetting("phraseGroupByTag"), true)
+  );
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() =>
+    parseCollapsedGroups(readCachedUiSetting("phraseCollapsedGroups"))
+  );
+  const [tagsExpanded, setTagsExpanded] = useState<boolean>(() =>
+    parseBooleanFlag(readCachedUiSetting("phraseTagsExpanded"), false)
+  );
   const [hasOverflowTags, setHasOverflowTags] = useState(false);
+
+  const dirtyUiRef = useRef({
+    viewMode: false,
+    groupByTag: false,
+    collapsedGroups: false,
+    tagsExpanded: false,
+    selectedTag: false,
+  });
+  const hydratedSettingsRef = useRef(false);
 
   const [revealedIds, setRevealedIds] = useState<Set<number>>(new Set());
   const [copiedId, setCopiedId] = useState<number | null>(null);
@@ -161,40 +162,133 @@ export default function QuickPhrasesView({
     ? { duration: 0 }
     : { type: "spring" as const, stiffness: 520, damping: 40, mass: 0.7 };
 
-  const updateViewMode = useCallback((next: PhraseViewMode) => {
-    setViewMode(next);
-    try {
-      localStorage.setItem(VIEW_MODE_STORAGE_KEY, next);
-    } catch {
-      // ignore
+  const persistUi = useCallback(
+    (key: UiStateKey, rawValue: string) => {
+      persistUiSetting(key, rawValue, onPersistUiSetting);
+    },
+    [onPersistUiSetting]
+  );
+
+  // Hydrate quick-phrase UI layout from durable SQLite settings (survives reboots & cache resets).
+  useEffect(() => {
+    if (!appSettings || Object.keys(appSettings).length === 0 || hydratedSettingsRef.current) {
+      return;
     }
-  }, []);
+    hydratedSettingsRef.current = true;
+
+    const dbView = appSettings[UI_SETTING_KEYS.phraseViewMode];
+    if (dbView !== undefined) {
+      if (!dirtyUiRef.current.viewMode) {
+        const next = parsePhraseViewMode(dbView);
+        setViewMode(next);
+        writeCachedUiSetting("phraseViewMode", next);
+      }
+    } else {
+      persistUi("phraseViewMode", viewMode);
+    }
+
+    const dbGroupBy = appSettings[UI_SETTING_KEYS.phraseGroupByTag];
+    if (dbGroupBy !== undefined) {
+      if (!dirtyUiRef.current.groupByTag) {
+        const next = parseBooleanFlag(dbGroupBy, true);
+        setGroupByTag(next);
+        writeCachedUiSetting("phraseGroupByTag", String(next));
+      }
+    } else {
+      persistUi("phraseGroupByTag", String(groupByTag));
+    }
+
+    const dbCollapsed = appSettings[UI_SETTING_KEYS.phraseCollapsedGroups];
+    if (dbCollapsed !== undefined) {
+      if (!dirtyUiRef.current.collapsedGroups) {
+        const next = parseCollapsedGroups(dbCollapsed);
+        setCollapsedGroups(next);
+        writeCachedUiSetting("phraseCollapsedGroups", serializeCollapsedGroups(next));
+      }
+    } else {
+      persistUi("phraseCollapsedGroups", serializeCollapsedGroups(collapsedGroups));
+    }
+
+    const dbTagsExpanded = appSettings[UI_SETTING_KEYS.phraseTagsExpanded];
+    if (dbTagsExpanded !== undefined) {
+      if (!dirtyUiRef.current.tagsExpanded) {
+        const next = parseBooleanFlag(dbTagsExpanded, false);
+        setTagsExpanded(next);
+        writeCachedUiSetting("phraseTagsExpanded", String(next));
+      }
+    } else {
+      persistUi("phraseTagsExpanded", String(tagsExpanded));
+    }
+
+    const dbSelectedTag = appSettings[UI_SETTING_KEYS.phraseSelectedTag];
+    if (dbSelectedTag !== undefined) {
+      if (!dirtyUiRef.current.selectedTag) {
+        const next = parseSelectedTag(dbSelectedTag);
+        setSelectedTag(next);
+        writeCachedUiSetting("phraseSelectedTag", next ?? "");
+      }
+    } else {
+      persistUi("phraseSelectedTag", selectedTag ?? "");
+    }
+  }, [
+    appSettings,
+    collapsedGroups,
+    groupByTag,
+    persistUi,
+    selectedTag,
+    tagsExpanded,
+    viewMode,
+  ]);
+
+  const updateViewMode = useCallback(
+    (next: PhraseViewMode) => {
+      dirtyUiRef.current.viewMode = true;
+      setViewMode(next);
+      persistUi("phraseViewMode", next);
+    },
+    [persistUi]
+  );
 
   const toggleGroupByTag = useCallback(() => {
+    dirtyUiRef.current.groupByTag = true;
     setGroupByTag((prev) => {
       const next = !prev;
-      try {
-        localStorage.setItem(GROUP_BY_TAG_STORAGE_KEY, String(next));
-      } catch {
-        // ignore
-      }
+      persistUi("phraseGroupByTag", String(next));
       return next;
     });
-  }, []);
+  }, [persistUi]);
 
-  const toggleGroupCollapsed = useCallback((groupKey: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      try {
-        localStorage.setItem(COLLAPSED_GROUPS_STORAGE_KEY, JSON.stringify(Array.from(next)));
-      } catch {
-        // ignore
-      }
+  const toggleGroupCollapsed = useCallback(
+    (groupKey: string) => {
+      dirtyUiRef.current.collapsedGroups = true;
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(groupKey)) next.delete(groupKey);
+        else next.add(groupKey);
+        persistUi("phraseCollapsedGroups", serializeCollapsedGroups(next));
+        return next;
+      });
+    },
+    [persistUi]
+  );
+
+  const updateSelectedTag = useCallback(
+    (next: string | null) => {
+      dirtyUiRef.current.selectedTag = true;
+      setSelectedTag(next);
+      persistUi("phraseSelectedTag", next ?? "");
+    },
+    [persistUi]
+  );
+
+  const toggleTagsExpanded = useCallback(() => {
+    dirtyUiRef.current.tagsExpanded = true;
+    setTagsExpanded((prev) => {
+      const next = !prev;
+      persistUi("phraseTagsExpanded", String(next));
       return next;
     });
-  }, []);
+  }, [persistUi]);
 
   const openCreateModal = useCallback(() => {
     setComposerState({ open: true, phrase: null });
@@ -257,6 +351,8 @@ export default function QuickPhrasesView({
       setPhrases(data || []);
     } catch (err) {
       console.error("fetch quick phrases error:", err);
+    } finally {
+      setPhrasesLoaded(true);
     }
   }, []);
 
@@ -266,6 +362,8 @@ export default function QuickPhrasesView({
       if (counts) setSavedTags(Object.keys(counts));
     } catch (err) {
       console.error("fetch tags error:", err);
+    } finally {
+      setTagsLoaded(true);
     }
   }, []);
 
@@ -328,6 +426,13 @@ export default function QuickPhrasesView({
     });
     return rankPhraseTags(Array.from(set), tagCounts);
   }, [savedTags, phrases, tagCounts]);
+
+  useEffect(() => {
+    if (!phrasesLoaded || !tagsLoaded || selectedTag === null) return;
+    if (!allTags.includes(selectedTag)) {
+      updateSelectedTag(null);
+    }
+  }, [phrasesLoaded, tagsLoaded, selectedTag, allTags, updateSelectedTag]);
 
   useEffect(() => {
     if (isWide) {
@@ -649,10 +754,10 @@ export default function QuickPhrasesView({
       const cycle: Array<string | null> = [null, ...allTags];
       const currentIdx = cycle.indexOf(selectedTag);
       const nextIdx = (Math.max(0, currentIdx) + delta + cycle.length) % cycle.length;
-      setSelectedTag(cycle[nextIdx]);
+      updateSelectedTag(cycle[nextIdx]);
       setFocusedIndex(0);
     },
-    [allTags, selectedTag]
+    [allTags, selectedTag, updateSelectedTag]
   );
 
   useEffect(() => {
@@ -796,7 +901,7 @@ export default function QuickPhrasesView({
       setIsCreatingTag(false);
       setNewTagName("");
       await fetchAllTags();
-      setSelectedTag(trimmed);
+      updateSelectedTag(trimmed);
       pushToast(`#${trimmed}`);
     } catch (err) {
       console.error("create tag error:", err);
@@ -1105,7 +1210,7 @@ export default function QuickPhrasesView({
               type="button"
               role="tab"
               onClick={() => {
-                setSelectedTag(null);
+                updateSelectedTag(null);
                 setFocusedIndex(0);
               }}
               className={`phrase-tag-filter${selectedTag === null ? " is-active" : ""}`}
@@ -1133,7 +1238,7 @@ export default function QuickPhrasesView({
                   aria-selected={isSelected}
                   type="button"
                   onClick={() => {
-                    setSelectedTag(isSelected ? null : tag);
+                    updateSelectedTag(isSelected ? null : tag);
                     setFocusedIndex(0);
                   }}
                   onContextMenu={(e) => {
@@ -1174,7 +1279,7 @@ export default function QuickPhrasesView({
               <button
                 type="button"
                 className="phrase-tag-expand-btn"
-                onClick={() => setTagsExpanded((v) => !v)}
+                onClick={toggleTagsExpanded}
                 aria-expanded={tagsExpanded}
                 title={tagsExpanded ? t("phrase_tags_collapse") : t("phrase_tags_expand")}
               >
@@ -1198,7 +1303,7 @@ export default function QuickPhrasesView({
               type="button"
               className={`phrase-rail-item${selectedTag === null ? " is-active" : ""}`}
               onClick={() => {
-                setSelectedTag(null);
+                updateSelectedTag(null);
                 setFocusedIndex(0);
               }}
             >
@@ -1219,7 +1324,7 @@ export default function QuickPhrasesView({
                   type="button"
                   className={`phrase-rail-item${isSelected ? " is-active" : ""}`}
                   onClick={() => {
-                    setSelectedTag(isSelected ? null : tag);
+                    updateSelectedTag(isSelected ? null : tag);
                     setFocusedIndex(0);
                   }}
                   onContextMenu={(e) => {
@@ -1277,13 +1382,23 @@ export default function QuickPhrasesView({
           ) : (
             <>
               {pinnedPhrases.length > 0 && (
-                <>
-                  <div className="list-section-header is-pinned">
-                    <span className="list-section-title">{t("section_pinned")}</span>
-                    <span className="list-section-count">{pinnedPhrases.length}</span>
+                <section className="phrase-pinned-zone" aria-label={t("section_pinned")}>
+                  <div className="phrase-pinned-zone-header">
+                    <span className="phrase-pinned-zone-lead">
+                      <span className="phrase-pinned-zone-icon" aria-hidden="true">
+                        <Pin size={11} />
+                      </span>
+                      <span className="phrase-pinned-zone-title">{t("section_pinned")}</span>
+                      {quickPasteModifier && quickPasteModifier !== "disabled" && (
+                        <span className="phrase-pinned-zone-hint">
+                          {MODIFIER_LABELS[quickPasteModifier]}1~9
+                        </span>
+                      )}
+                    </span>
+                    <span className="phrase-pinned-zone-count">{pinnedPhrases.length}</span>
                   </div>
                   {renderPhraseItems(pinnedPhrases)}
-                </>
+                </section>
               )}
 
               {useGroupedSections ? (

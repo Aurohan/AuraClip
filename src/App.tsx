@@ -43,6 +43,15 @@ import { useFilteredHistory } from "./shared/hooks/useFilteredHistory";
 import { useKeyboardNavigation } from "./shared/hooks/useKeyboardNavigation";
 import { cycleTypeFilter } from "./shared/lib/typeFilters";
 import { hasSensitiveTag } from "./shared/lib/sensitiveTags";
+import {
+  UI_SETTING_KEYS,
+  parseClipboardSortMode,
+  parseMainTab,
+  persistUiSetting,
+  readCachedUiSetting,
+  writeCachedUiSetting,
+  type MainTab,
+} from "./shared/lib/uiStateStorage";
 import { useListSelectionReset } from "./shared/hooks/useListSelectionReset";
 import { useSearchFetchTrigger } from "./shared/hooks/useSearchFetchTrigger";
 import { useScrollToSelection } from "./shared/hooks/useScrollToSelection";
@@ -132,18 +141,16 @@ const buildQuickPasteHintsById = (
 };
 
 const App = () => {
-  const [mainTab, setMainTab] = useState<"clipboard" | "phrases">("clipboard");
+  const [mainTab, setMainTab] = useState<MainTab>(() =>
+    parseMainTab(readCachedUiSetting("mainTab"))
+  );
   const [settingsInitialSection, setSettingsInitialSection] = useState<string | null>(null);
-  const [phraseSortMode, setPhraseSortMode] = useState<ClipboardSortMode>(() => {
-    try {
-      const value = localStorage.getItem("auraclip.phrase_sort_mode");
-      return value === "created" || value === "last_used" || value === "usage" ? value : "activity";
-    } catch { return "activity"; }
-  });
-  const updatePhraseSortMode = (mode: ClipboardSortMode) => {
-    setPhraseSortMode(mode);
-    try { localStorage.setItem("auraclip.phrase_sort_mode", mode); } catch { /* keep session choice */ }
-  };
+  const [phraseSortMode, setPhraseSortMode] = useState<ClipboardSortMode>(() =>
+    parseClipboardSortMode(readCachedUiSetting("phraseSortMode"))
+  );
+  const mainTabDirtyRef = useRef(false);
+  const phraseSortDirtyRef = useRef(false);
+  const uiSettingsHydratedRef = useRef(false);
   useFocusCoordinator();
 
   const appState = useAppState();
@@ -187,6 +194,7 @@ const App = () => {
     setPersistentLimitEnabled,
     persistentLimit,
     setPersistentLimit,
+    appSettings,
     setAppSettings,
     setDefaultApps,
     setInstalledApps,
@@ -699,7 +707,7 @@ const App = () => {
       if (payload !== "clipboard" && payload !== "phrases") return;
       setShowSettings(false);
       setShowTagManager(false);
-      setMainTab(payload);
+      updateMainTab(payload);
     });
     const unlistenClipboardShown = listen("clipboard-shown", onClipboardShown);
     const unlistenShow = getCurrentWindow().listen("tauri://show", onShown);
@@ -767,9 +775,49 @@ const App = () => {
   }, [setAppSettings]);
 
   const saveSetting = useCallback((key: string, val: string) => {
+    setAppSettings(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
     invoke("save_setting", { key, value: val })
       .catch(console.error);
-  }, []);
+  }, [setAppSettings]);
+
+  const updateMainTab = useCallback((next: MainTab) => {
+    mainTabDirtyRef.current = true;
+    setMainTab(next);
+    persistUiSetting("mainTab", next, saveSetting);
+  }, [saveSetting]);
+
+  const updatePhraseSortMode = useCallback((mode: ClipboardSortMode) => {
+    phraseSortDirtyRef.current = true;
+    setPhraseSortMode(mode);
+    persistUiSetting("phraseSortMode", mode, saveSetting);
+  }, [saveSetting]);
+
+  useEffect(() => {
+    if (!settings || uiSettingsHydratedRef.current) return;
+    uiSettingsHydratedRef.current = true;
+
+    const dbTab = settings[UI_SETTING_KEYS.mainTab];
+    if (dbTab !== undefined) {
+      if (!mainTabDirtyRef.current) {
+        const nextTab = parseMainTab(dbTab);
+        setMainTab(nextTab);
+        writeCachedUiSetting("mainTab", nextTab);
+      }
+    } else {
+      persistUiSetting("mainTab", mainTab, saveSetting);
+    }
+
+    const dbPhraseSort = settings[UI_SETTING_KEYS.phraseSortMode];
+    if (dbPhraseSort !== undefined) {
+      if (!phraseSortDirtyRef.current) {
+        const nextSort = parseClipboardSortMode(dbPhraseSort);
+        setPhraseSortMode(nextSort);
+        writeCachedUiSetting("phraseSortMode", nextSort);
+      }
+    } else {
+      persistUiSetting("phraseSortMode", phraseSortMode, saveSetting);
+    }
+  }, [settings, mainTab, phraseSortMode, saveSetting]);
 
   const updateClipboardSortMode = useCallback(
     (mode: ClipboardSortMode) => {
@@ -1177,7 +1225,7 @@ const App = () => {
       <AppHeader
         t={t}
         mainTab={mainTab}
-        setMainTab={setMainTab}
+        setMainTab={updateMainTab}
         showSettings={showSettings}
         setShowSettings={setShowSettings}
         showTagManager={effectiveShowTagManager}
@@ -1244,6 +1292,8 @@ const App = () => {
         >
           <AppMainContent
             phraseSortMode={phraseSortMode}
+            appSettings={appSettings}
+            onPersistUiSetting={saveSetting}
             quickPasteModifier={quickPasteModifier}
             clipboardPreviewText={latestClipboardText}
             splitViewEnabled={splitViewEnabled}
