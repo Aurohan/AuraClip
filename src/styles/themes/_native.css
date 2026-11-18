@@ -9,9 +9,9 @@ body/* A pinned window is a persistent state, not a primary action. Keep its
    active glow every time the window is shown. */
 .theme-mica .header-pin-btn.active,
 body.theme-acrylic .header-pin-btn.active {
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 36%, transparent);
   box-shadow: none;
 }
 

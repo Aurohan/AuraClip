@@ -9,6 +9,7 @@ import {
     Clipboard,
     Database,
     Info,
+    Keyboard,
     ListFilter,
     MessageSquareText,
     Palette,
@@ -23,6 +24,7 @@ import type { AppCleanupPolicy } from "../types";
 import { chosenApp, unchosenFallback } from "../utils/defaultApps";
 import AppSelectorModal from "./AppSelectorModal";
 import GeneralSettingsGroup from "./groups/GeneralSettingsGroup";
+import ShortcutsSettingsGroup from "./groups/ShortcutsSettingsGroup";
 import ClipboardSettingsGroup from "./groups/ClipboardSettingsGroup";
 import AdvancedSettingsGroup from "./groups/AdvancedSettingsGroup";
 import AppearanceSettingsGroup from "./groups/AppearanceSettingsGroup";
@@ -193,6 +195,8 @@ interface SettingsPanelProps {
 
     setShowAppSelector: (val: string | null) => void;
     handleResetSettings: () => void;
+    initialSection?: string | null;
+    onInitialSectionConsumed?: () => void;
 }
 
 const ABOUT_SECTION = "about";
@@ -201,6 +205,7 @@ const noop = () => {};
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
     general: Settings2,
+    shortcuts: Keyboard,
     appearance: Palette,
     clipboard: Clipboard,
     [ADVANCED_ENTRY]: ListFilter,
@@ -211,7 +216,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
 };
 
 const NAV_GROUPS: { labelKey: string; ids: string[] }[] = [
-    { labelKey: "settings_nav_group_basic", ids: ["general", "appearance"] },
+    { labelKey: "settings_nav_group_basic", ids: ["general", "shortcuts", "appearance"] },
     { labelKey: "settings_nav_group_clipboard", ids: ["clipboard", ADVANCED_ENTRY, "default_apps"] },
     { labelKey: "settings_nav_group_sync", ids: ["sync"] },
     { labelKey: "settings_nav_group_data", ids: ["secure_transfer", "data"] }
@@ -243,7 +248,7 @@ const SettingsPanel = (props: SettingsPanelProps) => {
         clipboardItemFontSize, setClipboardItemFontSize, clipboardTagFontSize, setClipboardTagFontSize,
         tagManagerEnabled, setTagManagerEnabled,
         setMqttEnabled, saveMqtt, setMqttServer, setMqttPort, setMqttUser, setMqttPass, setMqttTopic, setMqttProtocol, setMqttWsPath, setMqttNotificationEnabled,
-        setShowAppSelector, handleResetSettings
+        setShowAppSelector, handleResetSettings, initialSection, onInitialSectionConsumed
     } = props;
 
     const [emailCopied, setEmailCopied] = useState(false);
@@ -252,8 +257,17 @@ const SettingsPanel = (props: SettingsPanelProps) => {
     const [privacyKindsOpen, setPrivacyKindsOpen] = useState(false);
     const [privacyRulesOpen, setPrivacyRulesOpen] = useState(false);
     const isWide = useWideWindow();
-    const wideLayout = splitViewEnabled && isWide;
-    const [activeSection, setActiveSection] = useState("general");
+    const wideLayout = isWide;
+    const [activeSection, setActiveSection] = useState(() => initialSection || "general");
+
+    useEffect(() => {
+        if (!initialSection) return;
+        setActiveSection(initialSection);
+        if (!wideLayout && collapsedGroups[initialSection]) {
+            toggleGroup(initialSection);
+        }
+        onInitialSectionConsumed?.();
+    }, [initialSection, wideLayout, collapsedGroups, toggleGroup, onInitialSectionConsumed]);
     const { flaggedSections, acknowledge: acknowledgeUnreadable } = useUnreadableSecrets();
     const attentionBadge = (
         <span className="settings-attention-badge" role="img" aria-label={t("secret_reenter_hint")} title={t("secret_reenter_hint")}>!</span>
@@ -343,13 +357,35 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setScrollTopButtonEnabled={setScrollTopButtonEnabled}
                     tagManagerEnabled={tagManagerEnabled}
                     setTagManagerEnabled={setTagManagerEnabled}
-                    arrowKeySelection={arrowKeySelection}
-                    setArrowKeySelection={setArrowKeySelection}
                     lightModeEnabled={lightModeEnabled}
                     setLightModeEnabled={setLightModeEnabled}
                     lightModeIdleMinutes={lightModeIdleMinutes}
                     setLightModeIdleMinutes={setLightModeIdleMinutes}
                     saveAppSetting={saveAppSetting}
+                />
+            )
+        },
+        {
+            id: "shortcuts",
+            label: t("shortcuts_settings"),
+            node: (
+                <ShortcutsSettingsGroup
+                    t={t}
+                    {...groupState("shortcuts")}
+                    LabelWithHint={LabelWithHint}
+                    hotkeySettings={hotkeySettings}
+                    quickPasteModifier={quickPasteModifier}
+                    setQuickPasteModifier={setQuickPasteModifier}
+                    registryWinVEnabled={registryWinVEnabled}
+                    setRegistryWinVEnabled={setRegistryWinVEnabled}
+                    sequentialMode={sequentialMode}
+                    setSequentialModeState={setSequentialModeState}
+                    arrowKeySelection={arrowKeySelection}
+                    setArrowKeySelection={setArrowKeySelection}
+                    saveAppSetting={saveAppSetting}
+                    appSettings={appSettings}
+                    theme={theme}
+                    colorMode={colorMode}
                 />
             )
         },
@@ -376,9 +412,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setCaptureRichText={setCaptureRichText}
                     richTextSnapshotPreview={richTextSnapshotPreview}
                     setRichTextSnapshotPreview={setRichTextSnapshotPreview}
-                    hotkeySettings={hotkeySettings}
-                    quickPasteModifier={quickPasteModifier}
-                    setQuickPasteModifier={setQuickPasteModifier}
                     deleteAfterPaste={deleteAfterPaste}
                     setDeleteAfterPaste={setDeleteAfterPaste}
                     moveToTopAfterPaste={moveToTopAfterPaste}
@@ -387,10 +420,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setClickCopyOnly={setClickCopyOnly}
                     pasteMethod={pasteMethod}
                     setPasteMethod={setPasteMethod}
-                    registryWinVEnabled={registryWinVEnabled}
-                    setRegistryWinVEnabled={setRegistryWinVEnabled}
-                    sequentialMode={sequentialMode}
-                    setSequentialModeState={setSequentialModeState}
                     privacyProtection={privacyProtection}
                     setPrivacyProtection={setPrivacyProtection}
                     privacyProtectionKinds={privacyProtectionKinds}
@@ -407,10 +436,6 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                     setPrivacyKindsOpen={setPrivacyKindsOpen}
                     privacyRulesOpen={privacyRulesOpen}
                     setPrivacyRulesOpen={setPrivacyRulesOpen}
-
-                    appSettings={appSettings}
-                    theme={theme}
-                    colorMode={colorMode}
                 />
             )
         },

@@ -36,6 +36,11 @@ interface UseClipboardItemRendererOptions {
   sensitiveMaskSuffixVisible: number;
   sensitiveMaskEmailDomain: boolean;
   quickPasteHintsById: Record<number, QuickPasteHint>;
+  batchOrderById?: Record<number, number>;
+  onBatchToggle?: (id: number, shiftKey: boolean) => void;
+  onOpenTransform?: (item: ClipboardEntry) => void;
+  onExtractOcr?: (item: ClipboardEntry) => void;
+  onSaveAsPhrase?: (item: ClipboardEntry) => void;
   copyToClipboard: (
     id: number,
     content: string,
@@ -88,6 +93,11 @@ export const useClipboardItemRenderer = ({
   sensitiveMaskSuffixVisible,
   sensitiveMaskEmailDomain,
   quickPasteHintsById,
+  batchOrderById,
+  onBatchToggle,
+  onOpenTransform,
+  onExtractOcr,
+  onSaveAsPhrase,
   copyToClipboard,
   selectItemByIndex,
   setRevealedIds,
@@ -137,6 +147,11 @@ export const useClipboardItemRenderer = ({
           sensitiveMaskSuffixVisible={sensitiveMaskSuffixVisible}
           sensitiveMaskEmailDomain={sensitiveMaskEmailDomain}
           quickPasteHint={quickPasteHintsById[item.id]}
+          batchOrder={batchOrderById?.[item.id]}
+          onBatchToggle={onBatchToggle}
+          onOpenTransform={onOpenTransform}
+          onExtractOcr={onExtractOcr}
+          onSaveAsPhrase={onSaveAsPhrase}
           onSelect={() => selectItemByIndex(index)}
           onCopy={(withFormat) =>
             copyToClipboard(item.id, item.content, item.content_type, withFormat, item.is_pinned, item.tags || [])
@@ -234,6 +249,11 @@ export const useClipboardItemRenderer = ({
       sensitiveMaskSuffixVisible,
       sensitiveMaskEmailDomain,
       quickPasteHintsById,
+      batchOrderById,
+      onBatchToggle,
+      onOpenTransform,
+      onExtractOcr,
+      onSaveAsPhrase,
       copyToClipboard,
       selectItemByIndex,
       setRevealedIds,

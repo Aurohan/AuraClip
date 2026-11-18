@@ -36,3 +36,211 @@
   border-color: var(--button-active-filled-border-color);
   box-shadow: var(--button-active-filled-shadow);
 }
+
+/* Unified Thumbtack Glyph & Pinned Badges */
+.aurora-pin-glyph {
+  display: block;
+  flex-shrink: 0;
+  transform: rotate(34deg);
+  transform-origin: center;
+  transition: transform var(--duration-base) cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aurora-pin-glyph.is-pinned {
+  transform: rotate(0deg);
+}
+
+.btn-icon:hover .aurora-pin-glyph:not(.is-pinned) {
+  transform: rotate(16deg);
+}
+
+.pinned-card-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.card-pin-btn.active {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-color) 32%, transparent);
+}
+
+.card-delete-btn:hover {
+  color: var(--status-danger);
+}
+
+/* Theme-matched Aurora Ice-Blue frosted Back-to-Top launcher */
+@keyframes aurora-prism-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.aurora-scroll-top {
+  appearance: none;
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 50;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  isolation: isolate;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.92);
+  touch-action: manipulation;
+  box-shadow: var(--shadow-xs);
+  transition:
+    opacity var(--duration-base) cubic-bezier(0.22, 1, 0.36, 1),
+    transform var(--duration-base) cubic-bezier(0.22, 1, 0.36, 1),
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-base) ease;
+}
+
+.aurora-scroll-top.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.aurora-scroll-top-halo,
+.aurora-scroll-top-ring {
+  position: absolute;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.aurora-scroll-top-halo {
+  inset: -2px;
+  z-index: 0;
+  opacity: 0;
+  filter: blur(5px);
+  transition: opacity var(--duration-base) ease;
+}
+
+.aurora-scroll-top-ring {
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity var(--duration-base) ease;
+}
+
+.aurora-scroll-top-halo::before,
+.aurora-scroll-top-ring::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150%;
+  height: 150%;
+  background: var(--aurora-prism-conic);
+  transform: translate(-50%, -50%) rotate(0deg);
+  will-change: transform;
+}
+
+.aurora-scroll-top-core {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--bg-window) 88%, var(--bg-panel) 12%) padding-box;
+  box-shadow: var(--shadow-inset);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition:
+    border-color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease;
+}
+
+.aurora-scroll-top-glyph {
+  transition: transform var(--duration-base) cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aurora-scroll-top.is-visible:hover,
+.aurora-scroll-top.is-visible:focus-visible {
+  color: var(--accent-color);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.aurora-scroll-top.is-visible:hover .aurora-scroll-top-core,
+.aurora-scroll-top.is-visible:focus-visible .aurora-scroll-top-core {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--bg-window) 94%, var(--accent-color) 6%) padding-box;
+}
+
+.aurora-scroll-top.is-visible:hover .aurora-scroll-top-halo,
+.aurora-scroll-top.is-visible:focus-visible .aurora-scroll-top-halo {
+  opacity: 0.42;
+}
+
+.aurora-scroll-top.is-visible:hover .aurora-scroll-top-ring,
+.aurora-scroll-top.is-visible:focus-visible .aurora-scroll-top-ring {
+  opacity: 1;
+}
+
+.aurora-scroll-top.is-visible:hover .aurora-scroll-top-halo::before,
+.aurora-scroll-top.is-visible:hover .aurora-scroll-top-ring::before,
+.aurora-scroll-top.is-visible:focus-visible .aurora-scroll-top-halo::before,
+.aurora-scroll-top.is-visible:focus-visible .aurora-scroll-top-ring::before {
+  animation: aurora-prism-spin 2s linear infinite;
+}
+
+.aurora-scroll-top.is-visible:hover .aurora-scroll-top-glyph {
+  transform: translateY(-1.5px);
+}
+
+.aurora-scroll-top.is-visible:active {
+  transform: translateY(0) scale(0.94);
+}
+
+.aurora-scroll-top.is-bursting .aurora-scroll-top-halo {
+  opacity: 0.68;
+}
+
+.aurora-scroll-top.is-bursting .aurora-scroll-top-ring {
+  opacity: 1;
+}
+
+.aurora-scroll-top.is-bursting .aurora-scroll-top-core {
+  border-color: transparent;
+}
+
+.aurora-scroll-top.is-bursting .aurora-scroll-top-halo::before,
+.aurora-scroll-top.is-bursting .aurora-scroll-top-ring::before {
+  animation: aurora-prism-spin 580ms linear infinite;
+}
+
+.aurora-scroll-top:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-scroll-top-halo::before,
+  .aurora-scroll-top-ring::before {
+    animation: none;
+  }
+}

@@ -1,4 +1,7 @@
-use crate::app::commands::hotkey_cmd::{normalize_quick_paste_modifier, sync_registered_hotkeys};
+use crate::app::commands::hotkey_cmd::{
+    normalize_quick_paste_modifier, run_on_main_thread_async, sync_registered_hotkeys,
+    sync_registered_hotkeys_on_main_thread,
+};
 use crate::app_state::{PasteQueue, SettingsState};
 use crate::database::DbState;
 use crate::error::{AppError, AppResult};
@@ -27,11 +30,11 @@ pub fn set_sequential_mode(
         queue.last_pasted_fingerprint = None;
     }
 
-    let _ = sync_registered_hotkeys(&app_handle);
+    sync_registered_hotkeys_on_main_thread(&app_handle);
 }
 
 #[tauri::command]
-pub fn set_quick_paste_modifier(
+pub async fn set_quick_paste_modifier(
     app_handle: AppHandle,
     state: State<'_, SettingsState>,
     modifier: String,
@@ -48,7 +51,7 @@ pub fn set_quick_paste_modifier(
         .set("app.quick_paste_modifier", &normalized)
         .map_err(AppError::from)?;
 
-    sync_registered_hotkeys(&app_handle)
+    run_on_main_thread_async(&app_handle, |h| sync_registered_hotkeys(&h)).await
 }
 
 #[tauri::command]
@@ -440,7 +443,17 @@ pub fn restart_mqtt_client(app_handle: AppHandle) {
 }
 
 #[tauri::command]
-pub fn reset_settings(
+pub fn get_mqtt_telemetry(app_handle: AppHandle) -> crate::services::mqtt_sub::MqttTelemetry {
+    crate::services::mqtt_sub::get_mqtt_telemetry(&app_handle)
+}
+
+#[tauri::command]
+pub async fn send_mqtt_self_test(app_handle: AppHandle) -> AppResult<()> {
+    crate::services::mqtt_sub::send_mqtt_self_test(app_handle).await
+}
+
+#[tauri::command]
+pub async fn reset_settings(
     app: AppHandle,
     state: State<'_, DbState>,
     settings_state: State<'_, crate::app_state::SettingsState>,
@@ -470,7 +483,7 @@ pub fn reset_settings(
     // The window applies the rest when it reloads, but not these two.
     let _ = set_tray_visible(app.clone(), app.state(), !fresh.hide_tray_icon);
 
-    sync_registered_hotkeys(&app)
+    run_on_main_thread_async(&app, |h| sync_registered_hotkeys(&h)).await
 }
 
 #[tauri::command]

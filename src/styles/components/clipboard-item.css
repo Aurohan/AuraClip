@@ -523,86 +523,6 @@
   text-align: left;
 }
 
-/* Unified Floating Copy Path Pill (Hover-Revealed in Bottom-Right) */
-.unified-copy-path-pill {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 25px;
-  padding: 0 9px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--text-primary);
-  background: var(--bg-panel, rgba(30, 32, 48, 0.85));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.14));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px) scale(0.95);
-  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-              background 0.15s ease,
-              border-color 0.15s ease,
-              color 0.15s ease,
-              box-shadow 0.15s ease;
-}
-
-/* On hovering the history item card, smoothly float up in bottom-right */
-.history-item:hover .unified-copy-path-pill {
-  opacity: 0.92;
-  pointer-events: auto;
-  transform: translateY(0) scale(1);
-}
-
-/* Direct hover on the pill button */
-.unified-copy-path-pill:hover {
-  opacity: 1 !important;
-  background: var(--accent-color, #6366f1) !important;
-  border-color: var(--accent-color, #6366f1) !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
-  transform: translateY(-1px) scale(1.02);
-}
-
-.unified-copy-path-pill:active {
-  transform: translateY(0.5px) scale(0.97);
-}
-
-/* Copied feedback state */
-.unified-copy-path-pill.copied {
-  opacity: 1 !important;
-  pointer-events: auto !important;
-  transform: translateY(0) scale(1) !important;
-  background: #10b981 !important;
-  border-color: #10b981 !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.45);
-}
-
-.unified-copy-path-pill .pill-copy-icon {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-}
-
-.unified-copy-path-pill .pill-check-icon {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  color: #ffffff;
-}
-
 /* Quick Actions */
 .item-actions {
   display: flex;
@@ -636,8 +556,8 @@
   box-shadow: var(--button-shadow);
 }
 
-body.hide-unselected-item-actions .history-item:not(.selected):not(:hover) .item-actions,
-body.hide-unselected-item-actions.keyboard-owns-list .history-item:not(.selected) .item-actions {
+body.hide-unselected-item-actions .history-item:not(.selected):not(:hover):not(:has(.compact-more-btn.active)) .item-actions,
+body.hide-unselected-item-actions.keyboard-owns-list .history-item:not(.selected):not(:has(.compact-more-btn.active)) .item-actions {
   display: flex;
   flex: 0 0 0;
   width: 0;
@@ -699,8 +619,10 @@ body.hide-unselected-item-actions .history-item:hover:not(.keyboard-owns-list *)
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-button));
+  border: 1px solid color-mix(in srgb, var(--accent-color) 28%, var(--line-soft));
+  box-shadow: var(--shadow-inset);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: var(--font-size-2xs);
@@ -708,4 +630,266 @@ body.hide-unselected-item-actions .history-item:hover:not(.keyboard-owns-list *)
   letter-spacing: 0;
   line-height: 1;
   opacity: 1;
+}
+
+/* Multi-Type Visual Diversity & Unified Card Polish */
+.card-kind-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.card-kind-pill.is-sms {
+  border: 1px solid color-mix(in srgb, var(--kind-sms) 38%, transparent);
+  background: color-mix(in srgb, var(--kind-sms) 15%, transparent);
+  color: var(--kind-sms);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color var(--duration-fast), transform var(--duration-fast);
+}
+
+.card-kind-pill.is-sms:hover {
+  background: var(--kind-sms);
+  color: var(--on-accent);
+}
+
+.card-kind-pill.is-url {
+  border: 1px solid color-mix(in srgb, var(--kind-link) 28%, transparent);
+  background: color-mix(in srgb, var(--kind-link) 11%, transparent);
+  color: var(--kind-link);
+}
+
+.card-kind-pill.is-code {
+  border: 1px solid color-mix(in srgb, var(--kind-code) 28%, transparent);
+  background: color-mix(in srgb, var(--kind-code) 12%, transparent);
+  color: var(--kind-code);
+}
+
+.card-kind-pill.is-ocr {
+  border: 1px solid color-mix(in srgb, var(--accent-color) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: var(--accent-color);
+}
+
+.history-item.is-sms-code:not(.selected) {
+  border-color: color-mix(in srgb, var(--kind-sms) 32%, var(--line-soft));
+  background: color-mix(in srgb, var(--kind-sms) 5%, var(--layout-item-background));
+}
+
+.history-item.is-code-card:not(.compact) .content-preview {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  padding: 6px 8px;
+  margin-top: 2px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--kind-code) 6%, var(--bg-panel));
+  border-left: 2px solid color-mix(in srgb, var(--kind-code) 65%, transparent);
+}
+
+.history-item.is-url-card:not(.compact) .content-preview {
+  color: color-mix(in srgb, var(--kind-link) 78%, var(--text-primary));
+}
+
+.history-item.is-batch-selected {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 11%, var(--layout-item-background));
+}
+
+.batch-order-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding-inline: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-color);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Side-by-Side Image Thumbnail + Offline OCR Text Excerpt */
+.image-ocr-split {
+  display: grid;
+  grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 2px;
+}
+
+.image-ocr-split .image-preview-frame {
+  margin: 0;
+}
+
+.image-copy-origin-hint {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--bg-window) 88%, transparent);
+  border: 1px solid var(--line-soft);
+  color: var(--text-primary);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.image-preview-frame:hover .image-copy-origin-hint {
+  opacity: 1;
+}
+
+.image-ocr-excerpt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 76%, transparent);
+  border: 1px solid var(--line-soft);
+  transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease;
+}
+
+.image-ocr-excerpt:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 36%, var(--line-soft));
+}
+
+.image-ocr-excerpt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ocr-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ocr-inline-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line-soft);
+  background: var(--bg-button);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.ocr-inline-btn:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 42%, var(--line-soft));
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-button));
+  color: var(--accent-color);
+}
+
+.ocr-inline-btn.is-paste {
+  border-color: color-mix(in srgb, var(--accent-color) 28%, var(--line-soft));
+  color: var(--accent-color);
+}
+
+.ocr-inline-btn.is-paste:hover {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--on-accent);
+}
+
+.ocr-inline-btn.is-copied {
+  background: color-mix(in srgb, var(--status-success) 16%, var(--bg-button));
+  border-color: color-mix(in srgb, var(--status-success) 42%, var(--line-soft));
+  color: var(--status-success);
+}
+
+.image-ocr-excerpt-body {
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  border-radius: var(--radius-xs);
+  padding: 2px 4px;
+  cursor: copy;
+  transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.image-ocr-excerpt-body:hover {
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.detail-ocr-box {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+  border: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-ocr-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detail-ocr-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--accent-color);
+}
+
+.detail-ocr-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-main);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  color: var(--text-primary);
 }

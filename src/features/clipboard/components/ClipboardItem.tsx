@@ -7,8 +7,6 @@ import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { currentMonitor, getCurrentWindow, LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
-    Pin,
-    PinOff,
     Eye,
     EyeOff,
     ExternalLink,
@@ -16,6 +14,7 @@ import {
     StickyNote,
     X,
     Copy,
+    ClipboardPaste,
     Trash2,
     MoreHorizontal,
     Check,
@@ -35,8 +34,12 @@ import {
     FileQuestion,
     GripVertical,
     PictureInPicture2,
-    MessageSquare
+    MessageSquare,
+    BookmarkPlus,
+    ScanText,
+    Wand2
 } from "lucide-react";
+import PinGlyph from "../../../shared/components/PinGlyph";
 import { motion } from "framer-motion";
 import { isItemInteractionActive } from "../lib/itemInteraction";
 import type { ClipboardItemProps } from "../types";
@@ -79,6 +82,8 @@ import { openPinStickerWindow } from "../lib/pinStickerControls";
 import { activateForInput } from "../../../shared/lib/focus";
 import { getNotePlaceholder } from "../../../shared/lib/platform";
 import { setupDragDataTransfer, createDragGhostBadge, shouldHideAfterExternalDrop, isShortenedForList, nativeDragPayload } from "../lib/dragDrop";
+import { extractImageOcrText } from "../../../shared/lib/searchMatch";
+import { canTransformClipboardEntry, detectCodeBadge, extractOtpDigits, extractUrlDomain } from "../lib/cardSemantics";
 
 const COMPACT_PREVIEW_LABEL = "compact-preview";
 const COMPACT_PREVIEW_HOVER_DELAY_MS = 320;
@@ -811,6 +816,11 @@ const ClipboardItem = ({
     sensitiveMaskSuffixVisible = 3,
     sensitiveMaskEmailDomain = false,
     quickPasteHint,
+    batchOrder,
+    onBatchToggle,
+    onOpenTransform,
+    onExtractOcr,
+    onSaveAsPhrase,
     dragControls,
     id,
     compactMode,
@@ -897,6 +907,7 @@ const ClipboardItem = ({
     const singleFilePath = filePaths.length === 1 ? filePaths[0] : null;
     const [fileIcon, setFileIcon] = useState<string | null>(() => peekFileIcon(singleFilePath) ?? null);
     const [isPathCopied, setIsPathCopied] = useState(false);
+    const [isOcrCopied, setIsOcrCopied] = useState(false);
 
     const hasPhysicalPath = useMemo(() => {
         if (item.content_type === "file") {
@@ -1091,10 +1102,10 @@ const ClipboardItem = ({
     }, [isMoreMenuOpen]);
 
     useEffect(() => {
-        if ((!compactMode || isEditingTags || isEditingNote) && isMoreMenuOpen) {
+        if ((isEditingTags || isEditingNote) && isMoreMenuOpen) {
             setIsMoreMenuOpen(false);
         }
-    }, [compactMode, isEditingTags, isEditingNote, isMoreMenuOpen]);
+    }, [isEditingTags, isEditingNote, isMoreMenuOpen]);
 
     const sensitivePreview = useMemo(
         () => formatSensitivePreview(item.content, item.content_type, {
@@ -1187,6 +1198,42 @@ const ClipboardItem = ({
     // Text-like entries get a tile on the left (refined themes show it);
     // images, files and videos already lead with their own preview.
     const smsCode = isSmsCode(item);
+    const otpDigits = useMemo(
+        () => (smsCode && !isSensitiveHidden ? extractOtpDigits(item.content) : null),
+        [smsCode, isSensitiveHidden, item.content]
+    );
+    const urlDomain = useMemo(
+        () => (item.content_type === "url" && !isSensitiveHidden ? extractUrlDomain(item.content) : null),
+        [item.content_type, isSensitiveHidden, item.content]
+    );
+    const codeBadge = useMemo(
+        () => (item.content_type === "code" && !isSensitiveHidden ? detectCodeBadge(item.content) : null),
+        [item.content_type, isSensitiveHidden, item.content]
+    );
+    const imageOcrText = useMemo(
+        () => (!isSensitiveHidden ? extractImageOcrText(item) : ""),
+        [isSensitiveHidden, item]
+    );
+    const handleCopyOcrText = useCallback(async (e: React.MouseEvent | React.KeyboardEvent) => {
+        e.stopPropagation();
+        if (!imageOcrText) return;
+        try {
+            await navigator.clipboard.writeText(imageOcrText);
+            invoke("play_preview_sound").catch(() => {});
+            setIsOcrCopied(true);
+            setTimeout(() => {
+                setIsOcrCopied(false);
+            }, 1800);
+        } catch (err) {
+            console.error("Failed to copy OCR text:", err);
+        }
+    }, [imageOcrText]);
+    const handlePasteOcrText = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!imageOcrText) return;
+        void invoke("paste_text_directly", { content: imageOcrText });
+    }, [imageOcrText]);
+    const canTransform = canTransformClipboardEntry(item, isSensitiveHidden);
     const leadKind = compactMode || standaloneColorValue || useSnapshotPreviewImage
         ? null
         : smsCode ? "sms"
@@ -1978,7 +2025,8 @@ const ClipboardItem = ({
             transition={{ duration: 0.1 }}
             draggable={!isEditingTags && !isEditingNote && !isReordering}
             data-lead={leadKind ?? undefined}
-            className={`history-item ${leadKind ? "has-lead" : ""} ${smsCode ? "is-sms-code" : ""} ${isInteractionActive ? "selected" : ""} ${isDetailFocused ? "detail-focused" : ""} ${compactMode ? "compact" : ""} ${item.is_pinned ? "pinned" : ""} ${isDragging ? "is-dragging" : ""} ${isEditingTags ? "editing-tags" : ""} ${isEditingNote ? "editing-note" : ""} ${className || ''}`}
+            data-kind={smsCode ? "sms" : item.content_type}
+            className={`history-item ${leadKind ? "has-lead" : ""} ${smsCode ? "is-sms-code" : ""} ${item.content_type === "code" ? "is-code-card" : ""} ${item.content_type === "url" ? "is-url-card" : ""} ${batchOrder ? "is-batch-selected" : ""} ${isInteractionActive ? "selected" : ""} ${isDetailFocused ? "detail-focused" : ""} ${compactMode ? "compact" : ""} ${item.is_pinned ? "pinned" : ""} ${isDragging ? "is-dragging" : ""} ${isEditingTags ? "editing-tags" : ""} ${isEditingNote ? "editing-note" : ""} ${className || ''}`}
             onPointerDownCapture={(e) => {
                 if (dragReleaseTimerRef.current) {
                     clearTimeout(dragReleaseTimerRef.current);
@@ -2164,6 +2212,11 @@ const ClipboardItem = ({
 
                 e.preventDefault();
                 void hideCompactPreview();
+                if ((e.ctrlKey || e.metaKey || e.shiftKey) && onBatchToggle) {
+                    onBatchToggle(item.id, e.shiftKey);
+                    onSelect();
+                    return;
+                }
                 onCopy(true);
                 onSelect();
             }}
@@ -2190,6 +2243,11 @@ const ClipboardItem = ({
                 lastPasteTriggeredRef.current = now;
 
                 void hideCompactPreview();
+                if ((e.ctrlKey || e.metaKey || e.shiftKey) && onBatchToggle) {
+                    onBatchToggle(item.id, e.shiftKey);
+                    onSelect();
+                    return;
+                }
                 onCopy(true);
                 onSelect();
             }}
@@ -2342,11 +2400,38 @@ const ClipboardItem = ({
                         </div>
                     )}
                     <div className="app-info">
-                        {item.is_pinned && !dragControls && <Pin size={10} style={{ color: 'var(--accent-color)', marginRight: '-2px' }} />}
+                        {batchOrder ? (
+                            <span className="batch-order-badge">{batchOrder}</span>
+                        ) : null}
+                        {item.is_pinned && !dragControls && (
+                            <span className="pinned-card-badge" title={t('pinned')}>
+                                <PinGlyph pinned size={10} />
+                            </span>
+                        )}
                         {showSourceAppIcon
                             ? renderSourceAppIcon(sourceAppIcon, item.content_type, item.source_app)
                             : getIcon(item.content_type)}
                         <span>{sourceLabel(item.source_app, t('source_sms'))}</span>
+                        {otpDigits && (
+                            <button
+                                type="button"
+                                className="card-kind-pill is-sms"
+                                title={`${t('footer_hint_paste')}: ${otpDigits}`}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    void invoke("paste_text_directly", { content: otpDigits });
+                                }}
+                            >
+                                {otpDigits}
+                            </button>
+                        )}
+                        {!smsCode && urlDomain && (
+                            <span className="card-kind-pill is-url">{urlDomain}</span>
+                        )}
+                        {!smsCode && codeBadge && (
+                            <span className="card-kind-pill is-code">{codeBadge}</span>
+                        )}
                     </div>
                 </div>
 
@@ -2354,146 +2439,217 @@ const ClipboardItem = ({
                     {compactMode && hasTagsSection ? renderTagsContainer() : null}
                     <div className="item-meta-right-slot">
                     <div className="item-actions">
-                        {compactMode ? (
-                            (!isEditingTags && !isEditingNote) ? (
-                                <div
-                                    className="compact-more-action-wrap"
-                                    onMouseEnter={() => {
-                                        moreActionHoverRef.current = true;
-                                        compactPreviewBlockedRef.current = true;
-                                        // Cancel pending/in-flight show but keep the row hover
-                                        // anchor so leaving ··· can resume preview.
-                                        hoverRequestIdRef.current = ++compactPreviewRequestSerial;
-                                        if (hoverTimerRef.current) {
-                                            clearTimeout(hoverTimerRef.current);
-                                            hoverTimerRef.current = null;
-                                        }
-                                        void hideCompactPreviewGlobal();
-                                    }}
-                                    onMouseLeave={() => {
-                                        moreActionHoverRef.current = false;
-                                        compactPreviewBlockedRef.current =
-                                            isMoreMenuOpen ||
-                                            isEditingNote ||
-                                            isEditingTags;
-                                        // Still over the row: resume normal hover preview delay.
-                                        if (
-                                            compactPreviewBlockedRef.current ||
-                                            !compactPreviewEnabled ||
-                                            !itemRef.current?.matches(":hover") ||
-                                            !hoverAnchorRef.current
-                                        ) {
-                                            return;
-                                        }
-                                        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-                                        const requestId = ++compactPreviewRequestSerial;
-                                        hoverRequestIdRef.current = requestId;
-                                        const anchor = hoverAnchorRef.current;
-                                        hoverTimerRef.current = setTimeout(() => {
-                                            hoverTimerRef.current = null;
-                                            if (compactPreviewBlockedRef.current) return;
-                                            if (!isHoverPreviewRequestCurrent(requestId)) return;
-                                            void showCompactPreview(anchor, requestId);
-                                        }, COMPACT_PREVIEW_HOVER_DELAY_MS);
-                                    }}
-                                >
+                        {!compactMode && !isEditingTags && !isEditingNote && (
+                            <>
+                                {canReveal ? (
                                     <button
-                                        ref={moreButtonRef}
                                         type="button"
-                                        className={`btn-icon compact-more-btn ${isMoreMenuOpen ? "active" : ""}`}
+                                        className={`btn-icon ${isRevealed ? "active" : ""}`}
+                                        onClick={onToggleReveal}
+                                        title={isRevealed ? t('hide') : t('reveal')}
+                                    >
+                                        {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                                    </button>
+                                ) : hasPhysicalPath ? (
+                                    <button
+                                        type="button"
+                                        className={`btn-icon ${isPathCopied ? 'active' : ''}`}
+                                        onClick={handleCopyFilePath}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        title={isPathCopied ? t('path_copied') : t('copy_path')}
+                                    >
+                                        {isPathCopied ? <Check size={12} className="copy-icon-success" /> : <LinkIcon size={12} />}
+                                    </button>
+                                ) : canTransform && onOpenTransform ? (
+                                    <button
+                                        type="button"
+                                        className="btn-icon"
+                                        onMouseDown={(e) => e.stopPropagation()}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (isMoreMenuOpen) {
-                                                setIsMoreMenuOpen(false);
-                                            } else {
-                                                moreActionHoverRef.current = true;
-                                                compactPreviewBlockedRef.current = true;
-                                                void hideCompactPreview();
-                                                updateMoreMenuPosition();
-                                                setIsMoreMenuOpen(true);
-                                            }
+                                            onOpenTransform(item);
+                                        }}
+                                        title={t('transform_action')}
+                                    >
+                                        <Wand2 size={12} />
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    className={`btn-icon card-pin-btn ${item.is_pinned ? "active" : ""}`}
+                                    onClick={onTogglePin}
+                                    title={item.is_pinned ? t('unpin') : t('pin')}
+                                >
+                                    <PinGlyph pinned={item.is_pinned} size={13} />
+                                </button>
+                            </>
+                        )}
+                        {!isEditingTags && !isEditingNote ? (
+                            <div
+                                className="compact-more-action-wrap"
+                                onMouseEnter={() => {
+                                    moreActionHoverRef.current = true;
+                                    compactPreviewBlockedRef.current = true;
+                                    hoverRequestIdRef.current = ++compactPreviewRequestSerial;
+                                    if (hoverTimerRef.current) {
+                                        clearTimeout(hoverTimerRef.current);
+                                        hoverTimerRef.current = null;
+                                    }
+                                    void hideCompactPreviewGlobal();
+                                }}
+                                onMouseLeave={() => {
+                                    moreActionHoverRef.current = false;
+                                    compactPreviewBlockedRef.current =
+                                        isMoreMenuOpen ||
+                                        isEditingNote ||
+                                        isEditingTags;
+                                    if (
+                                        compactPreviewBlockedRef.current ||
+                                        !compactPreviewEnabled ||
+                                        !itemRef.current?.matches(":hover") ||
+                                        !hoverAnchorRef.current
+                                    ) {
+                                        return;
+                                    }
+                                    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+                                    const requestId = ++compactPreviewRequestSerial;
+                                    hoverRequestIdRef.current = requestId;
+                                    const anchor = hoverAnchorRef.current;
+                                    hoverTimerRef.current = setTimeout(() => {
+                                        hoverTimerRef.current = null;
+                                        if (compactPreviewBlockedRef.current) return;
+                                        if (!isHoverPreviewRequestCurrent(requestId)) return;
+                                        void showCompactPreview(anchor, requestId);
+                                    }, COMPACT_PREVIEW_HOVER_DELAY_MS);
+                                }}
+                            >
+                                <button
+                                    ref={moreButtonRef}
+                                    type="button"
+                                    className={`btn-icon compact-more-btn ${isMoreMenuOpen ? "active" : ""}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (isMoreMenuOpen) {
+                                            setIsMoreMenuOpen(false);
+                                        } else {
+                                            moreActionHoverRef.current = true;
+                                            compactPreviewBlockedRef.current = true;
+                                            void hideCompactPreview();
+                                            updateMoreMenuPosition();
+                                            setIsMoreMenuOpen(true);
+                                        }
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    title={t('more_actions')}
+                                    aria-label={t('more_actions')}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isMoreMenuOpen}
+                                >
+                                    <MoreHorizontal size={13} />
+                                </button>
+                                {isMoreMenuOpen && menuPos && createPortal(
+                                    <div
+                                        ref={moreMenuRef}
+                                        className="compact-action-menu"
+                                        role="menu"
+                                        aria-label={t('more_actions')}
+                                        style={{
+                                            position: 'fixed',
+                                            top: menuPos.top !== undefined ? `${menuPos.top}px` : undefined,
+                                            bottom: menuPos.bottom !== undefined ? `${menuPos.bottom}px` : undefined,
+                                            right: `${menuPos.right}px`,
+                                            zIndex: 100050,
                                         }}
                                         onMouseDown={(e) => e.stopPropagation()}
-                                        title={t('more_actions')}
-                                        aria-label={t('more_actions')}
-                                        aria-haspopup="menu"
-                                        aria-expanded={isMoreMenuOpen}
+                                        onClick={(e) => e.stopPropagation()}
                                     >
-                                        <MoreHorizontal size={13} />
-                                    </button>
-                                    {isMoreMenuOpen && menuPos && createPortal(
-                                        <div
-                                            ref={moreMenuRef}
-                                            className="compact-action-menu"
-                                            role="menu"
-                                            aria-label={t('more_actions')}
-                                            style={{
-                                                position: 'fixed',
-                                                top: menuPos.top !== undefined ? `${menuPos.top}px` : undefined,
-                                                bottom: menuPos.bottom !== undefined ? `${menuPos.bottom}px` : undefined,
-                                                right: `${menuPos.right}px`,
-                                                zIndex: 100050,
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="compact-action-menu-item"
+                                            onClick={() => {
+                                                setIsMoreMenuOpen(false);
+                                                onCopy(true);
                                             }}
-                                            onMouseDown={(e) => e.stopPropagation()}
-                                            onClick={(e) => e.stopPropagation()}
                                         >
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                className="compact-action-menu-item"
-                                                onClick={() => {
-                                                    setIsMoreMenuOpen(false);
-                                                    onCopy(true);
-                                                }}
-                                            >
-                                                <Copy size={13} />
-                                                <span>{t('copy')}</span>
-                                            </button>
+                                            <Copy size={13} />
+                                            <span>{item.content_type === 'image' ? t('copy_image') : t('copy')}</span>
+                                        </button>
 
-                                            {item.content_type === 'file' && (
+                                        {imageOcrText && (
+                                            <>
                                                 <button
                                                     type="button"
                                                     role="menuitem"
                                                     className="compact-action-menu-item"
                                                     onClick={(e) => {
                                                         setIsMoreMenuOpen(false);
-                                                        handleCopyFilePath(e);
+                                                        void handleCopyOcrText(e);
                                                     }}
                                                 >
-                                                    <Copy size={13} />
-                                                    <span>{t('copy_path')}</span>
+                                                    <ScanText size={13} />
+                                                    <span>{t('ocr_copy_text')}</span>
                                                 </button>
-                                            )}
-
-                                            {canReveal && (
                                                 <button
                                                     type="button"
                                                     role="menuitem"
-                                                    className={`compact-action-menu-item ${isRevealed ? "is-active" : ""}`}
+                                                    className="compact-action-menu-item"
                                                     onClick={(e) => {
                                                         setIsMoreMenuOpen(false);
-                                                        onToggleReveal(e);
+                                                        handlePasteOcrText(e);
                                                     }}
                                                 >
-                                                    {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
-                                                    <span>{isRevealed ? t('hide') : t('reveal')}</span>
+                                                    <ClipboardPaste size={13} />
+                                                    <span>{t('ocr_paste_text')}</span>
                                                 </button>
-                                            )}
+                                            </>
+                                        )}
 
+                                        {hasPhysicalPath && (
                                             <button
                                                 type="button"
                                                 role="menuitem"
                                                 className="compact-action-menu-item"
                                                 onClick={(e) => {
                                                     setIsMoreMenuOpen(false);
-                                                    onOpen(e);
+                                                    void handleCopyFilePath(e);
                                                 }}
                                             >
-                                                <ExternalLink size={13} />
-                                                <span>{t('open')}</span>
+                                                <LinkIcon size={13} />
+                                                <span>{t('copy_path')}</span>
                                             </button>
+                                        )}
 
-                                            {item.content_type === 'image' && (
+                                        {canReveal && (
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                className={`compact-action-menu-item ${isRevealed ? "is-active" : ""}`}
+                                                onClick={(e) => {
+                                                    setIsMoreMenuOpen(false);
+                                                    onToggleReveal(e);
+                                                }}
+                                            >
+                                                {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
+                                                <span>{isRevealed ? t('hide') : t('reveal')}</span>
+                                            </button>
+                                        )}
+
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="compact-action-menu-item"
+                                            onClick={(e) => {
+                                                setIsMoreMenuOpen(false);
+                                                onOpen(e);
+                                            }}
+                                        >
+                                            <ExternalLink size={13} />
+                                            <span>{t('open')}</span>
+                                        </button>
+
+                                        {item.content_type === 'image' && (
+                                            <>
                                                 <button
                                                     type="button"
                                                     role="menuitem"
@@ -2507,139 +2663,119 @@ const ClipboardItem = ({
                                                     <PictureInPicture2 size={13} />
                                                     <span>{t('pin_sticker')}</span>
                                                 </button>
-                                            )}
+                                                {onExtractOcr && (
+                                                    <button
+                                                        type="button"
+                                                        role="menuitem"
+                                                        className="compact-action-menu-item"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setIsMoreMenuOpen(false);
+                                                            onExtractOcr(item);
+                                                        }}
+                                                    >
+                                                        <ScanText size={13} />
+                                                        <span>{t('ocr_extract')}</span>
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
 
+                                        {canTransform && onOpenTransform && (
                                             <button
                                                 type="button"
                                                 role="menuitem"
-                                                className={`compact-action-menu-item ${item.is_pinned ? "is-active" : ""}`}
-                                                onClick={(e) => {
-                                                    setIsMoreMenuOpen(false);
-                                                    onTogglePin(e);
-                                                }}
-                                            >
-                                                {item.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
-                                                <span>{item.is_pinned ? t('unpin') : t('pin')}</span>
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                className={`compact-action-menu-item ${item.tags && item.tags.length > 0 ? "is-active" : ""}`}
-                                                onClick={(e) => {
-                                                    setIsMoreMenuOpen(false);
-                                                    onToggleTagEditor(e);
-                                                }}
-                                            >
-                                                <Tag size={13} />
-                                                <span>{t('edit_tags')}</span>
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                className={`compact-action-menu-item ${item.note ? "is-active" : ""}`}
+                                                className="compact-action-menu-item"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     setIsMoreMenuOpen(false);
-                                                    onToggleNoteEditor(e);
+                                                    onOpenTransform(item);
                                                 }}
                                             >
-                                                <StickyNote size={13} />
-                                                <span>{item.note ? t('edit_note') : t('add_note')}</span>
+                                                <Wand2 size={13} />
+                                                <span>{t('transform_action')}</span>
                                             </button>
+                                        )}
 
-                                            <div className="compact-action-menu-divider" role="separator" />
-
+                                        {canTransform && onSaveAsPhrase && (
                                             <button
                                                 type="button"
                                                 role="menuitem"
-                                                className="compact-action-menu-item danger"
+                                                className="compact-action-menu-item"
                                                 onClick={(e) => {
+                                                    e.stopPropagation();
                                                     setIsMoreMenuOpen(false);
-                                                    onDelete(e);
+                                                    onSaveAsPhrase(item);
                                                 }}
                                             >
-                                                <Trash2 size={13} />
-                                                <span>{t('delete')}</span>
+                                                <BookmarkPlus size={13} />
+                                                <span>{t('save_as_phrase')}</span>
                                             </button>
-                                        </div>,
-                                        document.body
-                                    )}
-                                </div>
-                            ) : null
-                        ) : (
-                            <>
-                                {canReveal && (
-                                    <button
-                                        className={`btn-icon ${isRevealed ? "active" : ""}`}
-                                        onClick={onToggleReveal}
-                                        title={isRevealed ? t('hide') : t('reveal')}
-                                    >
-                                        {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                                    </button>
+                                        )}
+
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className={`compact-action-menu-item ${item.is_pinned ? "is-active" : ""}`}
+                                            onClick={(e) => {
+                                                setIsMoreMenuOpen(false);
+                                                onTogglePin(e);
+                                            }}
+                                        >
+                                            <PinGlyph pinned={item.is_pinned} size={13} />
+                                            <span>{item.is_pinned ? t('unpin') : t('pin')}</span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className={`compact-action-menu-item ${item.tags && item.tags.length > 0 ? "is-active" : ""}`}
+                                            onClick={(e) => {
+                                                setIsMoreMenuOpen(false);
+                                                onToggleTagEditor(e);
+                                            }}
+                                        >
+                                            <Tag size={13} />
+                                            <span>{t('edit_tags')}</span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className={`compact-action-menu-item ${item.note ? "is-active" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setIsMoreMenuOpen(false);
+                                                onToggleNoteEditor(e);
+                                            }}
+                                        >
+                                            <StickyNote size={13} />
+                                            <span>{item.note ? t('edit_note') : t('add_note')}</span>
+                                        </button>
+
+                                        <div className="compact-action-menu-divider" role="separator" />
+
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="compact-action-menu-item danger"
+                                            onClick={(e) => {
+                                                setIsMoreMenuOpen(false);
+                                                onDelete(e);
+                                            }}
+                                        >
+                                            <Trash2 size={13} />
+                                            <span>{t('delete')}</span>
+                                        </button>
+                                    </div>,
+                                    document.body
                                 )}
-                                <button
-                                    className="btn-icon"
-                                    onClick={onOpen}
-                                    title={t('open')}
-                                >
-                                    <ExternalLink size={12} />
-                                </button>
-                                {item.content_type === 'image' && (
-                                    <button
-                                        className="btn-icon"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            openPinStickerWindow(item);
-                                        }}
-                                        title={t('pin_sticker')}
-                                    >
-                                        <PictureInPicture2 size={12} />
-                                    </button>
-                                )}
-                                <button
-                                    className={`btn-icon ${item.is_pinned ? "active" : ""}`}
-                                    onClick={onTogglePin}
-                                    title={item.is_pinned ? t('unpin') : t('pin')}
-                                >
-                                    {item.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
-                                </button>
-                                <button
-                                    className={`btn-icon ${item.tags && item.tags.length > 0 ? "active" : ""}`}
-                                    onClick={onToggleTagEditor}
-                                    title={t('edit_tags')}
-                                >
-                                    <Tag size={12} />
-                                </button>
-                                <button
-                                    className={`btn-icon ${item.note ? "active" : ""} ${isEditingNote ? "active" : ""}`}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (isEditingNote) {
-                                            onNoteSave(noteInput);
-                                        } else {
-                                            onToggleNoteEditor(e);
-                                        }
-                                    }}
-                                    title={item.note ? t('edit_note') : t('add_note')}
-                                >
-                                    <StickyNote size={12} />
-                                </button>
-                                {hasPhysicalPath && (
-                                    <button
-                                        className={`btn-icon ${isPathCopied ? 'active' : ''}`}
-                                        onClick={handleCopyFilePath}
-                                        title={isPathCopied ? t('path_copied') : t('copy_path')}
-                                    >
-                                        {isPathCopied ? <Check size={12} className="copy-icon-success" /> : <LinkIcon size={12} />}
-                                    </button>
-                                )}
-                                <button className="btn-icon" onClick={onDelete} title={t('delete')}>
-                                    <X size={12} />
-                                </button>
-                            </>
+                            </div>
+                        ) : null}
+                        {!compactMode && !isEditingTags && !isEditingNote && (
+                            <button type="button" className="btn-icon card-delete-btn" onClick={onDelete} title={t('delete')}>
+                                <X size={12} />
+                            </button>
                         )}
                     </div>
                     <div className="item-meta-right-info">
@@ -2662,41 +2798,102 @@ const ClipboardItem = ({
             {
                 compactMode && item.is_pinned && (
                     <div className="compact-pinned-indicator" title={t('pinned')}>
-                        <Pin size={10} fill="currentColor" />
+                        <PinGlyph pinned size={10} />
                     </div>
                 )
             }
             <div className={`content-preview-shell${overlayMetaInPreview ? ' has-overlay-meta' : ''}`}>
                 <div data-content-type={item.content_type} className={`content-preview ${item.content_type === 'rich_text' ? 'rich-text' : ''} ${item.content_type === 'file' ? 'file-preview' : ''} ${isSensitiveHidden ? 'sensitive-blur' : ''}`}>
                 {item.content_type === "image" ? (
-                    <div
-                        className="image-preview-frame"
-                        onMouseEnter={isAnimatableImage ? () => setPlayAnimation(true) : undefined}
-                        onMouseLeave={isAnimatableImage ? () => setPlayAnimation(false) : undefined}
-                    >
-                        {(item.is_external && item.file_preview_exists === false) || imageLoadFailed ? (
-                            <div className="image-preview error-placeholder" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-element)', color: 'var(--text-secondary)', height: '100px', fontSize: 'var(--font-size-sm)' }}>
-                                <ImageOff size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
-                                <span>{t('image_deleted')}</span>
-                            </div>
-                        ) : listImageSrc && (
-                            // Not loading="lazy": rows are already virtualized, and lazy
-                            // loading only delays images that are about to be visible.
-                            <img
-                                src={listImageSrc}
-                                alt={t('image_preview')}
-                                className="image-preview"
-                                draggable={false}
-                                decoding="async"
-                                style={isSensitiveHidden ? { filter: 'blur(8px)' } : {}}
-                                onError={() => {
-                                    setImageLoadFailed(true);
-                                }}
-                            />
-                        )}
-                        {isSensitiveHidden && (
-                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 'bold', opacity: 0.5, fontSize: 'var(--font-size-2xs)' }}>
-                                SENSITIVE
+                    <div className={imageOcrText && !compactMode ? "image-ocr-split" : undefined}>
+                        <div
+                            className="image-preview-frame"
+                            title={imageOcrText && !compactMode ? t('paste_image_hint') : undefined}
+                            onMouseEnter={isAnimatableImage ? () => setPlayAnimation(true) : undefined}
+                            onMouseLeave={isAnimatableImage ? () => setPlayAnimation(false) : undefined}
+                        >
+                            {(item.is_external && item.file_preview_exists === false) || imageLoadFailed ? (
+                                <div className="image-preview error-placeholder" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-element)', color: 'var(--text-secondary)', height: '100px', fontSize: 'var(--font-size-sm)' }}>
+                                    <ImageOff size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                                    <span>{t('image_deleted')}</span>
+                                </div>
+                            ) : listImageSrc && (
+                                <img
+                                    src={listImageSrc}
+                                    alt={t('image_preview')}
+                                    className="image-preview"
+                                    draggable={false}
+                                    decoding="async"
+                                    style={isSensitiveHidden ? { filter: 'blur(8px)' } : {}}
+                                    onError={() => {
+                                        setImageLoadFailed(true);
+                                    }}
+                                />
+                            )}
+                            {imageOcrText && !compactMode && !isSensitiveHidden && (
+                                <span className="image-copy-origin-hint">{t('paste_image_hint')}</span>
+                            )}
+                            {isSensitiveHidden && (
+                                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 'bold', opacity: 0.5, fontSize: 'var(--font-size-2xs)' }}>
+                                    SENSITIVE
+                                </div>
+                            )}
+                        </div>
+                        {imageOcrText && !compactMode && (
+                            <div className="image-ocr-excerpt">
+                                <div className="image-ocr-excerpt-head">
+                                    <span className="card-kind-pill is-ocr">
+                                        <ScanText size={10} />
+                                        <span>{t('ocr_badge')}</span>
+                                    </span>
+                                    <div className="ocr-inline-actions">
+                                        <button
+                                            type="button"
+                                            className={`ocr-inline-btn${isOcrCopied ? " is-copied" : ""}`}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onClick={(e) => void handleCopyOcrText(e)}
+                                            title={t('ocr_copy_text')}
+                                        >
+                                            {isOcrCopied ? (
+                                                <>
+                                                    <Check size={10} />
+                                                    <span>{t('copied')}</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Copy size={10} />
+                                                    <span>{t('ocr_copy_text')}</span>
+                                                </>
+                                            )}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="ocr-inline-btn is-paste"
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onClick={handlePasteOcrText}
+                                            title={t('ocr_paste_text')}
+                                        >
+                                            <ClipboardPaste size={10} />
+                                            <span>{t('ocr_paste_text')}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div
+                                    role="button"
+                                    tabIndex={0}
+                                    className="image-ocr-excerpt-body"
+                                    title={t('ocr_copy_text')}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => void handleCopyOcrText(e)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            void handleCopyOcrText(e);
+                                        }
+                                    }}
+                                >
+                                    {imageOcrText}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -2819,27 +3016,6 @@ const ClipboardItem = ({
                         : item.preview
                 )}
                 </div>
-                {hasPhysicalPath && !compactMode && (
-                    <button
-                        type="button"
-                        className={`unified-copy-path-pill ${isPathCopied ? 'copied' : ''}`}
-                        onClick={handleCopyFilePath}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        title={isPathCopied ? t('path_copied') : t('copy_path')}
-                    >
-                        {isPathCopied ? (
-                            <>
-                                <Check size={12} className="pill-check-icon" />
-                                <span>{t('path_copied')}</span>
-                            </>
-                        ) : (
-                            <>
-                                <Copy size={12} className="pill-copy-icon" />
-                                <span>{t('copy_path')}</span>
-                            </>
-                        )}
-                    </button>
-                )}
                 {overlayMetaInPreview && renderMetaFooter()}
             </div>
 
@@ -2903,6 +3079,7 @@ export default memo(ClipboardItem, (prevProps, nextProps) => {
         prevProps.tagColors === nextProps.tagColors &&
         prevProps.quickPasteHint?.slot === nextProps.quickPasteHint?.slot &&
         prevProps.quickPasteHint?.combo === nextProps.quickPasteHint?.combo &&
+        prevProps.batchOrder === nextProps.batchOrder &&
         prevProps.compactMode === nextProps.compactMode &&
         prevProps.theme === nextProps.theme &&
         prevProps.language === nextProps.language &&

@@ -95,4 +95,34 @@ describe("entryMatchesSearch", () => {
     expect(entryMatchesSearch(itemWithNote, parseSearchQuery("note:"))).toBe(true);
     expect(entryMatchesSearch(itemWithoutNote, parseSearchQuery("note:"))).toBe(false);
   });
+
+  it("matches Chinese text via Pinyin initials and full Pinyin", () => {
+    const item = createMockEntry({
+      preview: "个人身份证号码备份",
+      content: "个人身份证号码备份 110101...",
+      tags: ["工作邮箱"],
+    });
+
+    expect(entryMatchesSearch(item, parseSearchQuery("sfz"))).toBe(true);
+    expect(entryMatchesSearch(item, parseSearchQuery("shenfenzheng"))).toBe(true);
+    expect(entryMatchesSearch(item, parseSearchQuery("gzyx"))).toBe(true);
+  });
+
+  it("matches OCR text on image entries without matching raw image paths", () => {
+    const ocrImage = createMockEntry({
+      content_type: "image",
+      content: "C:\\attachments\\screenshot_999.png",
+      preview: "[OCR] 服务器连接超时 502 Bad Gateway",
+    });
+    const unindexedImage = createMockEntry({
+      content_type: "image",
+      content: "C:\\attachments\\screenshot_999.png",
+      preview: "[Image Content]",
+    });
+
+    expect(entryMatchesSearch(ocrImage, parseSearchQuery("502"))).toBe(true);
+    expect(entryMatchesSearch(ocrImage, parseSearchQuery("ljcs"))).toBe(true);
+    expect(entryMatchesSearch(ocrImage, parseSearchQuery("screenshot_999"))).toBe(false);
+    expect(entryMatchesSearch(unindexedImage, parseSearchQuery("image"))).toBe(false);
+  });
 });

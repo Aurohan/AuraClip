@@ -71,7 +71,7 @@ const VirtualClipboardList = React.forwardRef<VirtualClipboardListHandle, Virtua
             scrollToTop: () => {
                 virtuosoRef.current?.scrollTo({
                     top: 0,
-                    behavior: 'auto'
+                    behavior: 'smooth'
                 });
             },
             resetAfterIndex: (_index: number) => {

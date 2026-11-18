@@ -1,38 +1,54 @@
-import { usePhraseTagScroll } from "../hooks/usePhraseTagScroll";
-import type { ClipboardSortMode } from "../../app/types";
-import { sortQuickPhrases } from "../lib/sortQuickPhrases";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import {
+  ChevronDown,
+  Download,
+  FolderTree,
+  LayoutGrid,
+  MoreHorizontal,
   Plus,
-  Pin,
-  PinOff,
-  Copy,
-  Edit2,
-  Trash2,
-  Eye,
-  EyeOff,
+  Rows3,
   Sparkles,
-  Check,
-  Tag as TagIcon,
-  X,
-  Lock,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
+  SquareStack,
+  Upload,
 } from "lucide-react";
+import ScrollToTopButton from "../../../shared/components/ScrollToTopButton";
 import { motion, useReducedMotion } from "framer-motion";
 import { usePhrasePins } from "../hooks/usePhrasePins";
+import { sortQuickPhrases } from "../lib/sortQuickPhrases";
+import {
+  derivePhraseTitleFromContent,
+  extractInteractiveSlots,
+} from "../lib/phraseTemplateClient";
+import {
+  buildPhraseTagSections,
+  rankPhraseTags,
+  UNTAGGED_GROUP_KEY,
+  type PhraseViewMode,
+} from "../lib/phraseVaultGroups";
+import PhraseComposerModal from "./PhraseComposerModal";
+import PhraseDetailPane from "./PhraseDetailPane";
+import PhraseFillModal from "./PhraseFillModal";
+import PhraseVaultCard, { type PhraseCardMenuPosition } from "./PhraseVaultCard";
+import type { ClipboardSortMode, QuickPasteModifier } from "../../app/types";
 import type { QuickPhrase } from "../../../shared/types";
-import { getTagColor, getTagTextColor } from "../../../shared/lib/utils";
 import { showPasteConfirm } from "../../../shared/lib/pasteFeedback";
+import { matchesTextOrPinyin } from "../../../shared/lib/pinyinMatch";
+import { getTagColor } from "../../../shared/lib/utils";
+import { useWideWindow } from "../../../shared/hooks/useWideWindow";
 
 interface QuickPhrasesViewProps {
   sortMode: ClipboardSortMode;
   t: (key: string) => string;
   theme: string;
   search: string;
+  quickPasteModifier?: QuickPasteModifier;
+  clipboardPreviewText?: string;
+  splitViewEnabled?: boolean;
+  onCloseSplitView?: () => void;
+  onCountsChange?: (total: number, filtered: number, isFiltered: boolean) => void;
+  onOpenTransformText?: (title: string, content: string) => void;
   pushToast: (msg: string, duration?: number) => void;
   openConfirm: (options: {
     title: string;
@@ -40,7 +56,52 @@ interface QuickPhrasesViewProps {
     danger?: boolean;
     onConfirm: () => Promise<void> | void;
   }) => void;
-  onOpenTagManager?: () => void;
+}
+
+const QUICK_PASTE_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"] as const;
+const VIEW_MODE_STORAGE_KEY = "auraclip.phraseViewMode";
+const GROUP_BY_TAG_STORAGE_KEY = "auraclip.phraseGroupByTag";
+const COLLAPSED_GROUPS_STORAGE_KEY = "auraclip.phraseCollapsedGroups";
+
+const MODIFIER_LABELS: Record<Exclude<QuickPasteModifier, "disabled">, string> = {
+  ctrl: "Ctrl+",
+  alt: "Alt+",
+  shift: "Shift+",
+  win: "Win+",
+};
+
+function readStoredViewMode(): PhraseViewMode {
+  try {
+    const raw = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    if (raw === "compact" || raw === "grid" || raw === "cards") return raw;
+  } catch {
+    // ignore storage errors
+  }
+  return "compact";
+}
+
+function readStoredGroupByTag(): boolean {
+  try {
+    const raw = localStorage.getItem(GROUP_BY_TAG_STORAGE_KEY);
+    if (raw === "false") return false;
+  } catch {
+    // ignore storage errors
+  }
+  return true;
+}
+
+function readStoredCollapsedGroups(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_GROUPS_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.filter((item): item is string => typeof item === "string"));
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return new Set();
 }
 
 export default function QuickPhrasesView({
@@ -48,130 +109,147 @@ export default function QuickPhrasesView({
   t,
   theme,
   search,
+  quickPasteModifier = "ctrl",
+  clipboardPreviewText = "",
+  splitViewEnabled = false,
+  onCloseSplitView,
+  onCountsChange,
+  onOpenTransformText,
   pushToast,
   openConfirm,
-  onOpenTagManager,
 }: QuickPhrasesViewProps) {
   const { pins, togglePin } = usePhrasePins(pushToast);
+  const isWide = useWideWindow();
+  const splitActive = Boolean(splitViewEnabled && isWide);
+
   const [phrases, setPhrases] = useState<QuickPhrase[]>([]);
   const [savedTags, setSavedTags] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-  // States for inline card operations
+  const [viewMode, setViewMode] = useState<PhraseViewMode>(readStoredViewMode);
+  const [groupByTag, setGroupByTag] = useState<boolean>(readStoredGroupByTag);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readStoredCollapsedGroups);
+  const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [hasOverflowTags, setHasOverflowTags] = useState(false);
+
   const [revealedIds, setRevealedIds] = useState<Set<number>>(new Set());
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
+  const [fillModalPhrase, setFillModalPhrase] = useState<QuickPhrase | null>(null);
+  const [composerState, setComposerState] = useState<{
+    open: boolean;
+    phrase: QuickPhrase | null;
+  }>({ open: false, phrase: null });
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
-  // Top bar tag creation & horizontal scrolling
   const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [newTagName, setNewTagName] = useState("");
-  const {
-    tagBarRef, tagScrollProgress, updateTagScrollMetrics,
-    handleTagBarWheel, handleBarPointerDown, handleBarPointerMove, handleBarPointerUp,
-  } = usePhraseTagScroll();
+  const [tagColors, setTagColors] = useState<Record<string, string>>({});
+  const [editingTagPhraseId, setEditingTagPhraseId] = useState<number | null>(null);
+  const [inlineTagInput, setInlineTagInput] = useState("");
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [cardMenu, setCardMenu] = useState<PhraseCardMenuPosition | null>(null);
+
+  const tagWrapRef = useRef<HTMLDivElement | null>(null);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const cardMenuRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const reduceMotion = useReducedMotion();
   const pillTransition = reduceMotion
     ? { duration: 0 }
     : { type: "spring" as const, stiffness: 520, damping: 40, mass: 0.7 };
-  const scrollTagBar = (direction: 1 | -1) => {
-    const el = tagBarRef.current;
-    if (el) el.scrollBy({ left: direction * el.clientWidth * 0.7, behavior: "smooth" });
-  };
+
+  const updateViewMode = useCallback((next: PhraseViewMode) => {
+    setViewMode(next);
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleGroupByTag = useCallback(() => {
+    setGroupByTag((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(GROUP_BY_TAG_STORAGE_KEY, String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleGroupCollapsed = useCallback((groupKey: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      try {
+        localStorage.setItem(COLLAPSED_GROUPS_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const openCreateModal = useCallback(() => {
+    setComposerState({ open: true, phrase: null });
+  }, []);
+
+  const openEditModal = useCallback((phrase: QuickPhrase, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingTagPhraseId(null);
+    setComposerState({ open: true, phrase });
+  }, []);
 
   useEffect(() => {
-    if (isCreatingTag && tagBarRef.current) {
-      tagBarRef.current.scrollTo({
-        left: tagBarRef.current.scrollWidth,
-        behavior: "smooth",
-      });
-    }
-  }, [isCreatingTag]);
+    if (!moreMenuOpen) return;
+    const onPointerDown = (ev: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(ev.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [moreMenuOpen]);
 
-  // Tag custom colors state & realtime sync
-  const [tagColors, setTagColors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!cardMenu) return;
+    const handleOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (cardMenuRef.current?.contains(target) || target.closest(".phrase-card-more-btn")) {
+        return;
+      }
+      setCardMenu(null);
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCardMenu(null);
+    };
+    const handleScrollOrResize = () => setCardMenu(null);
+    window.addEventListener("mousedown", handleOutside, true);
+    window.addEventListener("keydown", handleEsc, true);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      window.removeEventListener("mousedown", handleOutside, true);
+      window.removeEventListener("keydown", handleEsc, true);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [cardMenu]);
 
   const fetchTagColors = useCallback(async () => {
     try {
       const colors = await invoke<Record<string, string>>("get_tag_colors");
-      if (colors) {
-        setTagColors(colors);
-      }
+      if (colors) setTagColors(colors);
     } catch (e) {
       console.error("fetchTagColors error:", e);
     }
   }, []);
-
-  useEffect(() => {
-    fetchTagColors();
-    let unlisten: (() => void) | undefined;
-    listen("tag-colors-updated", () => {
-      fetchTagColors();
-    }).then((off) => {
-      unlisten = off;
-    });
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, [fetchTagColors]);
-
-  const handleUpdateTagColor = async (tag: string, newColor: string) => {
-    try {
-      setTagColors((prev) => ({ ...prev, [tag]: newColor }));
-      await invoke("set_tag_color", { name: tag, color: newColor });
-      await emit("tag-colors-updated");
-      pushToast(`已修改 #${tag} 颜色`);
-    } catch (err) {
-      console.error("set_tag_color error:", err);
-    }
-  };
-
-  const resolveTagBg = useCallback(
-    (tName: string) => tagColors[tName] || getTagColor(tName, theme),
-    [tagColors, theme]
-  );
-
-  // Card inline tag editing
-  const [editingTagPhraseId, setEditingTagPhraseId] = useState<number | null>(null);
-  const [inlineTagInput, setInlineTagInput] = useState("");
-
-  // Card inline title/content editing
-  const [editingContentPhraseId, setEditingContentPhraseId] = useState<number | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editSensitive, setEditSensitive] = useState(false);
-
-  // Bottom new phrase creation form (replaces modal)
-  const [isCreatingPhrase, setIsCreatingPhrase] = useState(false);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-
-  // 确保页面与祖先容器顶置，防止任何 scrollIntoView 导致 Header 移出可视范围
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      const appContainer = document.querySelector(".app-container");
-      if (appContainer) appContainer.scrollTop = 0;
-      const mainContent = document.querySelector(".main-content");
-      if (mainContent) mainContent.scrollTop = 0;
-    }
-  }, []);
-
-  const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    setShowScrollTop(e.currentTarget.scrollTop > 80);
-  };
-
-  const scrollToTop = () => {
-    listContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  };
-  const [newPhraseTitle, setNewPhraseTitle] = useState("");
-  const [newPhraseContent, setNewPhraseContent] = useState("");
-  const [newPhraseTags, setNewPhraseTags] = useState<string[]>([]);
-  const [newPhraseTagInput, setNewPhraseTagInput] = useState("");
-  const [newPhraseSensitive, setNewPhraseSensitive] = useState(false);
-
-  const listContainerRef = useRef<HTMLDivElement | null>(null);
-  const bottomCreateRef = useRef<HTMLDivElement | null>(null);
 
   const fetchPhrases = useCallback(async () => {
     try {
@@ -184,146 +262,529 @@ export default function QuickPhrasesView({
 
   const fetchAllTags = useCallback(async () => {
     try {
-      const tagCounts = await invoke<Record<string, number>>("get_all_tags_info");
-      if (tagCounts) {
-        setSavedTags(Object.keys(tagCounts));
-      }
+      const counts = await invoke<Record<string, number>>("get_all_tags_info");
+      if (counts) setSavedTags(Object.keys(counts));
     } catch (err) {
       console.error("fetch tags error:", err);
     }
   }, []);
 
   useEffect(() => {
-    fetchPhrases();
-    fetchAllTags();
-    let unlisten: (() => void) | null = null;
+    void fetchPhrases();
+    void fetchAllTags();
+    void fetchTagColors();
+    let offPhrases: (() => void) | null = null;
+    let offColors: (() => void) | null = null;
     listen("quick-phrases-changed", () => {
-      fetchPhrases();
-      fetchAllTags();
+      void fetchPhrases();
+      void fetchAllTags();
     }).then((off) => {
-      unlisten = off;
+      offPhrases = off;
+    });
+    listen("tag-colors-updated", () => {
+      void fetchTagColors();
+    }).then((off) => {
+      offColors = off;
     });
     return () => {
-      if (unlisten) unlisten();
+      offPhrases?.();
+      offColors?.();
     };
-  }, [fetchPhrases, fetchAllTags]);
+  }, [fetchPhrases, fetchAllTags, fetchTagColors]);
 
-  // Extract all unique tags combining saved_tags and quick phrases
+  const resolveTagBg = useCallback(
+    (tName: string) => tagColors[tName] || getTagColor(tName, theme),
+    [tagColors, theme]
+  );
+
+  const handleUpdateTagColor = async (tag: string, newColor: string) => {
+    try {
+      setTagColors((prev) => ({ ...prev, [tag]: newColor }));
+      await invoke("set_tag_color", { name: tag, color: newColor });
+      await emit("tag-colors-updated");
+      pushToast(`#${tag}`);
+    } catch (err) {
+      console.error("set_tag_color error:", err);
+    }
+  };
+
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    phrases.forEach((p) => p.tags?.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
+    phrases.forEach((p) =>
+      p.tags?.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1))
+    );
     return counts;
   }, [phrases]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    savedTags.forEach((t) => {
-      if (t && t !== "sensitive") set.add(t);
+    savedTags.forEach((tg) => {
+      if (tg && tg !== "sensitive") set.add(tg);
     });
     phrases.forEach((p) => {
       p.tags?.forEach((tag) => {
         if (tag) set.add(tag);
       });
     });
-    return Array.from(set);
-  }, [savedTags, phrases]);
+    return rankPhraseTags(Array.from(set), tagCounts);
+  }, [savedTags, phrases, tagCounts]);
 
   useEffect(() => {
-    updateTagScrollMetrics();
-    const el = tagBarRef.current;
+    if (isWide) {
+      setHasOverflowTags(false);
+      return;
+    }
+    const el = tagWrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      updateTagScrollMetrics();
-    });
+    const measure = () => {
+      // Two rows max height is ~58px; check natural height even when clamped.
+      setHasOverflowTags(el.scrollHeight > 64);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [allTags, updateTagScrollMetrics]);
+  }, [allTags, isWide, isCreatingTag, tagsExpanded]);
 
-  useEffect(() => {
-    const el = tagBarRef.current;
-    const picked = el?.querySelector<HTMLElement>(".phrase-tag-filter.is-active");
-    if (!el || !picked) return;
-    const left = picked.offsetLeft - 28;
-    const right = picked.offsetLeft + picked.offsetWidth + 28 - el.clientWidth;
-    if (el.scrollLeft > left) el.scrollTo({ left, behavior: "smooth" });
-    else if (el.scrollLeft < right) el.scrollTo({ left: right, behavior: "smooth" });
-  }, [selectedTag, tagBarRef]);
-
-  // Filtered by tag & search
   const filteredPhrases = useMemo(() => {
-    return sortQuickPhrases(phrases.filter((p) => {
-      if (selectedTag && !p.tags?.includes(selectedTag)) {
-        return false;
-      }
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const inTitle = p.title.toLowerCase().includes(q);
-        const inContent = p.content.toLowerCase().includes(q);
-        const inTags = p.tags?.some((t) => t.toLowerCase().includes(q));
-        return inTitle || inContent || inTags;
-      }
-      return true;
-    }), pins, sortMode);
+    const rawSearch = search.trim();
+    const tagSearchMode = rawSearch.startsWith("#") || rawSearch.toLowerCase().startsWith("tag:");
+    const tagQuery = tagSearchMode
+      ? rawSearch.replace(/^(#|tag:)/i, "").trim()
+      : "";
+
+    return sortQuickPhrases(
+      phrases.filter((p) => {
+        if (selectedTag && !p.tags?.includes(selectedTag)) return false;
+        if (!rawSearch) return true;
+        if (tagSearchMode) {
+          if (!tagQuery) return Boolean(p.tags?.length);
+          return Boolean(p.tags?.some((tag) => matchesTextOrPinyin(tag, tagQuery)));
+        }
+        const inTitle = matchesTextOrPinyin(p.title, rawSearch);
+        const inContent = matchesTextOrPinyin(p.content, rawSearch);
+        const inTags = p.tags?.some((tag) => matchesTextOrPinyin(tag, rawSearch));
+        return Boolean(inTitle || inContent || inTags);
+      }),
+      pins,
+      sortMode
+    );
   }, [phrases, selectedTag, search, pins, sortMode]);
 
-  const toggleReveal = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setRevealedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const pinnedSet = useMemo(() => new Set(pins), [pins]);
+  const pinnedPhrases = useMemo(
+    () => filteredPhrases.filter((p) => pinnedSet.has(p.id)),
+    [filteredPhrases, pinnedSet]
+  );
+  const regularPhrases = useMemo(
+    () => filteredPhrases.filter((p) => !pinnedSet.has(p.id)),
+    [filteredPhrases, pinnedSet]
+  );
 
-  // 点击卡片直接：复制 + 关闭窗口 + 自动粘贴 (粘贴静音)
-  const handleCardClick = async (phrase: QuickPhrase, card?: Element | null) => {
-    try {
-      await showPasteConfirm(card ?? null);
-      await invoke("paste_quick_phrase", { id: phrase.id });
-    } catch (err) {
-      console.error("Paste quick phrase error:", err);
-      try {
-        await invoke("paste_text_directly", { content: phrase.content });
-      } catch (e2) {
-        console.error("Fallback paste error:", e2);
-        pushToast("粘贴失败");
+  const useGroupedSections = Boolean(
+    groupByTag && selectedTag === null && !search.trim() && regularPhrases.length > 0
+  );
+
+  const regularTagSections = useMemo(
+    () => (useGroupedSections ? buildPhraseTagSections(regularPhrases, allTags) : []),
+    [useGroupedSections, regularPhrases, allTags]
+  );
+
+  // Ordered visible phrases strictly following rendered order so keyboard arrows & Alt+1..9 stay aligned.
+  const orderedVisiblePhrases = useMemo(() => {
+    if (!useGroupedSections) return filteredPhrases;
+    const out: QuickPhrase[] = [...pinnedPhrases];
+    for (const sec of regularTagSections) {
+      if (!collapsedGroups.has(sec.key)) {
+        out.push(...sec.phrases);
       }
     }
-  };
+    return out;
+  }, [useGroupedSections, filteredPhrases, pinnedPhrases, regularTagSections, collapsedGroups]);
 
-  // 纯复制按钮：复制到剪贴板，播放复制音效，提示已复制，不关闭窗口
-  const handleCopyOnly = async (phrase: QuickPhrase, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const visibleIndexById = useMemo(() => {
+    const map = new Map<number, number>();
+    orderedVisiblePhrases.forEach((p, idx) => map.set(p.id, idx));
+    return map;
+  }, [orderedVisiblePhrases]);
+
+  useEffect(() => {
+    const isFiltered = Boolean(selectedTag || search.trim());
+    onCountsChange?.(phrases.length, filteredPhrases.length, isFiltered);
+  }, [phrases.length, filteredPhrases.length, selectedTag, search, onCountsChange]);
+
+  useEffect(() => {
+    setFocusedIndex((prev) =>
+      orderedVisiblePhrases.length === 0 ? 0 : Math.min(prev, orderedVisiblePhrases.length - 1)
+    );
+  }, [orderedVisiblePhrases.length]);
+
+  const quickComboById = useMemo(() => {
+    if (!quickPasteModifier || quickPasteModifier === "disabled") return {};
+    const prefix = MODIFIER_LABELS[quickPasteModifier];
+    const map: Record<number, string> = {};
+    orderedVisiblePhrases.slice(0, QUICK_PASTE_KEYS.length).forEach((p, idx) => {
+      map[p.id] = `${prefix}${QUICK_PASTE_KEYS[idx]}`;
+    });
+    return map;
+  }, [orderedVisiblePhrases, quickPasteModifier]);
+
+  const executePhrasePaste = useCallback(
+    async (phrase: QuickPhrase, card?: Element | null) => {
+      if (extractInteractiveSlots(phrase.content).length > 0) {
+        setFillModalPhrase(phrase);
+        return;
+      }
+      try {
+        await showPasteConfirm(card ?? null);
+        await invoke("paste_quick_phrase", { id: phrase.id });
+      } catch (err) {
+        console.error("Paste quick phrase error:", err);
+        try {
+          await invoke("paste_text_directly", { content: phrase.content });
+        } catch (e2) {
+          console.error("Fallback paste error:", e2);
+          pushToast(t("transform_failed"));
+        }
+      }
+    },
+    [pushToast, t]
+  );
+
+  const executePhraseCopy = useCallback(
+    async (phrase: QuickPhrase) => {
+      if (extractInteractiveSlots(phrase.content).length > 0) {
+        setFillModalPhrase(phrase);
+        return;
+      }
+      try {
+        await invoke<string>("copy_quick_phrase", { id: phrase.id });
+        setCopiedId(phrase.id);
+        pushToast(`${t("phrase_copied")}: ${phrase.title}`);
+        setTimeout(() => setCopiedId(null), 1800);
+      } catch (err) {
+        try {
+          await navigator.clipboard.writeText(phrase.content);
+          setCopiedId(phrase.id);
+          pushToast(`${t("phrase_copied")}: ${phrase.title}`);
+          setTimeout(() => setCopiedId(null), 1800);
+          invoke("mark_quick_phrase_used", { id: phrase.id }).catch(() => {});
+        } catch (e2) {
+          console.error("Copy error:", err, e2);
+        }
+      }
+    },
+    [pushToast, t]
+  );
+
+  const handleSaveComposer = useCallback(
+    async (draft: {
+      id: number;
+      title: string;
+      content: string;
+      tags: string[];
+      isSensitive: boolean;
+    }) => {
+      for (const tg of draft.tags) {
+        invoke("create_new_tag", { tagName: tg }).catch(() => {});
+      }
+      const existing = draft.id > 0 ? phrases.find((p) => p.id === draft.id) : undefined;
+      const payload: QuickPhrase = {
+        id: draft.id,
+        title: draft.title,
+        content: draft.content,
+        tags: draft.tags,
+        isSensitive: draft.isSensitive,
+        sortOrder: existing?.sortOrder ?? 0,
+        useCount: existing?.useCount ?? 0,
+        createdAt: existing?.createdAt ?? Date.now(),
+        updatedAt: Date.now(),
+      };
+      await invoke("save_quick_phrase", { phrase: payload });
+      await fetchPhrases();
+      await fetchAllTags();
+      pushToast(draft.id > 0 ? t("saved") : t("phrase_created_toast"));
+    },
+    [fetchAllTags, fetchPhrases, phrases, pushToast, t]
+  );
+
+  const handleDuplicatePhrase = useCallback(
+    async (phrase: QuickPhrase) => {
+      try {
+        await invoke("save_quick_phrase", {
+          phrase: {
+            id: 0,
+            title: `${phrase.title} (${t("phrase_copy_suffix")})`,
+            content: phrase.content,
+            tags: phrase.tags || [],
+            isSensitive: Boolean(phrase.isSensitive),
+            sortOrder: 0,
+            useCount: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          } satisfies QuickPhrase,
+        });
+        await fetchPhrases();
+        pushToast(t("phrase_duplicated_toast"));
+      } catch (err) {
+        console.error("duplicate phrase error:", err);
+      }
+    },
+    [fetchPhrases, pushToast, t]
+  );
+
+  const handleDelete = useCallback(
+    (phrase: QuickPhrase, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      openConfirm({
+        title: t("phrase_delete_confirm_title"),
+        message: `${t("phrase_delete_confirm_msg")} (${phrase.title})`,
+        danger: true,
+        onConfirm: async () => {
+          try {
+            await invoke("delete_quick_phrase", { id: phrase.id });
+            void fetchPhrases();
+          } catch (err) {
+            console.error("Delete error:", err);
+          }
+        },
+      });
+    },
+    [fetchPhrases, openConfirm, t]
+  );
+
+  const handleExportJson = () => {
+    setMoreMenuOpen(false);
     try {
-      await navigator.clipboard.writeText(phrase.content);
-      setCopiedId(phrase.id);
-      pushToast(`${t("phrase_copied")}: ${phrase.title}`);
-      setTimeout(() => setCopiedId(null), 1800);
-      invoke("mark_quick_phrase_used", { id: phrase.id }).catch(() => {});
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        phrases: phrases.map((p) => ({
+          title: p.title,
+          content: p.content,
+          tags: p.tags || [],
+          isSensitive: Boolean(p.isSensitive),
+        })),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      a.href = url;
+      a.download = `AuraClip-Phrases-${day}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      pushToast(t("phrase_exported_toast").replace("{n}", String(phrases.length)));
     } catch (err) {
-      console.error("Copy error:", err);
+      console.error("export phrases error:", err);
     }
   };
 
-  const handleDelete = (phrase: QuickPhrase, e: React.MouseEvent) => {
-    e.stopPropagation();
-    openConfirm({
-      title: t("phrase_delete_confirm_title"),
-      message: `${t("phrase_delete_confirm_msg")} (${phrase.title})`,
-      danger: true,
-      onConfirm: async () => {
-        try {
-          await invoke("delete_quick_phrase", { id: phrase.id });
-          fetchPhrases();
-        } catch (err) {
-          console.error("Delete error:", err);
+  const handleImportJsonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      const list: Array<Partial<QuickPhrase>> = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.phrases)
+          ? parsed.phrases
+          : [];
+      const existingContents = new Set(phrases.map((p) => p.content.trim()));
+      let importedCount = 0;
+      for (const row of list) {
+        const content = typeof row.content === "string" ? row.content.trim() : "";
+        if (!content || existingContents.has(content)) continue;
+        existingContents.add(content);
+        const tags = Array.isArray(row.tags)
+          ? row.tags.filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+          : [];
+        for (const tg of tags) {
+          invoke("create_new_tag", { tagName: tg }).catch(() => {});
         }
-      },
-    });
+        await invoke("save_quick_phrase", {
+          phrase: {
+            id: 0,
+            title:
+              typeof row.title === "string" && row.title.trim()
+                ? row.title.trim()
+                : derivePhraseTitleFromContent(content),
+            content,
+            tags,
+            isSensitive: Boolean(row.isSensitive),
+            sortOrder: 0,
+            useCount: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          } satisfies QuickPhrase,
+        });
+        importedCount++;
+      }
+      await fetchPhrases();
+      await fetchAllTags();
+      pushToast(t("phrase_imported_toast").replace("{n}", String(importedCount)));
+    } catch (err) {
+      console.error("import phrases error:", err);
+      pushToast(t("phrase_import_failed"));
+    }
   };
 
-  // 顶部新建全局分类标签
+  useEffect(() => {
+    const target = orderedVisiblePhrases[focusedIndex];
+    if (!target) return;
+    const el = listContainerRef.current?.querySelector<HTMLElement>(
+      `[data-phrase-id="${target.id}"]`
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [focusedIndex, orderedVisiblePhrases]);
+
+  const stepSelectedTag = useCallback(
+    (delta: -1 | 1) => {
+      const cycle: Array<string | null> = [null, ...allTags];
+      const currentIdx = cycle.indexOf(selectedTag);
+      const nextIdx = (Math.max(0, currentIdx) + delta + cycle.length) % cycle.length;
+      setSelectedTag(cycle[nextIdx]);
+      setFocusedIndex(0);
+    },
+    [allTags, selectedTag]
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing || fillModalPhrase || composerState.open) return;
+      if (document.querySelector(".modal-overlay")) return;
+
+      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
+      const inEditable =
+        activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT";
+      const inHeaderSearch =
+        document.activeElement?.classList.contains("search-input") ?? false;
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        openCreateModal();
+        return;
+      }
+
+      if (isCreatingTag || editingTagPhraseId !== null) return;
+
+      if (quickPasteModifier && quickPasteModifier !== "disabled") {
+        const modMatch =
+          (quickPasteModifier === "ctrl" && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) ||
+          (quickPasteModifier === "alt" && e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey) ||
+          (quickPasteModifier === "shift" && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) ||
+          (quickPasteModifier === "win" && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey);
+        if (modMatch) {
+          const slotIdx = QUICK_PASTE_KEYS.indexOf(
+            e.key as (typeof QUICK_PASTE_KEYS)[number]
+          );
+          if (slotIdx >= 0 && orderedVisiblePhrases[slotIdx]) {
+            e.preventDefault();
+            const target = orderedVisiblePhrases[slotIdx];
+            void executePhrasePaste(
+              target,
+              document.querySelector(`[data-phrase-id="${target.id}"]`)
+            );
+            return;
+          }
+        }
+      }
+
+      if (inEditable && !inHeaderSearch) return;
+
+      if (!inEditable && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "[" || e.key === "]")) {
+        e.preventDefault();
+        stepSelectedTag(e.key === "[" ? -1 : 1);
+        return;
+      }
+
+      const selected = orderedVisiblePhrases[focusedIndex];
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex((prev) =>
+          Math.min(prev + 1, Math.max(0, orderedVisiblePhrases.length - 1))
+        );
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex((prev) => Math.max(prev - 1, 0));
+      } else if (e.key === "Enter" && selected) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          void executePhraseCopy(selected);
+        } else {
+          void executePhrasePaste(
+            selected,
+            document.querySelector(`[data-phrase-id="${selected.id}"]`)
+          );
+        }
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "e" &&
+        selected
+      ) {
+        e.preventDefault();
+        openEditModal(selected);
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "d" &&
+        selected
+      ) {
+        e.preventDefault();
+        void handleDuplicatePhrase(selected);
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "k" &&
+        selected &&
+        !selected.isSensitive &&
+        onOpenTransformText
+      ) {
+        e.preventDefault();
+        onOpenTransformText(selected.title, selected.content);
+      } else if (e.key === "Delete" && !inEditable && selected) {
+        e.preventDefault();
+        if (pinnedSet.has(selected.id)) {
+          pushToast(t("keyboard_delete_pinned"), 2200);
+        } else {
+          handleDelete(selected);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    composerState.open,
+    editingTagPhraseId,
+    executePhraseCopy,
+    executePhrasePaste,
+    fillModalPhrase,
+    focusedIndex,
+    handleDelete,
+    handleDuplicatePhrase,
+    isCreatingTag,
+    onOpenTransformText,
+    openCreateModal,
+    openEditModal,
+    orderedVisiblePhrases,
+    pinnedSet,
+    pushToast,
+    quickPasteModifier,
+    stepSelectedTag,
+    t,
+  ]);
+
   const handleCreateTopTag = async () => {
     const trimmed = newTagName.trim();
     if (!trimmed) {
@@ -334,1070 +795,613 @@ export default function QuickPhrasesView({
       await invoke("create_new_tag", { tagName: trimmed });
       setIsCreatingTag(false);
       setNewTagName("");
-      fetchAllTags();
+      await fetchAllTags();
       setSelectedTag(trimmed);
-      pushToast(`已创建标签: #${trimmed}`);
+      pushToast(`#${trimmed}`);
     } catch (err) {
       console.error("create tag error:", err);
       setIsCreatingTag(false);
     }
   };
 
-
-
-  // 卡片内联添加标签
-  const handleAddTagToPhrase = async (phrase: QuickPhrase, tagToAdd: string) => {
-    const trimmed = tagToAdd.trim();
-    if (!trimmed) return;
-    const currentTags = phrase.tags || [];
-    if (currentTags.includes(trimmed)) return;
-    const updatedTags = [...currentTags, trimmed];
-    try {
-      await invoke("create_new_tag", { tagName: trimmed }).catch(() => {});
-      await invoke("save_quick_phrase", { phrase: { ...phrase, tags: updatedTags } });
-      setInlineTagInput("");
-      fetchPhrases();
-      fetchAllTags();
-    } catch (err) {
-      console.error("add tag to phrase error:", err);
-    }
-  };
-
-  // 卡片内联移除标签
-  const handleRemoveTagFromPhrase = async (phrase: QuickPhrase, tagToRemove: string) => {
-    const currentTags = phrase.tags || [];
-    const updatedTags = currentTags.filter((t) => t !== tagToRemove);
-    try {
-      await invoke("save_quick_phrase", { phrase: { ...phrase, tags: updatedTags } });
-      fetchPhrases();
-      fetchAllTags();
-    } catch (err) {
-      console.error("remove tag from phrase error:", err);
-    }
-  };
-
-  // 启动卡片内联标题/内容编辑
-  const startEditingContent = (phrase: QuickPhrase, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingContentPhraseId(phrase.id);
-    setEditTitle(phrase.title);
-    setEditContent(phrase.content);
-    setEditSensitive(phrase.isSensitive || false);
-    setEditingTagPhraseId(null);
-  };
-
-  // 保存卡片内联标题/内容编辑
-  const saveEditingContent = async (phrase: QuickPhrase, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!editContent.trim()) {
-      pushToast("内容不能为空");
-      return;
-    }
-    try {
-      const updated: QuickPhrase = {
-        ...phrase,
-        title: editTitle.trim() || editContent.trim().slice(0, 20),
-        content: editContent.trim(),
-        isSensitive: editSensitive,
-        updatedAt: Date.now(),
-      };
-      await invoke("save_quick_phrase", { phrase: updated });
-      setEditingContentPhraseId(null);
-      fetchPhrases();
-      pushToast("已保存修改");
-    } catch (err) {
-      console.error("Save content error:", err);
-    }
-  };
-
-  // 保存底部新建短语
-  const handleSaveNewPhrase = async () => {
-    if (!newPhraseContent.trim()) {
-      pushToast("请输入短语内容");
-      return;
-    }
-    try {
-      const phrase: QuickPhrase = {
-        id: 0,
-        title: newPhraseTitle.trim() || newPhraseContent.trim().slice(0, 20),
-        content: newPhraseContent.trim(),
-        tags: newPhraseTags,
-        isSensitive: newPhraseSensitive,
-        sortOrder: 0,
-        useCount: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      for (const t of newPhraseTags) {
-        invoke("create_new_tag", { tagName: t }).catch(() => {});
+  const handleAddTagToPhrase = useCallback(
+    async (phrase: QuickPhrase, tagToAdd: string) => {
+      const trimmed = tagToAdd.trim();
+      if (!trimmed) return;
+      const currentTags = phrase.tags || [];
+      if (currentTags.includes(trimmed)) return;
+      try {
+        await invoke("create_new_tag", { tagName: trimmed }).catch(() => {});
+        await invoke("save_quick_phrase", {
+          phrase: { ...phrase, tags: [...currentTags, trimmed] },
+        });
+        setInlineTagInput("");
+        await fetchPhrases();
+        await fetchAllTags();
+      } catch (err) {
+        console.error("add tag to phrase error:", err);
       }
-      await invoke("save_quick_phrase", { phrase });
-      setIsCreatingPhrase(false);
-      setNewPhraseTitle("");
-      setNewPhraseContent("");
-      setNewPhraseTags([]);
-      setNewPhraseTagInput("");
-      setNewPhraseSensitive(false);
-      fetchPhrases();
-      fetchAllTags();
-      pushToast("已成功新建常用短语");
-    } catch (err) {
-      console.error("Save new phrase error:", err);
-    }
+    },
+    [fetchAllTags, fetchPhrases]
+  );
+
+  const handleRemoveTagFromPhrase = useCallback(
+    async (phrase: QuickPhrase, tagToRemove: string) => {
+      const updatedTags = (phrase.tags || []).filter((tg) => tg !== tagToRemove);
+      try {
+        await invoke("save_quick_phrase", { phrase: { ...phrase, tags: updatedTags } });
+        await fetchPhrases();
+        await fetchAllTags();
+      } catch (err) {
+        console.error("remove tag from phrase error:", err);
+      }
+    },
+    [fetchAllTags, fetchPhrases]
+  );
+
+  const toggleReveal = useCallback((id: number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setRevealedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const focusedPhrase = orderedVisiblePhrases[focusedIndex] ?? orderedVisiblePhrases[0] ?? null;
+
+  const handleCardPaste = useCallback(
+    (p: QuickPhrase, el: Element | null) => {
+      void executePhrasePaste(p, el);
+    },
+    [executePhrasePaste]
+  );
+
+  const handleCardCopy = useCallback(
+    (p: QuickPhrase) => {
+      void executePhraseCopy(p);
+    },
+    [executePhraseCopy]
+  );
+
+  const handleCardTogglePin = useCallback(
+    (id: number) => {
+      void togglePin(id);
+    },
+    [togglePin]
+  );
+
+  const handleCardDuplicate = useCallback(
+    (p: QuickPhrase) => {
+      void handleDuplicatePhrase(p);
+    },
+    [handleDuplicatePhrase]
+  );
+
+  const handleCardAddTag = useCallback(
+    (p: QuickPhrase, tg: string) => {
+      void handleAddTagToPhrase(p, tg);
+    },
+    [handleAddTagToPhrase]
+  );
+
+  const handleCardRemoveTag = useCallback(
+    (p: QuickPhrase, tg: string) => {
+      void handleRemoveTagFromPhrase(p, tg);
+    },
+    [handleRemoveTagFromPhrase]
+  );
+
+  const handleScrollTop = useCallback(() => {
+    listContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const renderCard = (phrase: QuickPhrase) => {
+    const globalIdx = visibleIndexById.get(phrase.id) ?? 0;
+    return (
+      <PhraseVaultCard
+        key={phrase.id}
+        phrase={phrase}
+        globalIdx={globalIdx}
+        viewMode={viewMode}
+        isFocused={globalIdx === focusedIndex}
+        isPinned={pinnedSet.has(phrase.id)}
+        isRevealed={revealedIds.has(phrase.id)}
+        isJustCopied={copiedId === phrase.id}
+        isEditingTag={editingTagPhraseId === phrase.id}
+        isCardMenuOpen={cardMenu?.id === phrase.id}
+        cardMenu={cardMenu}
+        cardMenuRef={cardMenuRef}
+        quickCombo={quickComboById[phrase.id]}
+        allTags={allTags}
+        inlineTagInput={inlineTagInput}
+        theme={theme}
+        splitActive={splitActive}
+        t={t}
+        resolveTagBg={resolveTagBg}
+        onFocusIndex={setFocusedIndex}
+        onPaste={handleCardPaste}
+        onCopy={handleCardCopy}
+        onToggleReveal={toggleReveal}
+        onTogglePin={handleCardTogglePin}
+        onEdit={openEditModal}
+        onDuplicate={handleCardDuplicate}
+        onDelete={handleDelete}
+        onOpenTransformText={onOpenTransformText}
+        onToggleCardMenu={setCardMenu}
+        onToggleInlineTagEdit={setEditingTagPhraseId}
+        onInlineTagInputChange={setInlineTagInput}
+        onAddTagToPhrase={handleCardAddTag}
+        onRemoveTagFromPhrase={handleCardRemoveTag}
+      />
+    );
   };
 
-  // 键盘快捷导航
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        isCreatingTag ||
-        editingContentPhraseId !== null ||
-        editingTagPhraseId !== null ||
-        isCreatingPhrase
-      ) {
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setFocusedIndex((prev) => Math.min(prev + 1, Math.max(0, filteredPhrases.length - 1)));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setFocusedIndex((prev) => Math.max(prev - 1, 0));
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        setFocusedIndex((prev) => Math.min(prev + 1, Math.max(0, filteredPhrases.length - 1)));
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        setFocusedIndex((prev) => Math.max(prev - 1, 0));
-      } else if (e.key === "Enter" && filteredPhrases.length > 0) {
-        const item = filteredPhrases[focusedIndex];
-        if (item) {
-          e.preventDefault();
-          handleCardClick(item, document.querySelector(`[data-phrase-id="${item.id}"]`));
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    filteredPhrases,
-    focusedIndex,
-    isCreatingTag,
-    editingContentPhraseId,
-    editingTagPhraseId,
-    isCreatingPhrase,
-  ]);
+  const renderPhraseItems = (items: QuickPhrase[]) =>
+    viewMode === "grid" ? (
+      <div className="phrase-vault-grid">{items.map(renderCard)}</div>
+    ) : (
+      items.map(renderCard)
+    );
+
+  const renderTagCreator = () =>
+    isCreatingTag ? (
+      <input
+        type="text"
+        className="app-input phrase-new-tag-input"
+        autoFocus
+        value={newTagName}
+        onChange={(e) => setNewTagName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void handleCreateTopTag();
+          } else if (e.key === "Escape") {
+            setIsCreatingTag(false);
+            setNewTagName("");
+          }
+        }}
+        onBlur={() => {
+          if (newTagName.trim()) void handleCreateTopTag();
+          else {
+            setIsCreatingTag(false);
+            setNewTagName("");
+          }
+        }}
+        placeholder={t("enter_tag_name")}
+      />
+    ) : (
+      <button
+        type="button"
+        onClick={() => setIsCreatingTag(true)}
+        className={`phrase-tag-add${isWide ? " phrase-rail-add" : ""}`}
+        title={t("add_tag")}
+      >
+        <Plus size={12} />
+        <span>{t("add_tag")}</span>
+      </button>
+    );
 
   return (
-    <div
-      className="quick-phrases-view"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        width: "100%",
-        flex: 1,
-        minHeight: 0,
-        overflow: "hidden",
-        position: "relative",
-      }}
-    >
-      {/* 顶部标签筛选栏 (只保留分类胶囊与新建标签，彻底杜绝横向截断) */}
-      {/* 顶部标签筛选栏整体容器 (左侧自适应可滑动标签栏 + 右侧固定标签管理按钮) */}
-      <div
-        className="phrase-tagbar"
-        data-scroll-start={tagScrollProgress.canScroll && (tagBarRef.current?.scrollLeft ?? 0) > 4 ? "" : undefined}
-        data-scroll-end={tagScrollProgress.canScroll && tagScrollProgress.thumbLeftRatio < 0.995 ? "" : undefined}
-      >
-        <div className="phrase-tagbar-track">
-        <motion.div
-          layoutScroll
-          ref={tagBarRef}
-          role="tablist"
-          aria-label={t("phrase_all_tags")}
-          onScroll={updateTagScrollMetrics}
-          onWheel={handleTagBarWheel}
-          onPointerDown={handleBarPointerDown}
-          onPointerMove={handleBarPointerMove}
-          onPointerUp={handleBarPointerUp}
-          style={{ cursor: tagScrollProgress.canScroll ? "grab" : "default" }}
-          className="phrase-tagbar-scroll hide-scrollbar"
-        >
-          <button
-            type="button"
-            role="tab"
-            onClick={() => setSelectedTag(null)}
-            className={`phrase-tag-filter${selectedTag === null ? " is-active" : ""}`}
-            aria-selected={selectedTag === null}
-          >
-            {selectedTag === null && (
-              <motion.span layoutId="phrase-tag-pill" className="phrase-tag-pill" transition={pillTransition} />
-            )}
-            <span className="phrase-tag-filter-name">{t("phrase_all_tags")}</span>
-            <span className="phrase-tag-filter-count">{phrases.length}</span>
-          </button>
-
-          {allTags.map((tag) => {
-            const isSelected = selectedTag === tag;
-            const bg = resolveTagBg(tag);
-
-            return (
+    <div className="quick-phrases-view">
+      <div className="phrase-tagbar">
+        <div className="phrase-vault-toolbar">
+          <div className="phrase-vault-toolbar-left">
+            <div className="phrase-view-segmented" role="group" aria-label={t("phrase_view_compact")}>
               <button
-                key={tag}
-                className={`phrase-tag-filter${isSelected ? " is-active" : ""}`}
-                role="tab"
-                aria-selected={isSelected}
                 type="button"
-                onClick={() => setSelectedTag(isSelected ? null : tag)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  document.getElementById(`tag-color-input-${tag}`)?.click();
-                }}
-                title={`点击筛选 #${tag}，右键修改颜色`}
-                style={{ "--tag-color": bg } as React.CSSProperties}
+                className={`phrase-view-btn${viewMode === "compact" ? " is-active" : ""}`}
+                onClick={() => updateViewMode("compact")}
+                title={t("phrase_view_compact")}
+                aria-label={t("phrase_view_compact")}
+                aria-pressed={viewMode === "compact"}
               >
-                {isSelected && (
-                  <motion.span layoutId="phrase-tag-pill" className="phrase-tag-pill" transition={pillTransition} />
-                )}
-                <span className="phrase-tag-filter-dot" />
-                <span className="phrase-tag-filter-name">{tag}</span>
-                {tagCounts.get(tag) ? <span className="phrase-tag-filter-count">{tagCounts.get(tag)}</span> : null}
-                <input
-                  type="color"
-                  id={`tag-color-input-${tag}`}
-                  style={{ display: "none" }}
-                  value={tagColors[tag] || bg}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => handleUpdateTagColor(tag, e.target.value)}
-                />
+                <Rows3 size={13} />
               </button>
-            );
-          })}
-
-          {/* 新建标签小按钮 / 内联输入框 */}
-          {isCreatingTag ? (
-            <div style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-              <input
-                type="text"
-                className="app-input"
-                autoFocus
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleCreateTopTag();
-                  } else if (e.key === "Escape") {
-                    setIsCreatingTag(false);
-                    setNewTagName("");
-                  }
-                }}
-                onBlur={() => {
-                  if (newTagName.trim()) {
-                    handleCreateTopTag();
-                  } else {
-                    setIsCreatingTag(false);
-                    setNewTagName("");
-                  }
-                }}
-                placeholder="回车创建标签..."
-                style={{
-                  height: "26px",
-                  padding: "2px 10px",
-                  fontSize: "12px",
-                  borderRadius: "14px",
-                  width: "110px",
-                  border: "1px solid var(--accent-color)",
-                }}
-              />
+              <button
+                type="button"
+                className={`phrase-view-btn${viewMode === "grid" ? " is-active" : ""}`}
+                onClick={() => updateViewMode("grid")}
+                title={t("phrase_view_grid")}
+                aria-label={t("phrase_view_grid")}
+                aria-pressed={viewMode === "grid"}
+              >
+                <LayoutGrid size={13} />
+              </button>
+              <button
+                type="button"
+                className={`phrase-view-btn${viewMode === "cards" ? " is-active" : ""}`}
+                onClick={() => updateViewMode("cards")}
+                title={t("phrase_view_cards")}
+                aria-label={t("phrase_view_cards")}
+                aria-pressed={viewMode === "cards"}
+              >
+                <SquareStack size={13} />
+              </button>
             </div>
-          ) : (
+
+            {selectedTag === null && !search.trim() && (
+              <button
+                type="button"
+                className={`phrase-group-toggle${groupByTag ? " is-active" : ""}`}
+                onClick={toggleGroupByTag}
+                title={t("phrase_group_by_tag")}
+                aria-pressed={groupByTag}
+              >
+                <FolderTree size={12} />
+                <span>{t("phrase_group_by_tag")}</span>
+              </button>
+            )}
+
+            <span className="phrase-vault-hint">{t("phrase_tags_nav_hint")}</span>
+          </div>
+
+          <div className="phrase-tagbar-side">
             <button
               type="button"
-              onClick={() => setIsCreatingTag(true)}
-              className="phrase-tag-add"
-              title="新建分类标签"
+              className="phrase-top-create-btn"
+              onClick={openCreateModal}
+              title={`${t("add_quick_phrase")} (Ctrl+N)`}
             >
-              <Plus size={12} />
-              <span>标签</span>
+              <Plus size={13} />
+              <span>{t("phrase_new_short")}</span>
             </button>
-          )}
-        </motion.div>
-          {tagScrollProgress.canScroll && (
+
+            <div className="phrase-more-wrap" ref={moreMenuRef}>
+              <button
+                type="button"
+                className={`btn-icon phrase-tag-manage${moreMenuOpen ? " active" : ""}`}
+                onClick={() => setMoreMenuOpen((v) => !v)}
+                title={t("more_actions")}
+                aria-label={t("more_actions")}
+              >
+                <MoreHorizontal size={15} />
+              </button>
+              {moreMenuOpen && (
+                <div className="phrase-more-popover" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="phrase-more-item"
+                    onClick={handleExportJson}
+                  >
+                    <Download size={13} />
+                    <span>{t("phrase_export_json")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="phrase-more-item"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <Upload size={13} />
+                    <span>{t("phrase_import_json")}</span>
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="sr-only-color-input"
+                onChange={(e) => void handleImportJsonFile(e)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {!isWide && (
+          <div
+            ref={tagWrapRef}
+            className={`phrase-tagbar-wrap${tagsExpanded ? " is-expanded" : ""}`}
+            role="tablist"
+            aria-label={t("phrase_all_tags")}
+          >
+            <button
+              type="button"
+              role="tab"
+              onClick={() => {
+                setSelectedTag(null);
+                setFocusedIndex(0);
+              }}
+              className={`phrase-tag-filter${selectedTag === null ? " is-active" : ""}`}
+              aria-selected={selectedTag === null}
+            >
+              {selectedTag === null && (
+                <motion.span
+                  layoutId="phrase-tag-pill"
+                  className="phrase-tag-pill"
+                  transition={pillTransition}
+                />
+              )}
+              <span className="phrase-tag-filter-name">{t("phrase_all_tags")}</span>
+              <span className="phrase-tag-filter-count">{phrases.length}</span>
+            </button>
+
+            {allTags.map((tag) => {
+              const isSelected = selectedTag === tag;
+              const bg = resolveTagBg(tag);
+              return (
+                <button
+                  key={tag}
+                  className={`phrase-tag-filter${isSelected ? " is-active" : ""}`}
+                  role="tab"
+                  aria-selected={isSelected}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTag(isSelected ? null : tag);
+                    setFocusedIndex(0);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById(`tag-color-input-${tag}`)?.click();
+                  }}
+                  title={`#${tag}`}
+                  style={{ "--tag-color": bg } as React.CSSProperties}
+                >
+                  {isSelected && (
+                    <motion.span
+                      layoutId="phrase-tag-pill"
+                      className="phrase-tag-pill"
+                      transition={pillTransition}
+                    />
+                  )}
+                  <span className="phrase-tag-filter-dot" />
+                  <span className="phrase-tag-filter-name">{tag}</span>
+                  {tagCounts.get(tag) ? (
+                    <span className="phrase-tag-filter-count">{tagCounts.get(tag)}</span>
+                  ) : null}
+                  <input
+                    type="color"
+                    id={`tag-color-input-${tag}`}
+                    className="sr-only-color-input"
+                    value={tagColors[tag] || bg}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => void handleUpdateTagColor(tag, e.target.value)}
+                  />
+                </button>
+              );
+            })}
+
+            {renderTagCreator()}
+
+            {(hasOverflowTags || tagsExpanded) && (
+              <button
+                type="button"
+                className="phrase-tag-expand-btn"
+                onClick={() => setTagsExpanded((v) => !v)}
+                aria-expanded={tagsExpanded}
+                title={tagsExpanded ? t("phrase_tags_collapse") : t("phrase_tags_expand")}
+              >
+                <ChevronDown
+                  size={12}
+                  style={{ transform: tagsExpanded ? "rotate(180deg)" : undefined }}
+                />
+                <span>{tagsExpanded ? t("phrase_tags_collapse") : t("phrase_tags_expand")}</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div
+        className={`phrase-workspace-body${isWide ? " has-rail" : ""}${splitActive ? " is-split" : ""}`}
+      >
+        {isWide && (
+          <aside className="phrase-tag-rail hide-scrollbar" aria-label={t("phrase_all_tags")}>
+            <button
+              type="button"
+              className={`phrase-rail-item${selectedTag === null ? " is-active" : ""}`}
+              onClick={() => {
+                setSelectedTag(null);
+                setFocusedIndex(0);
+              }}
+            >
+              <span className="phrase-rail-item-lead">
+                <span className="phrase-rail-item-label">{t("phrase_all_tags")}</span>
+              </span>
+              <span className="phrase-tag-filter-count">{phrases.length}</span>
+            </button>
+
+            <div className="phrase-rail-divider" role="separator" />
+
+            {allTags.map((tag) => {
+              const isSelected = selectedTag === tag;
+              const bg = resolveTagBg(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`phrase-rail-item${isSelected ? " is-active" : ""}`}
+                  onClick={() => {
+                    setSelectedTag(isSelected ? null : tag);
+                    setFocusedIndex(0);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById(`rail-tag-color-input-${tag}`)?.click();
+                  }}
+                  title={`#${tag}`}
+                  style={{ "--tag-color": bg } as React.CSSProperties}
+                >
+                  <span className="phrase-rail-item-lead">
+                    <span className="phrase-tag-filter-dot" />
+                    <span className="phrase-rail-item-label">{tag}</span>
+                  </span>
+                  {tagCounts.get(tag) ? (
+                    <span className="phrase-tag-filter-count">{tagCounts.get(tag)}</span>
+                  ) : null}
+                  <input
+                    type="color"
+                    id={`rail-tag-color-input-${tag}`}
+                    className="sr-only-color-input"
+                    value={tagColors[tag] || bg}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => void handleUpdateTagColor(tag, e.target.value)}
+                  />
+                </button>
+              );
+            })}
+
+            {renderTagCreator()}
+          </aside>
+        )}
+
+        <div
+          ref={listContainerRef}
+          className="quick-phrases-scroll-container"
+          onScroll={(e) => {
+            const next = e.currentTarget.scrollTop > 80;
+            setShowScrollTop((prev) => (prev === next ? prev : next));
+          }}
+        >
+          {filteredPhrases.length === 0 ? (
+            <div className="phrase-empty-state">
+              <Sparkles size={28} />
+              <p>{t("phrase_empty_tip")}</p>
+              <button
+                type="button"
+                className="phrase-top-create-btn"
+                onClick={openCreateModal}
+              >
+                <Plus size={13} />
+                <span>{t("add_quick_phrase")}</span>
+              </button>
+            </div>
+          ) : (
             <>
-              <button
-                type="button"
-                className="phrase-tagbar-arrow is-start"
-                aria-label="向左"
-                tabIndex={-1}
-                onClick={() => scrollTagBar(-1)}
-              >
-                <ChevronLeft size={14} strokeWidth={2.4} />
-              </button>
-              <button
-                type="button"
-                className="phrase-tagbar-arrow is-end"
-                aria-label="向右"
-                tabIndex={-1}
-                onClick={() => scrollTagBar(1)}
-              >
-                <ChevronRight size={14} strokeWidth={2.4} />
-              </button>
+              {pinnedPhrases.length > 0 && (
+                <>
+                  <div className="list-section-header is-pinned">
+                    <span className="list-section-title">{t("section_pinned")}</span>
+                    <span className="list-section-count">{pinnedPhrases.length}</span>
+                  </div>
+                  {renderPhraseItems(pinnedPhrases)}
+                </>
+              )}
+
+              {useGroupedSections ? (
+                regularTagSections.map((section) => {
+                  const collapsed = collapsedGroups.has(section.key);
+                  const groupColor =
+                    section.key === UNTAGGED_GROUP_KEY ? undefined : resolveTagBg(section.key);
+                  return (
+                    <section key={section.key} className="phrase-group-section">
+                      <button
+                        type="button"
+                        className={`phrase-group-header${collapsed ? " is-collapsed" : ""}`}
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleGroupCollapsed(section.key)}
+                      >
+                        <span className="phrase-group-header-lead">
+                          <ChevronDown size={12} className="phrase-group-chevron" />
+                          {groupColor && (
+                            <span
+                              className="phrase-tag-filter-dot"
+                              style={{ "--tag-color": groupColor } as React.CSSProperties}
+                            />
+                          )}
+                          <span>
+                            {section.label ? section.label : t("phrase_untagged_group")}
+                          </span>
+                        </span>
+                        <span className="list-section-count">{section.phrases.length}</span>
+                      </button>
+                      {!collapsed && renderPhraseItems(section.phrases)}
+                    </section>
+                  );
+                })
+              ) : (
+                <>
+                  {pinnedPhrases.length > 0 && regularPhrases.length > 0 && (
+                    <div className="list-section-header">
+                      <span className="list-section-title">{t("phrase_section_library")}</span>
+                      <span className="list-section-count">{regularPhrases.length}</span>
+                    </div>
+                  )}
+                  {renderPhraseItems(regularPhrases)}
+                </>
+              )}
             </>
           )}
         </div>
 
-        {/* 右侧常驻固定“标签管理”小图标 (类似于剪贴板顶栏的小标签图标，点击直达全屏标签管理) */}
-        {onOpenTagManager && (
-          <div className="phrase-tagbar-side">
-            <button
-              type="button"
-              className="btn-icon phrase-tag-manage"
-              onClick={onOpenTagManager}
-              title="标签管理 (点击进入全屏标签管理，可自定义标签颜色、名称等)"
-              aria-label="标签管理"
-            >
-              <TagIcon size={15} />
-            </button>
-          </div>
+        {splitActive && (
+          <aside className="main-split-detail phrase-split-detail">
+            <PhraseDetailPane
+              phrase={focusedPhrase}
+              isPinned={focusedPhrase ? pinnedSet.has(focusedPhrase.id) : false}
+              isRevealed={focusedPhrase ? revealedIds.has(focusedPhrase.id) : false}
+              clipboardPreviewText={clipboardPreviewText}
+              t={t}
+              onPaste={(p) =>
+                void executePhrasePaste(
+                  p,
+                  document.querySelector(`[data-phrase-id="${p.id}"]`)
+                )
+              }
+              onCopy={(p) => void executePhraseCopy(p)}
+              onTogglePin={(p) => void togglePin(p.id)}
+              onToggleReveal={(p) => toggleReveal(p.id)}
+              onEdit={(p) => openEditModal(p)}
+              onDuplicate={(p) => void handleDuplicatePhrase(p)}
+              onTransform={(p) => onOpenTransformText?.(p.title, p.content)}
+              onDelete={(p) => handleDelete(p)}
+              onClose={onCloseSplitView}
+            />
+          </aside>
         )}
       </div>
 
-      {/* 常用语紧凑单列滚动列表 */}
-      <div
-        ref={listContainerRef}
-        className="quick-phrases-scroll-container"
-        onScroll={handleListScroll}
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          overflowX: "hidden",
-          padding: "4px var(--layout-list-padding-x)",
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr)",
-          gap: "4px",
-          alignContent: "start",
+      <ScrollToTopButton
+        visible={showScrollTop}
+        label={t("scroll_to_top")}
+        onClick={handleScrollTop}
+      />
+
+      <PhraseComposerModal
+        open={composerState.open}
+        initialPhrase={composerState.phrase}
+        defaultTag={selectedTag}
+        allTags={allTags}
+        resolveTagBg={resolveTagBg}
+        clipboardPreviewText={clipboardPreviewText}
+        t={t}
+        onSave={handleSaveComposer}
+        onClose={() => setComposerState({ open: false, phrase: null })}
+      />
+
+      <PhraseFillModal
+        phrase={fillModalPhrase}
+        clipboardPreviewText={clipboardPreviewText}
+        t={t}
+        onClose={() => setFillModalPhrase(null)}
+        onConfirmPaste={(expanded) => {
+          const target = fillModalPhrase;
+          setFillModalPhrase(null);
+          if (target) {
+            invoke("mark_quick_phrase_used", { id: target.id }).catch(() => {});
+          }
+          invoke("paste_text_directly", { content: expanded }).catch(console.error);
         }}
-      >
-        {filteredPhrases.length === 0 && !isCreatingPhrase ? (
-          <div
-            style={{
-              gridColumn: "1 / -1",
-              textAlign: "center",
-              padding: "36px 20px",
-              opacity: 0.6,
-              fontSize: "13px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "10px",
-            }}
-          >
-            <Sparkles size={28} opacity={0.5} />
-            <p style={{ margin: 0 }}>{t("phrase_empty_tip")}</p>
-          </div>
-        ) : (
-          filteredPhrases.map((phrase, idx) => {
-            const isRevealed = revealedIds.has(phrase.id);
-            const isFocused = idx === focusedIndex;
-            const isJustCopied = copiedId === phrase.id;
-            const isEditingTag = editingTagPhraseId === phrase.id;
-            const isEditingContent = editingContentPhraseId === phrase.id;
-
-            // 候选标签（已存在但该短语尚未添加的标签）
-            const phraseExistingTags = new Set(phrase.tags || []);
-            const candidateTags = allTags
-              .filter((t) => !phraseExistingTags.has(t))
-              .filter((t) => !inlineTagInput || t.toLowerCase().includes(inlineTagInput.toLowerCase()));
-
-            return (
-              <div
-                key={phrase.id}
-                data-phrase-id={phrase.id}
-                className={`aurora-phrase-card${isFocused ? " is-focused" : ""}${isJustCopied ? " is-copied" : ""}`}
-                onClick={(e) => {
-                  if (!isEditingTag && !isEditingContent) {
-                    handleCardClick(phrase, e.currentTarget);
-                  }
-                }}
-                onMouseEnter={() => setFocusedIndex(idx)}
-                title={isEditingTag || isEditingContent ? "" : "点击直接填入当前光标位置"}
-                style={{
-                  gridColumn: "1 / -1",
-                  cursor: isEditingTag || isEditingContent ? "default" : "pointer",
-                  display: isEditingTag || isEditingContent ? "flex" : "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) auto",
-                  alignItems: "center",
-                  columnGap: "8px",
-                  rowGap: "2px",
-                  flexDirection: "column",
-                  transition: "background var(--duration-base), border-color var(--duration-base), box-shadow var(--duration-base), transform var(--duration-slow) cubic-bezier(0.34, 1.4, 0.64, 1)",
-                  position: "relative",
-                  minWidth: 0,
-                  boxSizing: "border-box",
-                }}
-              >
-                {/* 状态 1: 正在内联编辑内容 */}
-                {isEditingContent ? (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ display: "flex", flexDirection: "column", gap: "8px" }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-color, #4f7dff)" }}>
-                        编辑常用短语
-                      </span>
-                      <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", opacity: 0.8, cursor: "pointer" }}>
-                        <input
-                          type="checkbox"
-                          checked={editSensitive}
-                          onChange={(e) => setEditSensitive(e.target.checked)}
-                        />
-                        <Lock size={11} />
-                        设为保密
-                      </label>
-                    </div>
-
-                    <input
-                      type="text"
-                      className="app-input"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      placeholder="标题 (如: 常用手机号)"
-                      style={{ padding: "4px 8px", fontSize: "12px", borderRadius: "4px" }}
-                    />
-
-                    <textarea
-                      className="app-input"
-                      rows={3}
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      placeholder="内容..."
-                      style={{ padding: "6px 8px", fontSize: "12px", borderRadius: "4px", resize: "vertical" }}
-                      autoFocus
-                    />
-
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px", marginTop: "2px" }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingContentPhraseId(null);
-                        }}
-                        className="btn-icon"
-                        style={{ padding: "4px 10px", fontSize: "11px", borderRadius: "4px" }}
-                      >
-                        取消
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => saveEditingContent(phrase, e)}
-                        className="btn-icon"
-                        style={{
-                          padding: "4px 12px",
-                          fontSize: "11px",
-                          borderRadius: "4px",
-                          background: "var(--accent-color, #4f7dff)",
-                          color: "#fff",
-                          fontWeight: 600,
-                        }}
-                      >
-                        保存
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* 标题栏与操作按钮 */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px", gridColumn: "1 / -1", minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "4px", minWidth: 0, flex: 1 }}>
-                        {phrase.isSensitive && (
-                          <Lock size={11} style={{ opacity: 0.65, flexShrink: 0, color: "var(--accent-color, #4f7dff)" }} />
-                        )}
-                        <span
-                          className="aurora-phrase-title"
-                          style={{
-                            fontWeight: 600,
-                            fontSize: "var(--layout-meta-font-size)",
-                            color: "var(--text-secondary)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            letterSpacing: "0.2px",
-                          }}
-                          title={phrase.title}
-                        >
-                          {phrase.title}
-                        </span>
-                        {pins.includes(phrase.id) && <Pin size={10} aria-label="已置顶" style={{ color: "var(--accent-color)", flexShrink: 0 }} />}
-
-                        {isJustCopied && (
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "2px",
-                              color: "#10b981",
-                              fontWeight: 600,
-                              flexShrink: 0,
-                              marginLeft: "2px",
-                            }}
-                          >
-                            <Check size={10} /> 复制
-                          </span>
-                        )}
-                      </div>
-
-                      <span className="aurora-phrase-stats" style={{ fontSize: "10px", color: "var(--text-secondary)", opacity: 0.72, whiteSpace: "nowrap" }}>
-                        使用 {phrase.useCount || 0} 次 · {new Date(phrase.updatedAt || phrase.createdAt).toLocaleDateString()}
-                      </span>
-                      {/* 动作按钮区 */}
-                      <div
-                        className="item-actions aurora-phrase-actions"
-                        style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {phrase.isSensitive && (
-                          <button
-                            type="button"
-                            onClick={(e) => toggleReveal(phrase.id, e)}
-                            className="btn-icon"
-                            title={isRevealed ? "隐藏内容" : "显示明文"}
-                            style={{ padding: "3px", opacity: 0.7 }}
-                          >
-                            {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={(e) => handleCopyOnly(phrase, e)}
-                          className="btn-icon"
-                          title="仅复制到剪贴板"
-                          style={{ padding: "3px", opacity: 0.8 }}
-                        >
-                          {isJustCopied ? <Check size={12} color="#10b981" /> : <Copy size={13} />}
-                        </button>
-
-                        <button type="button" className="btn-icon" title={pins.includes(phrase.id) ? "取消置顶" : "置顶"}
-                          aria-label={pins.includes(phrase.id) ? "取消置顶" : "置顶"}
-                          onClick={(e) => { e.stopPropagation(); void togglePin(phrase.id); }}>
-                          {pins.includes(phrase.id) ? <PinOff size={13} /> : <Pin size={13} />}
-                        </button>
-
-                        {/* 标签管理按钮：完全复用剪贴板端，点击展开内联标签面板 */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingTagPhraseId(isEditingTag ? null : phrase.id);
-                            setInlineTagInput("");
-                          }}
-                          className={`btn-icon ${isEditingTag ? "active" : ""}`}
-                          title="管理标签"
-                          style={{
-                            padding: "3px",
-                            color: isEditingTag ? "var(--accent-color, #4f7dff)" : "inherit",
-                            opacity: isEditingTag ? 1 : 0.7,
-                          }}
-                        >
-                          <TagIcon size={13} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => startEditingContent(phrase, e)}
-                          className="btn-icon"
-                          title="编辑短语"
-                          style={{ padding: "3px", opacity: 0.7 }}
-                        >
-                          <Edit2 size={13} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => handleDelete(phrase, e)}
-                          className="btn-icon"
-                          title={t("delete")}
-                          style={{ padding: "3px", opacity: 0.7, color: "var(--danger-color, #e74c3c)" }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 内容预览 */}
-                    <div
-                      className="aurora-phrase-content"
-                      style={{
-                        fontSize: "var(--clipboard-item-font-size)",
-                        color: "var(--text-primary)",
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        fontFamily: phrase.isSensitive && !isRevealed ? "monospace" : "inherit",
-                        letterSpacing: phrase.isSensitive && !isRevealed ? "2px" : "normal",
-                        padding: 0,
-                      }}
-                    >
-                      {phrase.isSensitive && !isRevealed ? "••••••••••••••••" : phrase.content}
-                    </div>
-
-                    {/* 标签展示区与内联标签编辑器 (对标剪贴板端 Image 2) */}
-                    <div
-                      className={`item-tags-container${isEditingTag ? " tag-edit-active" : ""}`}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                        gap: "4px",
-                        marginTop: 0,
-                        justifyContent: "flex-end",
-                        minWidth: 0,
-                      }}
-                    >
-                      {phrase.tags?.map((t) => {
-                        const bg = resolveTagBg(t);
-                        return (
-                          <span
-                            key={t}
-                            className="tag-chip"
-                            style={{
-                              "--tag-color": bg,
-                              background: `color-mix(in srgb, ${bg} 17%, var(--bg-panel, #fff))`,
-                              color: "var(--text-secondary, #536179)",
-                              fontSize: "11px",
-                              padding: "2px 7px",
-                              borderRadius: "10px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "3px",
-                            } as React.CSSProperties}
-                          >
-                            #{t}
-                            {isEditingTag && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveTagFromPhrase(phrase, t);
-                                }}
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  padding: 0,
-                                  color: "inherit",
-                                  opacity: 0.75,
-                                  cursor: "pointer",
-                                  display: "flex",
-                                  alignItems: "center",
-                                }}
-                              >
-                                <X size={10} />
-                              </button>
-                            )}
-                          </span>
-                        );
-                      })}
-
-                      {!isEditingTag && !phrase.tags?.length && (
-                        <button type="button" className="aurora-add-tag" onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingTagPhraseId(phrase.id);
-                          setInlineTagInput("");
-                        }} aria-label="为短语添加标签">＋ 添加标签</button>
-                      )}
-
-                      {/* 内联添加标签控件与候选弹层 */}
-                      {isEditingTag && (
-                        <div
-                          className="tag-edit-anchor"
-                          style={{
-                            position: "relative",
-                            display: "inline-flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <div
-                            className="tag-edit-input-row"
-                            style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}
-                          >
-                            <input
-                              type="text"
-                              value={inlineTagInput}
-                              onChange={(e) => setInlineTagInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  handleAddTagToPhrase(phrase, inlineTagInput);
-                                } else if (e.key === "Escape") {
-                                  setEditingTagPhraseId(null);
-                                }
-                              }}
-                              className="tag-input"
-                              placeholder="输入标签名..."
-                              autoFocus
-                              style={{
-                                background: "var(--bg-input, rgba(128,128,128,0.1))",
-                                border: "1px solid rgba(128,128,128,0.2)",
-                                borderRadius: "4px",
-                                padding: "2px 6px",
-                                fontSize: "11px",
-                                color: "var(--text-primary)",
-                                outline: "none",
-                                width: "80px",
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleAddTagToPhrase(phrase, inlineTagInput)}
-                              className="btn-icon"
-                              style={{ padding: "2px", height: "20px", width: "20px" }}
-                              title="添加新标签"
-                            >
-                              <Plus size={12} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingTagPhraseId(null)}
-                              className="btn-icon"
-                              style={{ padding: "2px", height: "20px", width: "20px" }}
-                              title="完成"
-                            >
-                              <Check size={12} color="#10b981" />
-                            </button>
-                          </div>
-
-                          {/* 候选已有标签浮层 (点选直接一键附加) */}
-                          {candidateTags.length > 0 && (
-                            <div
-                              className="tag-edit-suggestions-popover hide-scrollbar"
-                              style={{
-                                position: "absolute",
-                                left: 0,
-                                top: "calc(100% + 4px)",
-                                zIndex: 60,
-                                background: "var(--popover-background, #1e1e24)",
-                                border: "1px solid rgba(128,128,128,0.25)",
-                                borderRadius: "6px",
-                                padding: "4px",
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "4px",
-                                minWidth: "120px",
-                                maxWidth: "200px",
-                                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                              }}
-                            >
-                              {candidateTags.map((cTag) => {
-                                const bg = resolveTagBg(cTag);
-                                const fg = getTagTextColor(bg, theme);
-                                return (
-                                  <button
-                                    key={cTag}
-                                    type="button"
-                                    onClick={() => handleAddTagToPhrase(phrase, cTag)}
-                                    className="tag-suggest-item"
-                                    title={`点击添加 #${cTag}`}
-                                    style={{
-                                      border: "none",
-                                      background: "transparent",
-                                      padding: "1px 2px",
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    <span
-                                      className="tag-suggest-pill"
-                                      style={{
-                                        background: bg,
-                                        color: fg,
-                                        fontSize: "10px",
-                                        padding: "1px 6px",
-                                        borderRadius: "6px",
-                                      }}
-                                    >
-                                      +{cTag}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                  </>
-                )}
-              </div>
-            );
-          })
-        )}
-
-        {/* 底部新建常用短语按钮与内联创建表单 */}
-        {isCreatingPhrase ? (
-          <div
-            ref={bottomCreateRef}
-            style={{
-              gridColumn: "1 / -1",
-              padding: "12px",
-              borderRadius: "8px",
-              background: "rgba(79, 125, 255, 0.08)",
-              border: "1px solid var(--accent-color, #4f7dff)",
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              boxShadow: "0 2px 10px rgba(79, 125, 255, 0.2)",
-              marginTop: "4px",
-              marginBottom: "12px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--accent-color, #4f7dff)" }}>
-                新建常用短语
-              </span>
-              <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", opacity: 0.8, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={newPhraseSensitive}
-                  onChange={(e) => setNewPhraseSensitive(e.target.checked)}
-                />
-                <Lock size={11} />
-                设为保密 (默认以••••显示)
-              </label>
-            </div>
-
-            <input
-              type="text"
-              className="app-input"
-              value={newPhraseTitle}
-              onChange={(e) => setNewPhraseTitle(e.target.value)}
-              placeholder="常用语标题 (如: 个人手机号、工作邮箱、税号)"
-              style={{ padding: "6px 10px", fontSize: "12px", borderRadius: "6px" }}
-            />
-
-            <textarea
-              className="app-input"
-              rows={3}
-              value={newPhraseContent}
-              onChange={(e) => setNewPhraseContent(e.target.value)}
-              placeholder="输入常用内容 (点击后将直接填入当前光标位置)..."
-              style={{ padding: "8px 10px", fontSize: "12px", borderRadius: "6px", resize: "vertical" }}
-              autoFocus
-            />
-
-            {/* 标签直选区：点选已有标签，或输入新标签 */}
-            <div>
-              <div style={{ fontSize: "11px", opacity: 0.7, marginBottom: "4px" }}>短语分类标签:</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center", marginBottom: "6px" }}>
-                {newPhraseTags.map((t) => {
-                  const bg = resolveTagBg(t);
-                  const fg = getTagTextColor(bg, theme);
-                  return (
-                    <span
-                      key={t}
-                      style={{
-                        background: bg,
-                        color: fg,
-                        fontSize: "11px",
-                        padding: "2px 6px",
-                        borderRadius: "8px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "3px",
-                      }}
-                    >
-                      #{t}
-                      <button
-                        type="button"
-                        onClick={() => setNewPhraseTags(newPhraseTags.filter((tag) => tag !== t))}
-                        style={{ background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer" }}
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  );
-                })}
-
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
-                  <input
-                    type="text"
-                    value={newPhraseTagInput}
-                    onChange={(e) => setNewPhraseTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === ",") {
-                        e.preventDefault();
-                        const tr = newPhraseTagInput.trim();
-                        if (tr && !newPhraseTags.includes(tr)) {
-                          setNewPhraseTags([...newPhraseTags, tr]);
-                          setNewPhraseTagInput("");
-                        }
-                      }
-                    }}
-                    placeholder="输入标签按回车..."
-                    style={{
-                      padding: "2px 6px",
-                      fontSize: "11px",
-                      borderRadius: "4px",
-                      width: "90px",
-                      background: "rgba(128,128,128,0.1)",
-                      border: "1px solid rgba(128,128,128,0.2)",
-                      outline: "none",
-                      color: "inherit",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const tr = newPhraseTagInput.trim();
-                      if (tr && !newPhraseTags.includes(tr)) {
-                        setNewPhraseTags([...newPhraseTags, tr]);
-                        setNewPhraseTagInput("");
-                      }
-                    }}
-                    className="btn-icon"
-                    style={{ padding: "2px", height: "20px", width: "20px" }}
-                  >
-                    <Plus size={11} />
-                  </button>
-                </div>
-              </div>
-
-              {/* 快速点选全局已有标签 */}
-              {allTags.filter((t) => !newPhraseTags.includes(t)).length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px" }}>
-                  <span style={{ fontSize: "10px", opacity: 0.5 }}>点击直接添加已有标签:</span>
-                  {allTags
-                    .filter((t) => !newPhraseTags.includes(t))
-                    .map((existTag) => {
-                      const bg = resolveTagBg(existTag);
-                      const fg = getTagTextColor(bg, theme);
-                      return (
-                        <button
-                          key={existTag}
-                          type="button"
-                          onClick={() => setNewPhraseTags([...newPhraseTags, existTag])}
-                          style={{
-                            background: bg,
-                            color: fg,
-                            border: "none",
-                            borderRadius: "6px",
-                            padding: "1px 6px",
-                            fontSize: "10px",
-                            cursor: "pointer",
-                          }}
-                        >
-                          +{existTag}
-                        </button>
-                      );
-                    })}
-                </div>
-              )}
-            </div>
-
-            {/* 操作按钮 */}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "4px" }}>
-              <button
-                type="button"
-                onClick={() => setIsCreatingPhrase(false)}
-                className="btn-icon"
-                style={{ padding: "6px 12px", fontSize: "12px", borderRadius: "6px" }}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveNewPhrase}
-                className="btn-icon"
-                style={{
-                  padding: "6px 14px",
-                  fontSize: "12px",
-                  borderRadius: "6px",
-                  background: "var(--accent-color, #4f7dff)",
-                  color: "#ffffff",
-                  fontWeight: 600,
-                  boxShadow: "0 2px 6px rgba(79, 125, 255, 0.35)",
-                }}
-              >
-                保存并创建
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setIsCreatingPhrase(true);
-              setTimeout(() => {
-                if (listContainerRef.current) {
-                  listContainerRef.current.scrollTo({
-                    top: listContainerRef.current.scrollHeight,
-                    behavior: "smooth",
-                  });
-                }
-              }, 60);
-            }}
-            style={{
-              gridColumn: "1 / -1",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              padding: "10px",
-              borderRadius: "8px",
-              border: "1px dashed rgba(79, 125, 255, 0.45)",
-              background: "rgba(79, 125, 255, 0.05)",
-              color: "var(--accent-color, #4f7dff)",
-              fontSize: "13px",
-              fontWeight: 500,
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-              marginTop: "4px",
-              marginBottom: "12px",
-              flexShrink: 0,
-            }}
-          >
-            <Plus size={15} />
-            <span>新建常用短语</span>
-          </button>
-        )}
-      </div>
-
-      {/* 回到顶部悬浮按钮 (与剪切板一致，滚落时出现，一键无缝滑回顶端) */}
-      {showScrollTop && (
-        <button
-          type="button"
-          onClick={scrollToTop}
-          className="btn-icon"
-          style={{
-            position: "absolute",
-            right: "20px",
-            bottom: "20px",
-            zIndex: 40,
-            width: "36px",
-            height: "36px",
-            borderRadius: "50%",
-            background: "var(--accent-color, #4f7dff)",
-            color: "#ffffff",
-            boxShadow: "0 4px 14px rgba(0, 0, 0, 0.3)",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-          }}
-          aria-label="回到顶部"
-          title="回到顶部"
-        >
-          <ArrowUp size={18} />
-        </button>
-      )}
+        onConfirmCopy={(expanded) => {
+          const target = fillModalPhrase;
+          setFillModalPhrase(null);
+          if (target) {
+            invoke("mark_quick_phrase_used", { id: target.id }).catch(() => {});
+          }
+          navigator.clipboard
+            .writeText(expanded)
+            .then(() => pushToast(t("copied")))
+            .catch(console.error);
+        }}
+      />
     </div>
   );
 }

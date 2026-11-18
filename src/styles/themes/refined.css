@@ -14,11 +14,17 @@
   --rf-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* ---- Header ---- */
+/* ---- Header & Footer Chrome ---- */
+
+:is(body.theme-acrylic, body.theme-mica) header,
+:is(body.theme-acrylic, body.theme-mica) .app-footer {
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
 
 :is(body.theme-acrylic, body.theme-mica) .header-actions .btn-icon {
   background: transparent;
-  border-color: transparent;
+  border: 1px solid transparent;
   box-shadow: none;
   color: var(--text-secondary);
   border-radius: var(--radius-md);
@@ -26,6 +32,7 @@
 
 :is(body.theme-acrylic, body.theme-mica) .header-actions .btn-icon:hover {
   background: var(--rf-hover);
+  border-color: var(--rf-hairline);
   color: var(--text-primary);
 }
 
@@ -34,13 +41,14 @@
 }
 
 :is(body.theme-acrylic, body.theme-mica) .header-actions .btn-icon.active {
-  background: transparent;
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent-color) 38%, transparent);
   color: var(--accent-color);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .header-back-btn {
-  background: transparent;
-  border-color: transparent;
+  background: var(--rf-fill);
+  border: 1px solid var(--rf-hairline);
   box-shadow: none;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
@@ -48,11 +56,12 @@
 
 :is(body.theme-acrylic, body.theme-mica) .header-back-btn:hover {
   background: var(--rf-hover);
+  border-color: var(--line-strong);
   color: var(--text-primary);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .main-tabs-segmented {
-  border: none;
+  border: 1px solid var(--rf-hairline);
   background: var(--rf-fill);
   border-radius: var(--radius-md);
 }
@@ -79,10 +88,10 @@
 /* ---- Search ---- */
 
 :is(body.theme-acrylic, body.theme-mica) .search-input {
-  background: var(--rf-fill);
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  box-shadow: none;
+  background: var(--bg-input);
+  border: var(--input-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-inset);
   transition:
     background var(--duration-base) ease,
     border-color var(--duration-base) ease,
@@ -90,47 +99,50 @@
 }
 
 :is(body.theme-acrylic, body.theme-mica) .search-input:hover {
-  background: var(--rf-hover);
+  border-color: var(--line-strong);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .search-input:focus {
   background: var(--bg-input);
-  border-color: color-mix(in srgb, var(--accent-color) 45%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-color) 58%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 16%, transparent);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .search-icon {
   color: var(--rf-meta);
 }
 
-/* ---- Category filters: text pills, the active one tinted ---- */
+/* ---- Category filters: modular pill rail ---- */
 
 :is(body.theme-acrylic, body.theme-mica) .search-type-filters {
-  gap: 2px;
+  gap: 4px;
 }
 
 :is(body.theme-acrylic, body.theme-mica) .search-type-filters .type-filter-chip {
   opacity: 1;
   padding: 4px 10px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--rf-fill);
   box-shadow: none;
   color: var(--text-secondary);
   font-weight: 500;
   transition:
     background var(--duration-base) ease,
+    border-color var(--duration-base) ease,
     color var(--duration-base) ease;
 }
 
 :is(body.theme-acrylic, body.theme-mica) .search-type-filters .type-filter-chip:hover {
   background: var(--rf-hover);
+  border-color: var(--rf-hairline);
   color: var(--text-primary);
   transform: none;
 }
 
 :is(body.theme-acrylic, body.theme-mica) .search-type-filters .type-filter-chip.active {
   background: var(--rf-selected);
+  border-color: color-mix(in srgb, var(--accent-color) 36%, transparent);
   color: var(--accent-color);
   font-weight: 600;
 }
@@ -140,26 +152,26 @@
           source · time            [actions on hover]                    */
 
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) {
-  border: none;
-  border-radius: var(--radius-lg);
-  padding: 9px 12px 8px;
-  margin-bottom: 3px;
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  padding: 10px 12px 8px;
+  margin-bottom: 6px;
   outline: none;
-  box-shadow: none;
+  box-shadow: var(--card-shadow);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact):hover:not(.selected, .keyboard-owns-list *, .list-pointer-selects *) {
   outline: none;
-  border-color: transparent;
-  background: color-mix(in srgb, var(--layout-item-background), var(--text-primary) 4%);
-  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.06);
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--layout-item-background), var(--text-primary) 5%);
+  box-shadow: var(--shadow-xs);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact).selected {
   outline: none;
-  border-color: transparent;
-  background: color-mix(in srgb, var(--layout-item-background), var(--accent-color) 12%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 38%, transparent);
+  border-color: color-mix(in srgb, var(--accent-color) 52%, transparent);
+  background: color-mix(in srgb, var(--layout-item-background), var(--accent-color) 13%);
+  box-shadow: var(--card-shadow), inset 3px 0 0 0 var(--accent-color);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .history-item.has-lead {
@@ -340,43 +352,55 @@
   font-weight: 600;
 }
 
-/* Actions: hidden until the row is hovered or selected, then fade in on a
-   small glass pill at the top right, over the content's end. */
-:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions {
+/* Actions: docked cleanly at the bottom-right meta row (never over preview text!),
+   hidden even when keyboard-selected (.selected), revealed only on pointer hover
+   or while the card's ··· overflow menu is open. Quick Phrase cards manage their
+   own inline header slot and are excluded here. */
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card) .item-actions {
   position: absolute;
-  top: 7px;
-  right: 8px;
+  bottom: 6px;
+  right: 10px;
+  top: auto;
   z-index: 30;
   display: flex;
-  gap: 1px;
+  gap: 2px;
   padding: 2px;
   border-radius: var(--radius-md);
-  background: var(--popover-background);
+  background: color-mix(in srgb, var(--popover-background) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   box-shadow:
-    0 1px 3px rgba(var(--shadow-rgb), 0.12),
+    0 2px 6px rgba(var(--shadow-rgb), 0.12),
     0 0 0 0.5px rgba(var(--shadow-rgb), 0.08);
   opacity: 0;
-  transform: translateY(-2px) scale(0.97);
+  transform: translateY(2px) scale(0.97);
   pointer-events: none;
   transition:
     opacity var(--duration-fast) ease,
     transform var(--duration-base) var(--rf-ease);
 }
 
-:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact):is(:hover, .selected, .editing-tags, .editing-note) .item-actions {
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card, .editing-tags, .editing-note):is(:hover:not(.keyboard-owns-list *), :has(.compact-more-btn.active)) .item-actions {
   opacity: 1;
   transform: none;
   pointer-events: auto;
 }
 
-/* hide_unselected_item_actions rules in clipboard-item.css also apply. */
-body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:not(.compact):is(:hover, .selected) .item-actions {
-  visibility: visible;
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card, .editing-tags, .editing-note):is(:hover:not(.keyboard-owns-list *), :has(.compact-more-btn.active)) .item-meta-right-info {
+  opacity: 0;
+  pointer-events: none;
 }
 
-:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon {
-  width: 24px;
-  height: 24px;
+/* hide_unselected_item_actions rules in clipboard-item.css also apply. */
+body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:not(.compact, .aurora-phrase-card, .editing-tags, .editing-note):is(:hover:not(.keyboard-owns-list *), :has(.compact-more-btn.active)) .item-actions {
+  visibility: visible;
+  width: auto;
+  overflow: visible;
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card) .item-actions .btn-icon {
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
   border-radius: 6px;
@@ -385,18 +409,22 @@ body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:
   color: var(--text-secondary);
 }
 
-:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon:hover {
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card) .item-actions .btn-icon:hover {
   background: var(--rf-hover);
   color: var(--text-primary);
   transform: none;
 }
 
-:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon.active {
-  background: transparent;
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card) .item-actions .btn-icon.active {
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
   color: var(--accent-color);
 }
 
-:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) .item-actions .btn-icon svg {
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card) .item-actions .btn-icon.card-delete-btn:hover {
+  color: var(--status-danger);
+}
+
+:is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact, .aurora-phrase-card) .item-actions .btn-icon svg {
   width: 13px;
   height: 13px;
 }
@@ -458,19 +486,10 @@ body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:
   z-index: 25;
 }
 
-/* Pinned rows: a small accent pin before the source name. */
-:is(body.theme-acrylic, body.theme-mica) .history-item.pinned:not(.compact) .app-info::before {
-  content: "";
-  width: 10px;
-  height: 10px;
-  flex: none;
-  background: var(--accent-color);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-
-:is(body.theme-acrylic, body.theme-mica) .history-item.pinned:not(.compact) .app-info > .lucide-pin {
-  display: none;
+/* Pinned rows use the shared .pinned-card-badge thumbtack chip across all themes. */
+:is(body.theme-acrylic, body.theme-mica) .history-item.pinned:not(.compact) .pinned-card-badge {
+  width: 16px;
+  height: 16px;
 }
 
 /* Tags: a soft tint of the tag's colour with text in the same hue, not a
@@ -510,77 +529,22 @@ body.hide-unselected-item-actions:is(.theme-acrylic, .theme-mica) .history-item:
 
 :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card {
   backdrop-filter: none;
-  border: none;
-  border-radius: var(--radius-lg);
-  padding: 10px 12px;
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card.is-focused {
-  border: none;
-  background: color-mix(in srgb, var(--layout-item-background), var(--text-primary) 4%);
-  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.06);
+  border-color: color-mix(in srgb, var(--accent-color) 48%, transparent);
+  background: color-mix(in srgb, var(--layout-item-background), var(--accent-color) 11%);
+  box-shadow: var(--card-shadow), inset 3px 0 0 0 var(--accent-color);
 }
 
 :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card.is-copied {
   background: color-mix(in srgb, var(--layout-item-background), var(--status-success) 12%);
 }
 
-/* Title names the phrase, so it leads; the stored value reads quieter. */
 :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-title {
-  color: var(--text-primary) !important; /* design-ok: beats the inline title colour */
-  font-size: var(--font-size-base) !important; /* design-ok: beats the inline title size */
-  letter-spacing: 0 !important; /* design-ok: beats the inline letter spacing */
-}
-
-:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-content {
-  color: var(--text-secondary) !important; /* design-ok: beats the inline content colour */
-  font-size: var(--font-size-sm) !important; /* design-ok: beats the inline content size */
-}
-
-:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-stats {
-  color: var(--rf-meta) !important; /* design-ok: beats the inline stats colour */
-  opacity: 1 !important; /* design-ok: beats the inline stats opacity */
-  font-size: var(--font-size-2xs);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Usage and date sit at the right end of the title row, where the action
-   buttons appear on hover; they trade places. */
-:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card .aurora-phrase-stats {
-  margin-left: auto;
-  transition: opacity var(--duration-fast) ease;
-}
-
-@media (hover: hover) {
-  :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card:is(:hover, :focus-within) .aurora-phrase-stats {
-    opacity: 0 !important; /* design-ok: beats the inline stats opacity */
-  }
-
-  :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card .aurora-phrase-actions {
-    position: absolute;
-    top: 6px;
-    right: 8px;
-  }
-
-  /* 添加标签 only when the card is under the pointer. */
-  :is(body.theme-acrylic, body.theme-mica) .aurora-phrase-card:not(:hover, :focus-within) .aurora-add-tag {
-    opacity: 0;
-  }
-}
-
-:is(body.theme-acrylic, body.theme-mica) .aurora-add-tag {
-  transition: opacity var(--duration-fast) ease, color var(--duration-base) ease;
-}
-
-:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-actions .btn-icon {
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-secondary);
-}
-
-:is(body.theme-acrylic, body.theme-mica) .aurora-phrase-actions .btn-icon:hover {
-  background: var(--rf-hover);
   color: var(--text-primary);
 }
 

@@ -86,32 +86,21 @@
   background: rgba(var(--status-success-rgb), 0.12);
 }
 
-/* Switching tabs: the new pane slides in from its side and fades up.
-   Opening the window: the list rises a few pixels as the window fades in. */
+/* Switching tabs: the new pane slides in subtly from its side. */
 .main-pane-enter-left {
-  animation: main-pane-in-left var(--duration-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: main-pane-in-left var(--duration-fast) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .main-pane-enter-right {
-  animation: main-pane-in-right var(--duration-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-body.just-shown .history-list-container,
-body.just-shown .quick-phrases-view {
-  animation: main-pane-rise var(--duration-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: main-pane-in-right var(--duration-fast) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes main-pane-in-left {
-  from { opacity: 0; transform: translateX(-8px); }
+  from { opacity: 0; transform: translateX(-4px); }
   to { opacity: 1; transform: none; }
 }
 
 @keyframes main-pane-in-right {
-  from { opacity: 0; transform: translateX(8px); }
-  to { opacity: 1; transform: none; }
-}
-
-@keyframes main-pane-rise {
-  from { opacity: 0.4; transform: translateY(6px); }
+  from { opacity: 0; transform: translateX(4px); }
   to { opacity: 1; transform: none; }
 }

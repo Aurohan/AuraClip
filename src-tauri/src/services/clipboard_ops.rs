@@ -1697,7 +1697,37 @@ fn handle_post_paste_actions(
     delete_after_use: bool,
     move_to_top: Option<bool>,
 ) -> AppResult<()> {
-    if delete_after_use {
+    let sms_auto_delete = if !delete_after_use && id != 0 {
+        let wants_sms_delete = state
+            .settings_repo
+            .get("app.mqtt_sms_delete_after_paste")
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        if wants_sms_delete {
+            if id > 0 {
+                state
+                    .repo
+                    .get_entry_by_id(id)
+                    .map(|e| e.is_some_and(|i| i.source_app == "mqtt"))
+                    .unwrap_or(false)
+            } else {
+                let session = app_handle.state::<crate::app_state::SessionHistory>();
+                let s = session.0.lock().unwrap();
+                s.iter()
+                    .find(|i| i.id == id)
+                    .map(|i| i.source_app == "mqtt")
+                    .unwrap_or(false)
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if delete_after_use || sms_auto_delete {
         // Fetch metadata to check for pinned or tagging protection
         let is_protected = if id != 0 {
             if id > 0 {

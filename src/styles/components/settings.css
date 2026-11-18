@@ -1247,7 +1247,7 @@
   background: var(--bg-panel);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-md);
 }
 
 .advanced-search-results-list {
@@ -1971,88 +1971,6 @@
   transition: transform var(--duration-base) ease, background var(--duration-base) ease, border-color var(--duration-base) ease;
 }
 
-.toggle > .left,
-.toggle > .right {
-  display: none;
-}
-
-.toggle > .left {
-  position: absolute;
-  width: 50%;
-  height: 88%;
-  background-color: var(--bg-element);
-  color: var(--text-primary);
-  left: 0;
-  bottom: 0;
-  align-items: center;
-  justify-content: center;
-  transform-origin: right;
-  transform: rotateX(10deg);
-  transform-style: preserve-3d;
-  transition: all var(--duration-base);
-  font-size: 0.65em;
-  font-weight: 900;
-}
-
-.toggle > .left::before {
-  position: absolute;
-  content: "OFF";
-  color: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  z-index: 1;
-}
-
-.toggle > .left::after {
-  position: absolute;
-  content: "";
-  width: 100%;
-  height: 100%;
-  background-color: var(--text-secondary);
-  opacity: 0.2;
-  transform-origin: center left;
-  transform: rotateY(90deg);
-  z-index: -1;
-}
-
-.toggle > .right {
-  position: absolute;
-  width: 50%;
-  height: 88%;
-  background-color: var(--bg-element);
-  color: var(--text-muted);
-  right: 1px;
-  bottom: 0;
-  align-items: center;
-  justify-content: center;
-  transform-origin: left;
-  transform: rotateX(10deg) rotateY(-45deg);
-  transform-style: preserve-3d;
-  transition: all var(--duration-base);
-  font-size: 0.65em;
-  font-weight: 900;
-}
-
-.toggle > .right::before {
-  position: absolute;
-  content: "ON";
-  color: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  z-index: 1;
-}
-
-.toggle > .right::after {
-  position: absolute;
-  content: "";
-  width: 100%;
-  height: 100%;
-  background-color: color-mix(in srgb, var(--bg-element) 78%, var(--line-strong));
-  transform-origin: center right;
-  transform: rotateY(-90deg);
-  z-index: -1;
-}
-
 .switch input:checked + .toggle {
   background: var(--switch-track-active-background);
   border-color: var(--switch-track-active-border-color);
@@ -2060,6 +1978,64 @@
 
 .switch input:checked + .toggle::before {
   transform: translateX(var(--switch-thumb-translate));
+}
+
+.hotkey-control-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.hotkey-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.hotkey-micro-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.hotkey-micro-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-color: var(--line-soft);
+  color: var(--text-primary);
+}
+
+.hotkey-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+
+.hotkey-scope-badge.is-global {
+  background: rgba(var(--accent-color-rgb), 0.14);
+  color: var(--accent-color);
+}
+
+.hotkey-scope-badge.is-window {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-secondary);
 }
 
 .key-group {
@@ -2120,6 +2096,70 @@
 
 .key-cap-empty {
   opacity: 0.5;
+}
+
+.key-cap-recording {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: rgba(var(--accent-color-rgb), 0.1);
+}
+
+.key-cap-live {
+  border-color: var(--accent-color);
+  background: rgba(var(--accent-color-rgb), 0.16);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.key-cap-recording-slot {
+  min-width: 36px;
+  border-style: dashed;
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: transparent;
+}
+
+.key-cap-readonly {
+  cursor: default;
+  height: 22px;
+  min-width: 24px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+}
+
+.shortcuts-cheatsheet-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
+  background: color-mix(in srgb, var(--bg-panel) 55%, transparent);
+}
+
+.shortcuts-cheatsheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--panel-divider-color);
+}
+
+.shortcuts-cheatsheet-row:last-child {
+  border-bottom: none;
+}
+
+.shortcuts-cheatsheet-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.shortcuts-cheatsheet-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 /* Recording prompts stack their lines; beats `.setting-item .hint` (block). */

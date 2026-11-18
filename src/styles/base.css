@@ -51,6 +51,17 @@
   /* File-type icons in file transfer. */
   /* LAN transfer avatars, one per sending device (tinted background, icon in the tone). */
 
+  /* Same-hue Aurora ice-blue luminous sweep derived from current theme --accent-color. */
+  --aurora-prism-conic: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--accent-color) 25%, transparent) 165deg,
+    color-mix(in srgb, var(--accent-color) 65%, var(--on-accent)) 245deg,
+    color-mix(in srgb, var(--accent-color) 92%, var(--on-accent)) 288deg,
+    var(--accent-color) 325deg,
+    transparent 360deg
+  );
+
   --line-soft: rgba(24, 34, 53, 0.12);
   --line-strong: rgba(24, 34, 53, 0.22);
   --shadow-xs: 0 4px 10px rgba(15, 23, 42, 0.08);

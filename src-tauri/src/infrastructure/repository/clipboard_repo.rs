@@ -1456,6 +1456,9 @@ impl ClipboardRepository for SqliteClipboardRepository {
                  WHERE (
                     (ch.content_type IN ('text','code','url','rich_text')
                      AND (ch.content LIKE '%' || ?1 || '%' OR ch.preview LIKE '%' || ?1 || '%'))
+                    OR (ch.content_type = 'image'
+                     AND ch.preview LIKE '[OCR] %'
+                     AND substr(ch.preview, 7) LIKE '%' || ?1 || '%')
                     OR ch.source_app LIKE '%' || ?1 || '%'
                     OR ch.note LIKE '%' || ?1 || '%'
                     OR EXISTS (
@@ -1561,6 +1564,9 @@ impl ClipboardRepository for SqliteClipboardRepository {
                        AND (
                          (ch.content_type IN ('text','code','url','rich_text')
                           AND (ch.content LIKE '%' || ?1 || '%' OR ch.preview LIKE '%' || ?1 || '%'))
+                         OR (ch.content_type = 'image'
+                          AND ch.preview LIKE '[OCR] %'
+                          AND substr(ch.preview, 7) LIKE '%' || ?1 || '%')
                          OR ch.source_app LIKE '%' || ?1 || '%'
                          OR ch.note LIKE '%' || ?1 || '%'
                          OR EXISTS (
@@ -1591,6 +1597,48 @@ impl ClipboardRepository for SqliteClipboardRepository {
             drop(conn);
             for entry in self.decrypt_rows_skipping_unreadable(raw_rows) {
                 if seen.insert(entry.id) { results.push(entry); }
+            }
+
+            // 1b) Pinyin scan for non-sensitive recent rows when query is ASCII letters/digits
+            if results.len() < limit as usize
+                && !tag_only
+                && term.len() >= 2
+                && term.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            {
+                let sql_pinyin_candidates = format!(
+                    "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.sort_at, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.note, ch.created_at, ch.last_used_at, ch.sort_at
+                     FROM clipboard_history ch
+                     WHERE NOT EXISTS (
+                         SELECT 1 FROM entry_tags se
+                         WHERE se.entry_id = ch.id
+                           AND se.tag COLLATE NOCASE IN {}
+                     )
+                     ORDER BY ch.sort_at DESC, ch.id DESC
+                     LIMIT 800",
+                    sensitive_tags_sql
+                );
+                let pinyin_raw_rows = {
+                    let conn = self.conn.lock().map_err(|e| e.to_string())?;
+                    let mut stmt = conn
+                        .prepare(&sql_pinyin_candidates)
+                        .map_err(|e| e.to_string())?;
+                    let rows = stmt
+                        .query_map([], Self::parse_raw_history_row)
+                        .map_err(|e| e.to_string())?;
+                    rows.collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| e.to_string())?
+                };
+                for entry in self.decrypt_rows_skipping_unreadable(pinyin_raw_rows) {
+                    if !seen.contains(&entry.id)
+                        && entry_matches_search(&entry, &term, tag_only, note_only)
+                        && seen.insert(entry.id)
+                    {
+                        results.push(entry);
+                        if results.len() >= limit as usize {
+                            break;
+                        }
+                    }
+                }
             }
 
             // 2) Decrypt-scan sensitive or encrypted entries (only if needed)

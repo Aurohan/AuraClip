@@ -236,3 +236,19 @@ pub async fn update_item_content(
     let _ = app_handle.emit("clipboard-changed", ());
     Ok(())
 }
+
+#[tauri::command]
+pub async fn extract_image_ocr(
+    app_handle: AppHandle,
+    id: i64,
+    force: Option<bool>,
+) -> AppResult<String> {
+    let force_run = force.unwrap_or(false);
+    let text = tokio::task::spawn_blocking(move || {
+        crate::services::ocr::index_image_entry_sync(&app_handle, id, force_run)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("OCR 线程异常: {e}")))?
+    .map_err(AppError::Validation)?;
+    Ok(text)
+}

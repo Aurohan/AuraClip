@@ -16,6 +16,8 @@ interface UseSettingsPanelPropsOptions {
   saveMqtt: (key: string, val: string) => void;
   handleResetSettings: () => void;
   toggleGroup: (group: string) => void;
+  initialSection?: string | null;
+  onInitialSectionConsumed?: () => void;
   state: AppState;
 }
 
@@ -29,6 +31,8 @@ export const useSettingsPanelProps = ({
   saveMqtt,
   handleResetSettings,
   toggleGroup,
+  initialSection,
+  onInitialSectionConsumed,
   state
 }: UseSettingsPanelPropsOptions): SettingsPanelProps => {
   const {
@@ -307,5 +311,7 @@ export const useSettingsPanelProps = ({
     setMqttNotificationEnabled,
     setShowAppSelector,
     handleResetSettings,
+    initialSection,
+    onInitialSectionConsumed,
   };
 };

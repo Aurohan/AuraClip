@@ -1,5 +1,5 @@
 /** How long the check mark shows before the window hides for the paste. */
-export const PASTE_CONFIRM_MS = 140;
+export const PASTE_CONFIRM_MS = 40;
 
 const CONFIRM_ATTR = "data-paste-confirm";
 

@@ -18,8 +18,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_LAYERED,
 };
 
-const FADE_IN: Duration = Duration::from_millis(140);
-const FADE_OUT: Duration = Duration::from_millis(110);
+const FADE_IN: Duration = Duration::from_millis(90);
+const FADE_OUT: Duration = Duration::from_millis(75);
 const FRAME: Duration = Duration::from_millis(8);
 
 /// Bench override `AURACLIP_FADE_SLOWDOWN=20`: fades 20 times slower, so a

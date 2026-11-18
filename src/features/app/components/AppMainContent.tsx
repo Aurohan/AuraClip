@@ -1,17 +1,20 @@
-import type { ClipboardSortMode } from "../types";
-import QuickPhrasesView from "../../quick-phrases/components/QuickPhrasesView";
-import PhraseTagManager from "../../quick-phrases/components/PhraseTagManager";
-import { memo, useCallback, type ComponentProps, type RefObject, type ReactNode } from "react";
+import type { ClipboardSortMode, QuickPasteModifier } from "../types";
+import { lazy, memo, Suspense, useCallback, type ComponentProps, type RefObject, type ReactNode } from "react";
 import { motion, Reorder, useDragControls } from "framer-motion";
 import type { DragControls } from "framer-motion";
-import { ArrowUp, Clipboard } from "lucide-react";
-import SettingsPanel from "../../settings/components/SettingsPanel";
+import { Clipboard } from "lucide-react";
+import ScrollToTopButton from "../../../shared/components/ScrollToTopButton";
 import { VirtualClipboardList } from "../../clipboard/components/VirtualClipboardList";
-import TagManager from "../../tag/components/TagManager";
 import type { ClipboardEntry } from "../../../shared/types";
 import type { VirtualClipboardListHandle } from "../../clipboard/types";
+import type SettingsPanelType from "../../settings/components/SettingsPanel";
 
-type SettingsPanelProps = ComponentProps<typeof SettingsPanel>;
+const QuickPhrasesView = lazy(() => import("../../quick-phrases/components/QuickPhrasesView"));
+const PhraseTagManager = lazy(() => import("../../quick-phrases/components/PhraseTagManager"));
+const SettingsPanel = lazy(() => import("../../settings/components/SettingsPanel"));
+const TagManager = lazy(() => import("../../tag/components/TagManager"));
+
+type SettingsPanelProps = ComponentProps<typeof SettingsPanelType>;
 type RenderItem = (
   item: ClipboardEntry,
   index: number,
@@ -21,6 +24,12 @@ type RenderItem = (
 
 interface AppMainContentProps {
   phraseSortMode: ClipboardSortMode;
+  quickPasteModifier?: QuickPasteModifier;
+  clipboardPreviewText?: string;
+  splitViewEnabled?: boolean;
+  onCloseSplitView?: () => void;
+  onPhraseCountsChange?: (total: number, filtered: number, isFiltered: boolean) => void;
+  onOpenTransformText?: (title: string, content: string) => void;
   t: (key: string) => string;
   mainTab?: "clipboard" | "phrases";
   pushToast: (msg: string, duration?: number) => void;
@@ -95,6 +104,12 @@ const SortableItem = memo(({
 
 const AppMainContent = ({
   phraseSortMode,
+  quickPasteModifier,
+  clipboardPreviewText,
+  splitViewEnabled,
+  onCloseSplitView,
+  onPhraseCountsChange,
+  onOpenTransformText,
   t,
   mainTab,
   pushToast,
@@ -103,7 +118,7 @@ const AppMainContent = ({
   privacyProtection,
   showSettings,
   showTagManager,
-  setShowTagManager,
+  setShowTagManager: _setShowTagManager,
   tagManagerEnabled,
   settingsPanelProps,
   filteredHistory,
@@ -160,15 +175,22 @@ const AppMainContent = ({
           overflow: "hidden"
         }}
       >
-        <QuickPhrasesView
-          sortMode={phraseSortMode}
-          t={t}
-          theme={theme}
-          search={search}
-          pushToast={pushToast}
-          openConfirm={openConfirm}
-          onOpenTagManager={() => setShowTagManager?.(true)}
-        />
+        <Suspense fallback={null}>
+          <QuickPhrasesView
+            sortMode={phraseSortMode}
+            t={t}
+            theme={theme}
+            search={search}
+            quickPasteModifier={quickPasteModifier}
+            clipboardPreviewText={clipboardPreviewText}
+            splitViewEnabled={splitViewEnabled}
+            onCloseSplitView={onCloseSplitView}
+            onCountsChange={onPhraseCountsChange}
+            onOpenTransformText={onOpenTransformText}
+            pushToast={pushToast}
+            openConfirm={openConfirm}
+          />
+        </Suspense>
       </motion.div>
     );
   }
@@ -180,16 +202,18 @@ const AppMainContent = ({
         animate={{ opacity: 1, x: 0 }}
         style={{ height: "100%", overflow: "hidden", boxSizing: "border-box", display: "flex", flexDirection: "column" }}
       >
-        {mainTab === "phrases" ? (
-          <PhraseTagManager
-            t={t}
-            theme={theme}
-            pushToast={pushToast}
-            openConfirm={openConfirm}
-          />
-        ) : (
-          <TagManager t={t} theme={theme} privacyProtection={privacyProtection} />
-        )}
+        <Suspense fallback={null}>
+          {mainTab === "phrases" ? (
+            <PhraseTagManager
+              t={t}
+              theme={theme}
+              pushToast={pushToast}
+              openConfirm={openConfirm}
+            />
+          ) : (
+            <TagManager t={t} theme={theme} privacyProtection={privacyProtection} />
+          )}
+        </Suspense>
       </motion.div>
     );
   }
@@ -197,7 +221,9 @@ const AppMainContent = ({
   if (showSettings) {
     return (
       <div className="settings-view">
-        <SettingsPanel {...settingsPanelProps} />
+        <Suspense fallback={null}>
+          <SettingsPanel {...settingsPanelProps} />
+        </Suspense>
       </div>
     );
   }
@@ -239,26 +265,38 @@ const AppMainContent = ({
             isKeyboardMode={isKeyboardMode}
             header={
               pinnedItems.length > 0 ? (
-                <Reorder.Group
-                  axis="y"
-                  values={orderedPinnedIds}
-                  onReorder={handlePinnedIdsReorder}
-                  className={isDraggingPinned ? "pinned-reorder dragging" : "pinned-reorder"}
-                  style={{ listStyle: "none", padding: 0 }}
-                >
-                  {pinnedItems.map((item, index) => (
-                    <SortableItem
-                      key={item.id}
-                      item={item}
-                      index={index}
-                      renderItem={renderItemContent}
-                      isFirst={index === 0}
-                      onDragStart={handlePinnedDragStart}
-                      onDragEnd={handlePinnedDragEnd}
-                      compactMode={compactMode}
-                    />
-                  ))}
-                </Reorder.Group>
+                <div className="pinned-section-block">
+                  <div className="list-section-header is-pinned">
+                    <span className="list-section-title">{t("section_pinned")}</span>
+                    <span className="list-section-count">{pinnedItems.length}</span>
+                  </div>
+                  <Reorder.Group
+                    axis="y"
+                    values={orderedPinnedIds}
+                    onReorder={handlePinnedIdsReorder}
+                    className={isDraggingPinned ? "pinned-reorder dragging" : "pinned-reorder"}
+                    style={{ listStyle: "none", padding: 0 }}
+                  >
+                    {pinnedItems.map((item, index) => (
+                      <SortableItem
+                        key={item.id}
+                        item={item}
+                        index={index}
+                        renderItem={renderItemContent}
+                        isFirst={index === 0}
+                        onDragStart={handlePinnedDragStart}
+                        onDragEnd={handlePinnedDragEnd}
+                        compactMode={compactMode}
+                      />
+                    ))}
+                  </Reorder.Group>
+                  {unpinnedItems.length > 0 && (
+                    <div className="list-section-header is-recent">
+                      <span className="list-section-title">{t("section_recent")}</span>
+                      <span className="list-section-count">{unpinnedItems.length}</span>
+                    </div>
+                  )}
+                </div>
               ) : null
             }
             renderItem={renderVirtualItem}
@@ -269,21 +307,7 @@ const AppMainContent = ({
             loadingLabel={t("loading")}
             loadMoreLabel={t("load_more")}
           />
-          {showScrollTop && (
-            <button
-              type="button"
-              className="btn-icon scroll-top-button"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onScrollTop();
-              }}
-              aria-label={t("scroll_to_top")}
-              title={t("scroll_to_top")}
-            >
-              <ArrowUp size={16} />
-            </button>
-          )}
+          <ScrollToTopButton visible={showScrollTop} label={t("scroll_to_top")} onClick={onScrollTop} />
         </div>
       )}
     </>

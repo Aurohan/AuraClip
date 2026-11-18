@@ -5,8 +5,8 @@ import {
   ArrowUpDown,
   Check,
   ChevronLeft,
-  Pin,
-  PinOff,
+  Columns2,
+  Hash,
   Search,
   Settings as SettingsIcon,
   Tag,
@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import PinGlyph from "../../../shared/components/PinGlyph";
 import { getTagColor } from "../../../shared/lib/utils";
 import { TYPE_FILTERS } from "../../../shared/lib/typeFilters";
+import { useWideWindow } from "../../../shared/hooks/useWideWindow";
 import type { ClipboardSortMode } from "../types";
 
 interface AppHeaderProps {
@@ -50,6 +52,8 @@ interface AppHeaderProps {
   setMainTab?: (val: "clipboard" | "phrases") => void;
   clipboardSortMode: ClipboardSortMode;
   onClipboardSortModeChange: (val: ClipboardSortMode) => void;
+  splitViewEnabled?: boolean;
+  onToggleSplitView?: () => void;
   onBack: () => void;
 }
 
@@ -72,11 +76,9 @@ const AppHeader = ({
   setShowTagFilter,
   allTags,
   tagColors,
-  searchIsFocused,
   setSearchIsFocused,
   setEditingTagsId,
   theme,
-  colorMode,
   settingsTitle,
   typeFilter,
   setTypeFilter,
@@ -84,21 +86,25 @@ const AppHeader = ({
   setMainTab,
   clipboardSortMode,
   onClipboardSortModeChange,
+  splitViewEnabled,
+  onToggleSplitView,
   onBack
 }: AppHeaderProps) => {
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchWrapRef = useRef<HTMLDivElement | null>(null);
+  const isWide = useWideWindow();
 
   const getTypeName = (type: string) => {
     switch (type) {
-      case "code": return t('type_code');
+      case "code": return t("type_code");
       case "link":
-      case "url": return t('type_url');
-      case "file": return t('type_file');
-      case "image": return t('type_image');
-      case "video": return t('type_video');
-      case "rich_text": return t('type_rich_text');
-      default: return t('type_text');
+      case "url": return t("type_url");
+      case "file": return t("type_file");
+      case "image": return t("type_image");
+      case "video": return t("type_video");
+      case "rich_text": return t("type_rich_text");
+      default: return t("type_text");
     }
   };
 
@@ -114,16 +120,21 @@ const AppHeader = ({
     t("clipboard_sort_activity");
 
   useEffect(() => {
-    if (!sortMenuOpen) return;
+    if (!sortMenuOpen && !showTagFilter) return;
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!sortMenuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (sortMenuOpen && !sortMenuRef.current?.contains(target)) {
         setSortMenuOpen(false);
+      }
+      if (showTagFilter && !searchWrapRef.current?.contains(target)) {
+        setShowTagFilter(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSortMenuOpen(false);
+        setShowTagFilter(false);
       }
     };
 
@@ -133,13 +144,15 @@ const AppHeader = ({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sortMenuOpen]);
+  }, [sortMenuOpen, showTagFilter, setShowTagFilter]);
 
   useEffect(() => {
-    if (!searchVisible) setSortMenuOpen(false);
-  }, [searchVisible]);
+    if (!searchVisible) {
+      setSortMenuOpen(false);
+      setShowTagFilter(false);
+    }
+  }, [searchVisible, setShowTagFilter]);
 
-  // Tab can move to a category scrolled out of the row; bring it into view.
   const typeFiltersRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const row = typeFiltersRef.current;
@@ -152,34 +165,31 @@ const AppHeader = ({
   }, [typeFilter]);
 
   const headerTitle = showTagManager && tagManagerEnabled
-    ? (mainTab === "phrases" ? "短语标签管理" : t('tag_manager'))
+    ? (mainTab === "phrases" ? "短语标签管理" : t("tag_manager"))
     : showSettings
       ? settingsTitle
-      : t('app_name');
+      : t("app_name");
 
   const hideWindow = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     invoke("hide_window_cmd").catch(console.error);
   };
 
+  const hasTagButton = mainTab !== "phrases" && allTags.length > 0;
+  const hasClearButton = search.length > 0;
+  const trailingCount = 1 + (hasTagButton ? 1 : 0) + (hasClearButton ? 1 : 0);
+
   return (
     <header
       onMouseDown={(e) => {
-        // Only drag on left click
         if (e.button !== 0) return;
-
-        // Don't drag if clicking on interactive elements
         const target = e.target as HTMLElement;
         if (target.closest('button, input, select, textarea, [role="button"]')) {
           return;
         }
-
-        // Blur search input if focused
         if (searchInputRef.current && document.activeElement === searchInputRef.current) {
           searchInputRef.current.blur();
         }
-
-        // Prevent default and start dragging
         e.preventDefault();
         getCurrentWindow().startDragging();
       }}
@@ -200,7 +210,6 @@ const AppHeader = ({
                 src={auraClipHeaderLogo}
                 alt="AuraClip"
                 draggable={false}
-                style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0, marginLeft: 2 }}
               />
               {setMainTab && (
                 <div
@@ -233,50 +242,81 @@ const AppHeader = ({
           )}
         </div>
 
-        <div className="header-drag-region">
-          {/* Middle area for dragging */}
-        </div>
+        <div className="header-drag-region" />
 
         <div className="header-actions">
-          {/* Pin Button */}
+          {!showSettings && !showTagManager && (
+            <>
+              {isWide && onToggleSplitView && (
+                <button
+                  type="button"
+                  className={`btn-icon header-tool-btn ${splitViewEnabled ? "active" : ""}`}
+                  title={t("split_view")}
+                  aria-label={t("split_view")}
+                  onClick={onToggleSplitView}
+                >
+                  <Columns2 size={15} />
+                </button>
+              )}
+              {tagManagerEnabled && (
+                <button
+                  type="button"
+                  className="btn-icon header-tool-btn"
+                  title={t("tag_manager")}
+                  aria-label={t("tag_manager")}
+                  onClick={() => setShowTagManager(true)}
+                >
+                  <Tag size={15} />
+                </button>
+              )}
+              {mainTab !== "phrases" && (
+                <button
+                  type="button"
+                  className="btn-icon header-tool-btn"
+                  title={t("clear_history")}
+                  aria-label={t("clear_history")}
+                  onClick={clearHistory}
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-icon header-tool-btn"
+                title={t("settings")}
+                aria-label={t("settings")}
+                onClick={() => setShowSettings(true)}
+              >
+                <SettingsIcon size={15} />
+              </button>
+              <span className="header-chrome-divider" aria-hidden="true" />
+            </>
+          )}
+
           <button
-            className={`btn-icon header-pin-btn ${isWindowPinned ? 'active' : ''}`}
-            title={t('pin')}
-            aria-label={t('pin')}
+            type="button"
+            className={`btn-icon header-tool-btn header-pin-btn ${isWindowPinned ? "active" : ""}`}
+            title={isWindowPinned ? t("window_pin_unlock") : t("window_pin_lock")}
+            aria-label={isWindowPinned ? t("window_pin_unlock") : t("window_pin_lock")}
+            aria-pressed={isWindowPinned}
             onClick={() => {
               const newVal = !isWindowPinned;
               setIsWindowPinned(newVal);
               invoke("set_window_pinned", { pinned: newVal }).catch(console.error);
             }}
           >
-            {isWindowPinned ? <PinOff size={16} /> : <Pin size={16} />}
+            <PinGlyph pinned={isWindowPinned} size={14} />
+            {isWindowPinned && <span className="header-pin-dot" aria-hidden="true" />}
           </button>
 
-          {!showSettings && !showTagManager && (
-            <>
-              {mainTab !== "phrases" && (
-                <button className="btn-icon" title={t('clear_history')} aria-label={t('clear_history')} onClick={clearHistory}>
-                <Trash2 size={16} />
-              </button>
-              )}
-              {tagManagerEnabled && (
-                <button className="btn-icon" title={t('tag_manager')} aria-label={t('tag_manager')} onClick={() => setShowTagManager(true)}>
-                  <Tag size={16} />
-                </button>
-              )}
-              <button className="btn-icon" title={t('settings')} aria-label={t('settings')} onClick={() => setShowSettings(true)}>
-                <SettingsIcon size={16} />
-              </button>
-            </>
-          )}
-
           <button
-            className="btn-icon windows-close-btn"
-            title={t('hide')}
-            aria-label={t('hide')}
+            type="button"
+            className="btn-icon header-tool-btn windows-close-btn"
+            title={t("hide")}
+            aria-label={t("hide")}
             onClick={hideWindow}
           >
-            <X size={16} strokeWidth={2.2} />
+            <X size={15} strokeWidth={2.1} />
           </button>
         </div>
       </div>
@@ -288,22 +328,22 @@ const AppHeader = ({
         >
           <div className="search-reveal-inner">
             <div className="search-container">
-                <div className="search-input-wrap">
-                  <div className="search-input-row">
-                    <span className="search-prompt" aria-hidden="true">
-                      {theme === "terminal" ? "➜" : "%"}
-                    </span>
-                    <Search size={14} className="search-icon" />
-                    <input
+              <div ref={searchWrapRef} className="search-input-wrap">
+                <div className="search-input-row">
+                  <span className="search-prompt" aria-hidden="true">
+                    {theme === "terminal" ? "➜" : "%"}
+                  </span>
+                  <Search size={14} className="search-icon" />
+                  <input
                     ref={searchInputRef}
                     type="text"
-                    className={`search-input has-sort-control ${showTagFilter && searchIsFocused && search.trim().length === 0 && allTags.length > 0 ? 'dropdown-open' : ''}`}
+                    className={`search-input has-sort-control trailing-${trailingCount} ${showTagFilter && allTags.length > 0 ? "dropdown-open" : ""}`}
                     placeholder={
                       mainTab === "phrases"
                         ? t("quick_phrases_search_placeholder")
                         : theme === "terminal"
                         ? t("search_placeholder_terminal")
-                        : t('search_placeholder')
+                        : t("search_placeholder")
                     }
                     value={search}
                     onCompositionStart={() => setIsComposing(true)}
@@ -314,25 +354,52 @@ const AppHeader = ({
                     onChange={(e) => {
                       setSearch(e.target.value);
                     }}
-                    onClick={() => { setShowTagFilter(true); setEditingTagsId(null); }}
                     onFocus={() => {
-                      // Do not re-invoke activate here: a second focus bounce can
-                      // blur the caret right after the user clicks the field.
                       setSortMenuOpen(false);
-                      // The tag list opens on click only. The search hotkey
-                      // focuses the field too, and the list then covered the
-                      // type filters like an empty record (#170, #135).
                       setSearchIsFocused(true);
                       setEditingTagsId(null);
                     }}
                     onBlur={() => {
                       setTimeout(() => {
-                        setShowTagFilter(false);
                         setSearchIsFocused(false);
-                      }, 200);
+                      }, 150);
                     }}
-                    style={{ color: colorMode === 'dark' ? '#ffffff' : undefined }}
                   />
+
+                  <div className="search-trailing-controls">
+                    {hasClearButton && (
+                      <button
+                        type="button"
+                        className="clipboard-sort-trigger search-clear-trigger"
+                        aria-label={t("clear_search")}
+                        title={t("clear_search")}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setSearch("");
+                          searchInputRef.current?.focus();
+                        }}
+                      >
+                        <X size={13} aria-hidden="true" />
+                      </button>
+                    )}
+
+                    {hasTagButton && (
+                      <button
+                        type="button"
+                        className={`clipboard-sort-trigger search-tag-trigger${showTagFilter ? " is-open" : ""}${search.startsWith("tag:") ? " has-custom-sort" : ""}`}
+                        aria-label={t("filter_by_tag")}
+                        aria-expanded={showTagFilter}
+                        title={t("filter_by_tag")}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setSortMenuOpen(false);
+                          setShowTagFilter(!showTagFilter);
+                        }}
+                      >
+                        <Hash size={13} aria-hidden="true" />
+                      </button>
+                    )}
+
                     <div ref={sortMenuRef} className="clipboard-sort-anchor">
                       <button
                         type="button"
@@ -346,7 +413,7 @@ const AppHeader = ({
                           setSortMenuOpen((open) => !open);
                         }}
                       >
-                        <ArrowUpDown size={14} aria-hidden="true" />
+                        <ArrowUpDown size={13} aria-hidden="true" />
                       </button>
                       {sortMenuOpen && (
                         <div className="clipboard-sort-menu" role="menu" aria-label={t("clipboard_sort")}>
@@ -378,44 +445,43 @@ const AppHeader = ({
                       )}
                     </div>
                   </div>
-                  {showTagFilter && searchIsFocused && search.trim().length === 0 && allTags.length > 0 && (
-                    <div className="tags-dropdown">
-                      <div className="tags-list">
-                        {allTags.map(tag => {
-                          const tagColor = tagColors[tag] || getTagColor(tag, theme);
-                          return (
-                            <button
-                              type="button"
-                              className="tag-chip tag-filter-chip"
-                              key={tag}
-                              // Keep the search box focused so the list stays open
-                              // until the click. Acting on mouse-down closed the list
-                              // under the pointer, and the release then landed on
-                              // (and pasted) the record beneath it.
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => {
-                                setSearch("tag:" + tag);
-                                setShowTagFilter(false);
-                              }}
-                              data-tag={tag}
-                              style={{
-                                '--tag-color': tagColor,
-                              } as CSSProperties}
-                            >
-                              <span
-                                className="tag-color-dot"
-                                style={{ backgroundColor: tagColor }}
-                                aria-hidden="true"
-                              />
-                              <span className="tag-name">{tag}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
-                {mainTab !== "phrases" && (
+
+                {showTagFilter && allTags.length > 0 && (
+                  <div className="tags-dropdown">
+                    <div className="tags-list">
+                      {allTags.map(tag => {
+                        const tagColor = tagColors[tag] || getTagColor(tag, theme);
+                        return (
+                          <button
+                            type="button"
+                            className="tag-chip tag-filter-chip"
+                            key={tag}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setSearch("tag:" + tag);
+                              setShowTagFilter(false);
+                            }}
+                            data-tag={tag}
+                            style={{
+                              "--tag-color": tagColor,
+                            } as CSSProperties}
+                          >
+                            <span
+                              className="tag-color-dot"
+                              style={{ backgroundColor: tagColor }}
+                              aria-hidden="true"
+                            />
+                            <span className="tag-name">{tag}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {mainTab !== "phrases" && (
                 <div
                   ref={typeFiltersRef}
                   className="search-type-filters hide-scrollbar"
@@ -428,17 +494,18 @@ const AppHeader = ({
                 >
                   {TYPE_FILTERS.map(type => (
                     <button
-                      key={type ?? 'all'}
-                      className={`btn-icon type-filter-chip${typeFilter === type ? ' active' : ''}`}
+                      key={type ?? "all"}
+                      type="button"
+                      className={`btn-icon type-filter-chip${typeFilter === type ? " active" : ""}`}
                       onClick={() => setTypeFilter(type)}
                       aria-pressed={typeFilter === type}
-                      title={type === null ? t('type_all') : getTypeName(type)}
+                      title={type === null ? t("type_all") : getTypeName(type)}
                     >
-                      {type === null ? t('type_all') : getTypeName(type)}
+                      {type === null ? t("type_all") : getTypeName(type)}
                     </button>
                   ))}
                 </div>
-                )}
+              )}
             </div>
           </div>
         </div>

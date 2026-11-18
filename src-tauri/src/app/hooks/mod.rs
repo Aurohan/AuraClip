@@ -1,11 +1,11 @@
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, RegisterHotKey, UnregisterHotKey, MOD_NOREPEAT, MOD_WIN, VK_CONTROL, VK_LWIN,
-    VK_MENU, VK_RWIN, VK_SHIFT,
+    GetAsyncKeyState, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -13,14 +13,18 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
+use crate::app::commands::hotkey_cmd::{run_on_main_thread_async, sync_registered_hotkeys};
 use crate::app::window_manager::{hide_window_on_resign, toggle_window};
 use crate::app_state::SettingsState;
 use crate::global_state::*;
 #[cfg(target_os = "windows")]
 use crate::infrastructure::windows_ext::WindowExt;
 
-// Store registered hotkey IDs for cleanup
-static BLOCKED_HOTKEY_IDS: std::sync::Mutex<Vec<i32>> = std::sync::Mutex::new(Vec::new());
+static RECORDING_MODS: AtomicU8 = AtomicU8::new(0);
+const MOD_BIT_CTRL: u8 = 1 << 0;
+const MOD_BIT_SHIFT: u8 = 1 << 1;
+const MOD_BIT_ALT: u8 = 1 << 2;
+const MOD_BIT_WIN: u8 = 1 << 3;
 
 /// The main window's HWND, so the mouse hook never asks Tauri for it:
 /// `WebviewWindow::hwnd()` waits for the main thread, and a low-level hook
@@ -36,131 +40,57 @@ pub fn remember_main_hwnd(window: &tauri::WebviewWindow) {
     }
 }
 
-#[cfg(target_os = "windows")]
 fn is_recording_clear_key(vk: u32) -> bool {
     matches!(vk, 0x08 | 0x2E)
 }
 
-#[cfg(target_os = "windows")]
-fn quick_paste_index_from_vk(vk: u32) -> Option<usize> {
+fn modifier_bit_for_vk(vk: u32) -> Option<u8> {
     match vk {
-        0x31 | 0x61 => Some(0),
-        0x32 | 0x62 => Some(1),
-        0x33 | 0x63 => Some(2),
-        0x34 | 0x64 => Some(3),
-        0x35 | 0x65 => Some(4),
-        0x36 | 0x66 => Some(5),
-        0x37 | 0x67 => Some(6),
-        0x38 | 0x68 => Some(7),
-        0x39 | 0x69 => Some(8),
-        0x30 | 0x60 => Some(9),
+        0x11 | 0xA2 | 0xA3 => Some(MOD_BIT_CTRL),
+        0x10 | 0xA0 | 0xA1 => Some(MOD_BIT_SHIFT),
+        0x12 | 0xA4 | 0xA5 => Some(MOD_BIT_ALT),
+        0x5B | 0x5C => Some(MOD_BIT_WIN),
         _ => None,
     }
 }
 
-#[cfg(target_os = "windows")]
-fn quick_paste_modifier_from_settings() -> String {
-    if let Some(handle) = GLOBAL_APP_HANDLE.get() {
-        let settings = handle.state::<SettingsState>();
-        return settings
-            .quick_paste_modifier
-            .lock()
-            .unwrap()
-            .clone()
-            .to_ascii_lowercase();
+fn format_modifier_prefix(mods: u8) -> String {
+    let mut out = String::new();
+    if mods & MOD_BIT_CTRL != 0 {
+        out.push_str("Ctrl+");
     }
-
-    "disabled".to_string()
-}
-
-#[cfg(target_os = "windows")]
-fn quick_paste_modifier_active(
-    modifier: &str,
-    ctrl_down: bool,
-    alt_down: bool,
-    shift_down: bool,
-    win_down: bool,
-) -> bool {
-    match modifier {
-        "disabled" => false,
-        "ctrl" => ctrl_down && !alt_down && !shift_down && !win_down,
-        "alt" => alt_down && !ctrl_down && !shift_down && !win_down,
-        "shift" => shift_down && !ctrl_down && !alt_down && !win_down,
-        "win" => win_down && !ctrl_down && !alt_down && !shift_down,
-        _ => ctrl_down && !alt_down && !shift_down && !win_down,
+    if mods & MOD_BIT_SHIFT != 0 {
+        out.push_str("Shift+");
     }
+    if mods & MOD_BIT_ALT != 0 {
+        out.push_str("Alt+");
+    }
+    if mods & MOD_BIT_WIN != 0 {
+        out.push_str("Win+");
+    }
+    out
 }
 
 #[tauri::command]
-pub fn set_recording_mode(app_handle: AppHandle, enabled: bool) -> Result<(), String> {
-    IS_RECORDING.store(enabled, Ordering::SeqCst);
-    crate::global_state::CLIPBOARD_MONITOR_PAUSED.store(enabled, Ordering::Relaxed);
+pub async fn set_recording_mode(app_handle: AppHandle, enabled: bool) -> Result<(), String> {
+    run_on_main_thread_async(&app_handle, move |handle| {
+        RECORDING_MODS.store(0, Ordering::SeqCst);
+        IS_RECORDING.store(enabled, Ordering::SeqCst);
+        crate::global_state::CLIPBOARD_MONITOR_PAUSED.store(enabled, Ordering::Relaxed);
 
-    let mut ids = BLOCKED_HOTKEY_IDS.lock().unwrap();
-
-    #[cfg(target_os = "windows")]
-    if enabled {
-        // Register ALL Win+ combinations to block system from handling them
-        if let Some(window) = app_handle.get_webview_window("main") {
-            if let Ok(hwnd_raw) = window.hwnd() {
-                let hwnd = HWND(hwnd_raw.0);
-                let mut id_counter = 0x1000i32;
-
-                // Block Win + A-Z
-                for vk in 0x41u32..=0x5Au32 {
-                    unsafe {
-                        if RegisterHotKey(Some(hwnd), id_counter, MOD_WIN | MOD_NOREPEAT, vk)
-                            .is_ok()
-                        {
-                            ids.push(id_counter);
-                        }
-                    }
-                    id_counter += 1;
-                }
-
-                // Block Win + 0-9
-                for vk in 0x30u32..=0x39u32 {
-                    unsafe {
-                        if RegisterHotKey(Some(hwnd), id_counter, MOD_WIN | MOD_NOREPEAT, vk)
-                            .is_ok()
-                        {
-                            ids.push(id_counter);
-                        }
-                    }
-                    id_counter += 1;
-                }
-
-                // Block special keys
-                let special_keys = [0x20u32, 0x0D, 0x09, 0x1B, 0x2C]; // Space, Enter, Tab, Esc, PrintScreen
-                for vk in special_keys {
-                    unsafe {
-                        if RegisterHotKey(Some(hwnd), id_counter, MOD_WIN | MOD_NOREPEAT, vk)
-                            .is_ok()
-                        {
-                            ids.push(id_counter);
-                        }
-                    }
-                    id_counter += 1;
-                }
-                println!("Recording mode ON: Blocked {} Win+ combinations", ids.len());
-            }
+        if enabled {
+            // Pause all AuraClip global shortcuts while recording so pressing an
+            // existing shortcut (e.g. Alt+V or Alt+1) records cleanly instead of
+            // hiding the window or triggering quick-paste.
+            let _ = handle.global_shortcut().unregister_all();
+        } else {
+            let _ = sync_registered_hotkeys(&handle);
+            let _ = handle.emit("hotkey-recording-preview", String::new());
         }
-    } else {
-        // Unregister all blocked hotkeys
-        if let Some(window) = app_handle.get_webview_window("main") {
-            if let Ok(hwnd_raw) = window.hwnd() {
-                let hwnd = HWND(hwnd_raw.0);
-                for id in ids.drain(..) {
-                    unsafe {
-                        let _ = UnregisterHotKey(Some(hwnd), id);
-                    }
-                }
-                println!("Recording mode OFF: Released blocked hotkeys");
-            }
-        }
-    }
-
-    Ok(())
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // Low-level Keyboard Hook Procedure
@@ -178,125 +108,85 @@ pub unsafe extern "system" fn keyboard_proc(
         let kbd_struct = *(l_param.0 as *const KBDLLHOOKSTRUCT);
         let vk = kbd_struct.vkCode;
 
-        // Handle Recording Mode - Black Hole Logic
+        // 1. Handle Recording Mode — deterministic modifier tracking + IME guard
         if IS_RECORDING.load(Ordering::SeqCst) {
-            let ctrl_down = GetAsyncKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000 != 0;
-            let shift_down = GetAsyncKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000 != 0;
-            let alt_down = GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000 != 0;
-            let win_down = (GetAsyncKeyState(VK_LWIN.0 as i32) as u16 & 0x8000 != 0)
-                || (GetAsyncKeyState(VK_RWIN.0 as i32) as u16 & 0x8000 != 0);
-
-            // ESC to cancel
-            if vk == 0x1B && is_down {
-                IS_RECORDING.store(false, Ordering::SeqCst);
+            if let Some(bit) = modifier_bit_for_vk(vk) {
+                if is_down {
+                    RECORDING_MODS.fetch_or(bit, Ordering::SeqCst);
+                } else if is_up {
+                    RECORDING_MODS.fetch_and(!bit, Ordering::SeqCst);
+                }
+                let mods = RECORDING_MODS.load(Ordering::SeqCst);
                 if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                    let preview = format_modifier_prefix(mods)
+                        .trim_end_matches('+')
+                        .to_string();
+                    let _ = handle.emit("hotkey-recording-preview", preview);
+                }
+                // Swallow modifiers during recording so Win never opens Start Menu
+                // and Alt never activates window system menu / steals focus.
+                return LRESULT(1);
+            }
+
+            if !is_down {
+                return LRESULT(1);
+            }
+
+            let mut mods = RECORDING_MODS.load(Ordering::SeqCst);
+            if GetAsyncKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000 != 0 {
+                mods |= MOD_BIT_CTRL;
+            }
+            if GetAsyncKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000 != 0 {
+                mods |= MOD_BIT_SHIFT;
+            }
+            if GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000 != 0 {
+                mods |= MOD_BIT_ALT;
+            }
+            if (GetAsyncKeyState(VK_LWIN.0 as i32) as u16 & 0x8000 != 0)
+                || (GetAsyncKeyState(VK_RWIN.0 as i32) as u16 & 0x8000 != 0)
+            {
+                mods |= MOD_BIT_WIN;
+            }
+
+            // Bare Esc cancels recording without closing settings/window
+            if vk == 0x1B && mods == 0 {
+                IS_RECORDING.store(false, Ordering::SeqCst);
+                RECORDING_MODS.store(0, Ordering::SeqCst);
+                if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                    let _ = handle.emit("hotkey-recording-preview", String::new());
                     let _ = handle.emit("recording-cancelled", ());
                 }
-                return CallNextHookEx(None, n_code, w_param, l_param);
+                return LRESULT(1);
             }
 
-            let is_win = vk == 0x5B || vk == 0x5C;
-            let is_other_modifier = (vk >= 0x10 && vk <= 0x12) || (vk >= 0xA0 && vk <= 0xA5);
-
-            if is_other_modifier {
-                return CallNextHookEx(None, n_code, w_param, l_param);
-            }
-
-            if !is_win && is_down {
+            // Bare Backspace / Delete clears the shortcut
+            if is_recording_clear_key(vk) && mods == 0 {
+                IS_RECORDING.store(false, Ordering::SeqCst);
+                RECORDING_MODS.store(0, Ordering::SeqCst);
                 if let Some(handle) = GLOBAL_APP_HANDLE.get() {
-                    if is_recording_clear_key(vk) {
-                        let _ = handle.emit("hotkey-recorded", String::new());
-                        IS_RECORDING.store(false, Ordering::SeqCst);
-                        return LRESULT(1);
-                    }
-
-                    let key_name = recorded_key_name(vk);
-
-                    let final_hotkey = format!(
-                        "{}{}{}{}{}",
-                        if ctrl_down { "Ctrl+" } else { "" },
-                        if shift_down { "Shift+" } else { "" },
-                        if alt_down { "Alt+" } else { "" },
-                        if win_down { "Win+" } else { "" },
-                        key_name
-                    );
-
-                    println!("Recorded Hotkey: {}", final_hotkey);
-                    let _ = handle.emit("hotkey-recorded", final_hotkey);
-                    IS_RECORDING.store(false, Ordering::SeqCst);
+                    let _ = handle.emit("hotkey-recording-preview", String::new());
+                    let _ = handle.emit("hotkey-recorded", String::new());
                 }
+                return LRESULT(1);
+            }
+
+            let key_name = recorded_key_name(vk);
+            // Ignore IME process keys (VK_PROCESSKEY = 0xE5) and unknown virtual keys
+            if key_name.starts_with("Key_") {
+                return LRESULT(1);
+            }
+
+            if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                let final_hotkey = format!("{}{}", format_modifier_prefix(mods), key_name);
+                IS_RECORDING.store(false, Ordering::SeqCst);
+                RECORDING_MODS.store(0, Ordering::SeqCst);
+                let _ = handle.emit("hotkey-recording-preview", String::new());
+                let _ = handle.emit("hotkey-recorded", final_hotkey);
             }
             return LRESULT(1);
         }
 
-        // 3. Quick Paste by Modifier+Number
-        {
-            let ctrl_down = (GetAsyncKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
-            let alt_down = (GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000) != 0;
-            let shift_down = (GetAsyncKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0;
-            let win_down = (GetAsyncKeyState(VK_LWIN.0 as i32) as u16 & 0x8000 != 0)
-                || (GetAsyncKeyState(VK_RWIN.0 as i32) as u16 & 0x8000 != 0);
-            let quick_paste_modifier = quick_paste_modifier_from_settings();
-
-            if is_up
-                && matches!(
-                    vk,
-                    0x11 | 0xA2 | 0xA3 | 0x12 | 0xA4 | 0xA5 | 0x10 | 0xA0 | 0xA1 | 0x5B | 0x5C
-                )
-            {
-                QUICK_PASTE_DIGIT_MASK.store(0, Ordering::SeqCst);
-            }
-
-            if let Some(index) = quick_paste_index_from_vk(vk) {
-                let bit = 1u32 << index;
-
-                if is_up {
-                    let pressed_mask = QUICK_PASTE_DIGIT_MASK.fetch_and(!bit, Ordering::SeqCst);
-                    if pressed_mask & bit != 0 {
-                        return LRESULT(1);
-                    }
-                }
-
-                if is_down
-                    && quick_paste_modifier_active(
-                        &quick_paste_modifier,
-                        ctrl_down,
-                        alt_down,
-                        shift_down,
-                        win_down,
-                    )
-                {
-                    let pressed_mask = QUICK_PASTE_DIGIT_MASK.fetch_or(bit, Ordering::SeqCst);
-                    if pressed_mask & bit != 0 {
-                        return LRESULT(1);
-                    }
-
-                    if let Some(handle) = GLOBAL_APP_HANDLE.get() {
-                        let handle_clone = handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            if let Err(err) =
-                                crate::services::clipboard_ops::paste_history_item_by_index(
-                                    handle_clone,
-                                    index,
-                                )
-                                .await
-                            {
-                                eprintln!(
-                                    "[ERROR] Quick paste by {}+{} failed: {}",
-                                    quick_paste_modifier,
-                                    index + 1,
-                                    err
-                                );
-                            }
-                        });
-                    }
-
-                    return LRESULT(1);
-                }
-            }
-        }
-
-        // 4. Global Navigation Keys (Up/Down, Enter, Delete, Esc)
+        // 2. Global Navigation Keys (Up/Down, Enter, Delete, Esc)
         if NAVIGATION_ENABLED.load(Ordering::SeqCst) && !IS_RECORDING.load(Ordering::SeqCst) {
             if IS_HIDDEN.load(Ordering::Relaxed) {
                 return CallNextHookEx(None, n_code, w_param, l_param);
@@ -396,7 +286,9 @@ pub unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: 
             // Handle Recording Mode
             if IS_RECORDING.load(Ordering::SeqCst) && msg == WM_MBUTTONDOWN {
                 IS_RECORDING.store(false, Ordering::SeqCst);
+                RECORDING_MODS.store(0, Ordering::SeqCst);
                 if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                    let _ = handle.emit("hotkey-recording-preview", String::new());
                     let _ = handle.emit("hotkey-recorded", "MouseMiddle");
                 }
                 return LRESULT(1);
@@ -472,10 +364,13 @@ pub unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: 
 /// pad weren't, so those keys couldn't be set.
 pub(crate) fn recorded_key_name(vk: u32) -> String {
     match vk {
-        0x20 => "Space".to_string(),
-        0x0D => "Enter".to_string(),
+        0x08 => "Backspace".to_string(),
         0x09 => "Tab".to_string(),
-        0x2D => "Insert".to_string(),
+        0x0D => "Enter".to_string(),
+        0x13 => "Pause".to_string(),
+        0x14 => "CapsLock".to_string(),
+        0x1B => "Escape".to_string(),
+        0x20 => "Space".to_string(),
         0x21 => "PageUp".to_string(),
         0x22 => "PageDown".to_string(),
         0x23 => "End".to_string(),
@@ -484,6 +379,10 @@ pub(crate) fn recorded_key_name(vk: u32) -> String {
         0x26 => "Up".to_string(),
         0x27 => "Right".to_string(),
         0x28 => "Down".to_string(),
+        0x2C => "PrintScreen".to_string(),
+        0x2D => "Insert".to_string(),
+        0x2E => "Delete".to_string(),
+        0x91 => "ScrollLock".to_string(),
         0xBB => "=".to_string(),
         0xBC => "Comma".to_string(),
         0xBD => "Minus".to_string(),

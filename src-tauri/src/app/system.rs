@@ -122,13 +122,19 @@ fn rehide_tray_icon(reason: &'static str, delays_ms: &'static [u64]) {
     });
 }
 
-/// Wake-from-sleep, Explorer-restart and session (unlock, Remote Desktop) notifications.
+/// Wake-from-sleep, Explorer-restart, OS shutdown/logoff and session notifications.
 #[cfg(target_os = "windows")]
 fn handle_system_message(msg: u32, wparam: WPARAM) {
     use windows::Win32::UI::WindowsAndMessaging::{
         PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMECRITICAL, PBT_APMRESUMESUSPEND,
-        WM_POWERBROADCAST,
+        WM_ENDSESSION, WM_POWERBROADCAST, WM_QUERYENDSESSION,
     };
+    if msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION {
+        // Allow clean process exit during Windows shutdown/restart/logoff so tao
+        // never receives prevent_exit() after entering RunnerState::Destroyed.
+        crate::app::light_mode::ALLOW_APP_EXIT.store(true, Ordering::SeqCst);
+        return;
+    }
     if msg == WM_POWERBROADCAST
         && matches!(wparam.0 as u32, PBT_APMRESUMEAUTOMATIC | PBT_APMRESUMECRITICAL | PBT_APMRESUMESUSPEND)
     {

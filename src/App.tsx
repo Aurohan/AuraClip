@@ -1,12 +1,18 @@
-﻿import { useEffect, useMemo, useRef, useCallback, useState, useDeferredValue } from "react";
+﻿import { lazy, Suspense, useEffect, useMemo, useRef, useCallback, useState, useDeferredValue } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ToastContainer from "./shared/components/ToastContainer";
 import ConfirmDialog from "./shared/components/ConfirmDialog";
+import BatchSelectionBar from "./features/clipboard/components/BatchSelectionBar";
+import SequentialQueueBar from "./features/clipboard/components/SequentialQueueBar";
+import { useBatchAndQueue } from "./features/clipboard/hooks/useBatchAndQueue";
+
+const TransformMenuModal = lazy(() => import("./features/clipboard/components/TransformMenuModal"));
 
 import { translations } from "./locales";
 import AppHeader from "./features/app/components/AppHeader";
 import AppMainContent from "./features/app/components/AppMainContent";
+import AppFooter from "./features/app/components/AppFooter";
 import { useAppState } from "./features/app/hooks/useAppState";
 import { useSettingsPanelProps } from "./features/settings/hooks/useSettingsPanelProps";
 import { useDebounce } from "./shared/hooks/useDebounce";
@@ -127,6 +133,7 @@ const buildQuickPasteHintsById = (
 
 const App = () => {
   const [mainTab, setMainTab] = useState<"clipboard" | "phrases">("clipboard");
+  const [settingsInitialSection, setSettingsInitialSection] = useState<string | null>(null);
   const [phraseSortMode, setPhraseSortMode] = useState<ClipboardSortMode>(() => {
     try {
       const value = localStorage.getItem("auraclip.phrase_sort_mode");
@@ -687,10 +694,6 @@ const App = () => {
     const onClipboardShown = () => {
       onShown();
       setTypeFilter(null);
-      // Restart the small rise of the list (styles main-tabs.css).
-      document.body.classList.remove("just-shown");
-      void document.body.offsetWidth;
-      document.body.classList.add("just-shown");
     };
     const unlistenMainTab = listen<string>("open-main-tab", ({ payload }) => {
       if (payload !== "clipboard" && payload !== "phrases") return;
@@ -789,9 +792,10 @@ const App = () => {
     setSelectedIndex
   });
 
-  const { checkHotkeyConflict, updateHotkey } = useHotkeyConfig({
+  const { checkHotkeyConflict, updateHotkey, recordingPreview } = useHotkeyConfig({
     hotkeys,
     setHotkeys,
+    setAppSettings,
     recordingHotkey,
     setRecordingHotkey,
     saveAppSetting,
@@ -880,6 +884,111 @@ const App = () => {
     onPointerSelect: arrowKeySelection ? selectRowUnderPointer : undefined
   });
   const [noteDraftState, setNoteDraftState] = useState<{ id: number; text: string } | null>(null);
+  const [transformTarget, setTransformTarget] = useState<ClipboardEntry | null>(null);
+  const [phraseCounts, setPhraseCounts] = useState<{ total: number; filtered: number; isFiltered: boolean }>({
+    total: 0,
+    filtered: 0,
+    isFiltered: false,
+  });
+
+  const handlePhraseCountsChange = useCallback((total: number, filtered: number, isFiltered: boolean) => {
+    setPhraseCounts((prev) =>
+      prev.total === total && prev.filtered === filtered && prev.isFiltered === isFiltered
+        ? prev
+        : { total, filtered, isFiltered }
+    );
+  }, []);
+
+  const latestClipboardText = useMemo(() => {
+    const firstText = history.find(
+      (h) =>
+        h.content_type === "text" ||
+        h.content_type === "code" ||
+        h.content_type === "url" ||
+        h.content_type === "rich_text"
+    );
+    return firstText?.content ?? "";
+  }, [history]);
+
+  const handleOpenTransformFromPhrase = useCallback((title: string, content: string) => {
+    const now = Date.now();
+    setTransformTarget({
+      id: 0,
+      content,
+      preview: content,
+      content_type: "text",
+      timestamp: now,
+      created_at: now,
+      is_pinned: false,
+      tags: [],
+      source_app: title,
+    });
+  }, []);
+
+  const {
+    selectedBatchIds,
+    batchJoiner,
+    setBatchJoiner,
+    batchOrderById,
+    handleBatchToggle,
+    clearBatchSelection,
+    handleMergePaste,
+    handleMergeCopy,
+    handleEnqueueSequential,
+    handleExtractOcr,
+    handleSaveAsPhrase,
+    pasteQueueIds,
+    queueNextPreview,
+    clearPasteQueue,
+  } = useBatchAndQueue({
+    history,
+    navigableHistory,
+    setHistory,
+    t,
+    pushToast,
+  });
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedBatchIds.length > 0 && !transformTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearBatchSelection();
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "k" &&
+        mainTab === "clipboard" &&
+        !showSettings &&
+        !effectiveShowTagManager
+      ) {
+        const target =
+          navigableHistory.find((i) => i.id === selectedItemId) ??
+          navigableHistory[selectedIndex] ??
+          navigableHistory[0];
+        if (target) {
+          e.preventDefault();
+          e.stopPropagation();
+          setTransformTarget(target);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [
+    clearBatchSelection,
+    selectedBatchIds.length,
+    transformTarget,
+    mainTab,
+    showSettings,
+    effectiveShowTagManager,
+    navigableHistory,
+    selectedItemId,
+    selectedIndex,
+  ]);
   const editingNoteDraft = noteDraftState?.id === editingNoteId ? noteDraftState.text : undefined;
   const setEditingNoteDraft = useCallback((text: string) => {
     if (editingNoteId !== null) setNoteDraftState({ id: editingNoteId, text });
@@ -1014,6 +1123,11 @@ const App = () => {
     sensitiveMaskSuffixVisible,
     sensitiveMaskEmailDomain,
     quickPasteHintsById,
+    batchOrderById,
+    onBatchToggle: handleBatchToggle,
+    onOpenTransform: setTransformTarget,
+    onExtractOcr: handleExtractOcr,
+    onSaveAsPhrase: handleSaveAsPhrase,
     copyToClipboard,
     selectItemByIndex,
     setRevealedIds,
@@ -1032,13 +1146,28 @@ const App = () => {
     theme,
     language,
     colorMode,
-    hotkeySettings: { hotkeys, recordingHotkey, setRecordingHotkey, updateHotkey, checkHotkeyConflict },
+    hotkeySettings: { hotkeys, recordingHotkey, recordingPreview, setRecordingHotkey, updateHotkey, checkHotkeyConflict },
     saveAppSetting,
     saveMqtt,
     handleResetSettings,
     toggleGroup,
+    initialSection: settingsInitialSection,
+    onInitialSectionConsumed: () => setSettingsInitialSection(null),
     state: appState
   });
+
+  const openSettingsSection = useCallback((section: string) => {
+    setShowTagManager(false);
+    setSettingsSubpage("home");
+    setSettingsInitialSection(section);
+    setShowSettings(true);
+  }, [setShowTagManager, setSettingsSubpage, setShowSettings]);
+
+  const handleToggleSplitView = useCallback(() => {
+    const next = !splitViewEnabled;
+    setSplitViewEnabled(next);
+    void saveAppSetting("split_view", String(next));
+  }, [splitViewEnabled, setSplitViewEnabled, saveAppSetting]);
 
   return (
     <div
@@ -1080,8 +1209,22 @@ const App = () => {
         setTypeFilter={setTypeFilter}
         clipboardSortMode={mainTab === "phrases" ? phraseSortMode : clipboardSortMode}
         onClipboardSortModeChange={mainTab === "phrases" ? updatePhraseSortMode : updateClipboardSortMode}
+        splitViewEnabled={splitViewEnabled}
+        onToggleSplitView={handleToggleSplitView}
         onBack={handleHeaderBack}
       />
+
+      {!showSettings && !effectiveShowTagManager && mainTab === "clipboard" && pasteQueueIds.length > 0 && (
+        <SequentialQueueBar
+          remainingCount={pasteQueueIds.length}
+          nextPreview={queueNextPreview}
+          onPasteNext={() => {
+            invoke("paste_next_step").catch(console.error);
+          }}
+          onClearQueue={clearPasteQueue}
+          t={t}
+        />
+      )}
 
       <main
         ref={mainRef}
@@ -1101,6 +1244,15 @@ const App = () => {
         >
           <AppMainContent
             phraseSortMode={phraseSortMode}
+            quickPasteModifier={quickPasteModifier}
+            clipboardPreviewText={latestClipboardText}
+            splitViewEnabled={splitViewEnabled}
+            onCloseSplitView={() => {
+              setSplitViewEnabled(false);
+              void saveAppSetting("split_view", "false");
+            }}
+            onPhraseCountsChange={handlePhraseCountsChange}
+            onOpenTransformText={handleOpenTransformFromPhrase}
             t={t}
         mainTab={mainTab}
         pushToast={pushToast}
@@ -1160,10 +1312,50 @@ const App = () => {
               onTagInput={setTagInput}
               noteDraft={editingNoteDraft}
               onNoteDraftChange={setEditingNoteDraft}
+              onOpenTransform={setTransformTarget}
+              onExtractOcr={handleExtractOcr}
+              onSaveAsPhrase={handleSaveAsPhrase}
             />
           )}
         </aside>
       </main>
+
+      {!showSettings && !effectiveShowTagManager && mainTab === "clipboard" && selectedBatchIds.length > 0 && (
+        <BatchSelectionBar
+          count={selectedBatchIds.length}
+          joiner={batchJoiner}
+          onJoinerChange={setBatchJoiner}
+          onMergePaste={() => void handleMergePaste()}
+          onMergeCopy={() => void handleMergeCopy()}
+          onEnqueueSequential={() => void handleEnqueueSequential()}
+          onClear={clearBatchSelection}
+          t={t}
+        />
+      )}
+
+      {!showSettings && !effectiveShowTagManager && (
+        <AppFooter
+          t={t}
+          mainTab={mainTab}
+          mqttEnabled={mqttEnabled}
+          totalCount={mainTab === "phrases" ? phraseCounts.total : history.length}
+          filteredCount={mainTab === "phrases" ? phraseCounts.filtered : filteredHistory.length}
+          isFiltered={mainTab === "phrases" ? phraseCounts.isFiltered : listIsFiltered}
+          onOpenSyncSettings={() => openSettingsSection("sync")}
+          onOpenShortcutsSettings={() => openSettingsSection("shortcuts")}
+        />
+      )}
+
+      {transformTarget && (
+        <Suspense fallback={null}>
+          <TransformMenuModal
+            item={transformTarget}
+            t={t}
+            pushToast={pushToast}
+            onClose={() => setTransformTarget(null)}
+          />
+        </Suspense>
+      )}
 
       <ToastContainer toasts={toasts} />
 

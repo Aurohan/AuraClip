@@ -5,7 +5,7 @@ type SettingSwitchProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "
 export const SettingSwitch = (props: SettingSwitchProps) => (
     <label className="switch">
         <input className="cb" type="checkbox" {...props} />
-        <div className="toggle"><div className="left" /><div className="right" /></div>
+        <span className="toggle" aria-hidden="true" />
     </label>
 );
 

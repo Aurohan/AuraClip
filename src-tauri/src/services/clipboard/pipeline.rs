@@ -427,6 +427,12 @@ impl PipelineStage for DeduplicationStage {
                     entry_mut.id = id;
                     if let Ok(Some(existing)) = db_state.repo.get_entry_by_id_with_conn(&conn, id) {
                         preserve_rich_format(entry_mut, &existing);
+                        if entry_mut.content_type == "image"
+                            && existing.content_type == "image"
+                            && crate::services::ocr::has_completed_ocr(&existing.preview)
+                        {
+                            entry_mut.preview = existing.preview.clone();
+                        }
                         entry_mut.created_at = existing.created_at;
                         entry_mut.last_used_at = existing.last_used_at;
                         // The UPDATE leaves these alone, but the entry is also
@@ -622,6 +628,13 @@ impl PipelineStage for DistributionStage {
         let _ = ctx
             .app_handle
             .emit("clipboard-updated", truncate_entry_for_ui(entry.clone()));
+
+        if entry.content_type == "image"
+            && entry.id > 0
+            && !crate::services::ocr::has_completed_ocr(&entry.preview)
+        {
+            crate::services::ocr::spawn_ocr_for_entry(ctx.app_handle.clone(), entry.id);
+        }
 
         if entry.is_external && entry.id != 0 {
             if let Some(path) =

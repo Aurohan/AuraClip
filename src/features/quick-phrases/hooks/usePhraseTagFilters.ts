@@ -1,12 +1,22 @@
 import { useMemo } from "react";
 import type { QuickPhrase } from "../../../shared/types";
 import { sortPhrasePins } from "../lib/phrasePins";
+import { matchesTextOrPinyin } from "../../../shared/lib/pinyinMatch";
 
 /** Filtering and counts for the phrase tag manager. */
-export function usePhraseTagFilters(phrases: QuickPhrase[], pins: number[], tagSearch: string, selectedTag: string | null, phraseSearch: string) {
-  // Aggregate tags and counts
+export function usePhraseTagFilters(
+  phrases: QuickPhrase[],
+  pins: number[],
+  tagSearch: string,
+  selectedTag: string | null,
+  phraseSearch: string,
+  extraTags: string[] = []
+) {
   const tagList = useMemo(() => {
     const counts: Record<string, number> = {};
+    for (const tg of extraTags) {
+      if (tg && tg !== "sensitive") counts[tg] = counts[tg] ?? 0;
+    }
     phrases.forEach((p) => {
       p.tags?.forEach((tag) => {
         if (!tag) return;
@@ -17,31 +27,33 @@ export function usePhraseTagFilters(phrases: QuickPhrase[], pins: number[], tagS
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [phrases]);
+  }, [phrases, extraTags]);
 
-  // Filtered tags for sidebar search
   const filteredTagList = useMemo(() => {
-    if (!tagSearch.trim()) return tagList;
-    const q = tagSearch.toLowerCase();
-    return tagList.filter((item) => item.name.toLowerCase().includes(q));
+    const q = tagSearch.trim();
+    if (!q) return tagList;
+    return tagList.filter((item) => matchesTextOrPinyin(item.name, q));
   }, [tagList, tagSearch]);
 
-  // Phrases filtered by selected tag and phraseSearch
   const displayPhrases = useMemo(() => {
-    return sortPhrasePins(phrases.filter((p) => {
-      if (selectedTag !== null) {
-        if (!p.tags?.includes(selectedTag)) return false;
-      }
-      if (phraseSearch.trim()) {
-        const q = phraseSearch.toLowerCase();
-        const inTitle = p.title.toLowerCase().includes(q);
-        const inContent = p.content.toLowerCase().includes(q);
-        const inTags = p.tags?.some((t) => t.toLowerCase().includes(q));
-        return inTitle || inContent || inTags;
-      }
-      return true;
-    }), pins);
+    return sortPhrasePins(
+      phrases.filter((p) => {
+        if (selectedTag !== null && !p.tags?.includes(selectedTag)) {
+          return false;
+        }
+        const q = phraseSearch.trim();
+        if (q) {
+          return Boolean(
+            matchesTextOrPinyin(p.title, q) ||
+              matchesTextOrPinyin(p.content, q) ||
+              p.tags?.some((t) => matchesTextOrPinyin(t, q))
+          );
+        }
+        return true;
+      }),
+      pins
+    );
   }, [phrases, selectedTag, phraseSearch, pins]);
 
-  return { filteredTagList, displayPhrases };
+  return { tagList, filteredTagList, displayPhrases };
 }

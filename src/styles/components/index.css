@@ -21,4 +21,6 @@
 @import "./utilities.css";
 
 @import "./aurora-refinement.css";
+@import "./transform-and-queue.css";
+@import "./phrase-workbench.css";
 @import "./press-feedback.css";

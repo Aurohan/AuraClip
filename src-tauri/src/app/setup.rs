@@ -861,6 +861,8 @@ fn start_services(app: &App, s: &StartupSettings, app_handle: AppHandle) {
     crate::infrastructure::windows_api::window_tracker::start_window_tracking(app_handle.clone());
     crate::services::clipboard::start_clipboard_monitor(app_handle.clone());
     crate::services::mqtt_sub::start_mqtt_client(app_handle.clone());
+    crate::services::mqtt_sub::start_sms_ttl_sweeper(app_handle.clone());
+    crate::services::ocr::start_ocr_backfill(app_handle.clone());
     crate::services::network_recovery::start_network_recovery(app_handle.clone());
     start_edge_docking_monitor(app_handle.clone());
     crate::app::light_mode::start_idle_watcher(app_handle.clone());

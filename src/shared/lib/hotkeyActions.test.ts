@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { defaultHotkeys, findHotkeyConflict, HOTKEY_ACTIONS, hotkeysFromSettings } from "./hotkeyActions";
 
 describe("hotkey actions", () => {
-  it("defaults are Alt+V for the clipboard and Alt+C for quick phrases, with no conflicts", () => {
+  it("defaults are Alt+C for the clipboard and Alt+V for quick phrases, with no conflicts", () => {
     const hotkeys = defaultHotkeys();
-    expect(hotkeys.clipboard).toBe("Alt+V");
-    expect(hotkeys.phrases).toBe("Alt+C");
+    expect(hotkeys.clipboard).toBe("Alt+C");
+    expect(hotkeys.phrases).toBe("Alt+V");
     for (const action of HOTKEY_ACTIONS) {
       expect(findHotkeyConflict(hotkeys, action.id, hotkeys[action.id])).toBeUndefined();
     }
@@ -13,7 +13,7 @@ describe("hotkey actions", () => {
 
   it("finds the other action using a hotkey, ignoring order and case", () => {
     const hotkeys = defaultHotkeys();
-    expect(findHotkeyConflict(hotkeys, "phrases", "alt+v")?.id).toBe("clipboard");
+    expect(findHotkeyConflict(hotkeys, "phrases", "alt+c")?.id).toBe("clipboard");
     expect(findHotkeyConflict(hotkeys, "search", "Shift+Alt+V")?.id).toBe("plain");
     expect(findHotkeyConflict(hotkeys, "phrases", "")).toBeUndefined();
   });

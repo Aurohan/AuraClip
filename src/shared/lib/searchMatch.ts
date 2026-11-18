@@ -1,7 +1,17 @@
 import type { ClipboardEntry } from "../types";
 import type { ParsedSearchQuery } from "./searchQuery";
+import { matchesTextOrPinyin } from "./pinyinMatch";
 
 const TEXT_TYPES = new Set(["text", "code", "url", "rich_text"]);
+export const IMAGE_OCR_PREFIX = "[OCR] ";
+
+export function extractImageOcrText(item: Pick<ClipboardEntry, "content_type" | "preview">): string {
+  if (item.content_type !== "image" || !item.preview) return "";
+  const trimmed = item.preview.trim();
+  return trimmed.startsWith(IMAGE_OCR_PREFIX)
+    ? trimmed.slice(IMAGE_OCR_PREFIX.length).trim()
+    : "";
+}
 
 export function entryMatchesSearch(
   item: ClipboardEntry,
@@ -26,31 +36,35 @@ export function entryMatchesSearch(
     const note = item.note?.trim() ?? "";
     if (!note) return false;
     if (!term) return true;
-    return note.toLowerCase().includes(term);
+    return matchesTextOrPinyin(note, term);
   }
 
   if (!term) {
     return true;
   }
 
-  if (item.tags?.some((tag) => tag.toLowerCase().includes(term))) {
+  if (item.tags?.some((tag) => matchesTextOrPinyin(tag, term))) {
     return true;
   }
 
-  if (item.source_app?.toLowerCase().includes(term)) {
+  if (item.source_app && matchesTextOrPinyin(item.source_app, term)) {
     return true;
   }
 
-  if (item.note?.toLowerCase().includes(term)) {
+  if (item.note && matchesTextOrPinyin(item.note, term)) {
     return true;
+  }
+
+  if (item.content_type === "image") {
+    const ocrText = extractImageOcrText(item);
+    return ocrText ? matchesTextOrPinyin(ocrText, term) : false;
   }
 
   if (TEXT_TYPES.has(item.content_type)) {
-    const preview = item.preview?.toLowerCase() ?? "";
-    if (preview.includes(term)) {
+    if (item.preview && matchesTextOrPinyin(item.preview, term)) {
       return true;
     }
-    if (item.content?.toLowerCase().includes(term)) {
+    if (item.content && matchesTextOrPinyin(item.content, term)) {
       return true;
     }
     if (isServerMatch && item.content?.includes("... [Truncated for speed]")) {

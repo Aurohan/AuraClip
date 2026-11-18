@@ -63,11 +63,72 @@ pub async fn paste_quick_phrase(
     if let Some(target) = phrases.into_iter().find(|p| p.id == id) {
         let _ = state.phrase_repo.increment_use(id);
         let _ = app_handle.emit("quick-phrases-changed", ());
-        crate::services::clipboard_ops::paste_text_directly(app_handle, target.content).await?;
+        let expanded = if crate::services::phrase_template::has_template_tokens(&target.content) {
+            let current_clip = arboard::Clipboard::new()
+                .ok()
+                .and_then(|mut c| c.get_text().ok())
+                .unwrap_or_default();
+            crate::services::phrase_template::expand_phrase_template(
+                &target.content,
+                &current_clip,
+                chrono::Local::now(),
+            )
+        } else {
+            target.content
+        };
+        crate::services::clipboard_ops::paste_text_directly(app_handle, expanded).await?;
         Ok(())
     } else {
         Err(AppError::Validation("Quick phrase not found".to_string()))
     }
+}
+
+#[tauri::command(async)]
+pub fn copy_quick_phrase(
+    app_handle: AppHandle,
+    state: State<'_, DbState>,
+    id: i64,
+) -> AppResult<String> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::sync::atomic::Ordering;
+
+    let phrases = state.phrase_repo.get_all().map_err(AppError::from)?;
+    let Some(target) = phrases.into_iter().find(|p| p.id == id) else {
+        return Err(AppError::Validation("Quick phrase not found".to_string()));
+    };
+
+    let expanded = if crate::services::phrase_template::has_template_tokens(&target.content) {
+        let current_clip = arboard::Clipboard::new()
+            .ok()
+            .and_then(|mut c| c.get_text().ok())
+            .unwrap_or_default();
+        crate::services::phrase_template::expand_phrase_template(
+            &target.content,
+            &current_clip,
+            chrono::Local::now(),
+        )
+    } else {
+        target.content
+    };
+
+    let normalized = expanded.trim().replace("\r\n", "\n");
+    let mut hasher = DefaultHasher::new();
+    normalized.hash(&mut hasher);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    crate::global_state::LAST_APP_SET_HASH.store(hasher.finish(), Ordering::SeqCst);
+    crate::global_state::LAST_APP_SET_TIMESTAMP.store(now, Ordering::SeqCst);
+
+    if let Ok(mut cb) = arboard::Clipboard::new() {
+        let _ = cb.set_text(expanded.clone());
+    }
+    let _ = state.phrase_repo.increment_use(id);
+    let _ = app_handle.emit("quick-phrases-changed", ());
+    crate::services::ui_sound::play_ui_sound(&app_handle, "copy");
+    Ok(expanded)
 }
 
 #[tauri::command(async)]

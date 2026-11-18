@@ -1,7 +1,16 @@
-import type { ComponentType, ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { Activity, ChevronDown, ChevronRight, Send } from "lucide-react";
 import { SettingSwitch } from "../SettingControls";
+import { isTauriRuntime } from "../../../../shared/lib/tauriRuntime";
+
+interface MqttTelemetry {
+    connected: boolean;
+    running: boolean;
+    last_inbound_ms: number;
+    last_message_ms: number;
+}
 
 interface LabelWithHintProps {
     label: string;
@@ -61,7 +70,64 @@ const SyncSettingsGroup = ({
     setMqttTopic,
     mqttNotificationEnabled,
     setMqttNotificationEnabled
-}: SyncSettingsGroupProps) => (
+}: SyncSettingsGroupProps) => {
+    const [smsTtlMinutes, setSmsTtlMinutes] = useState("0");
+    const [smsDeleteAfterPaste, setSmsDeleteAfterPaste] = useState(false);
+    const [lastMessageMs, setLastMessageMs] = useState(0);
+    const [selfTestState, setSelfTestState] = useState<"idle" | "sending" | "ok" | "fail">("idle");
+
+    useEffect(() => {
+        if (!isTauriRuntime()) return;
+        let disposed = false;
+        invoke<Record<string, string>>("get_settings")
+            .then((s) => {
+                if (disposed || !s) return;
+                if (s["app.mqtt_sms_ttl_minutes"]) {
+                    setSmsTtlMinutes(s["app.mqtt_sms_ttl_minutes"]);
+                }
+                setSmsDeleteAfterPaste(s["app.mqtt_sms_delete_after_paste"] === "true");
+            })
+            .catch(() => {});
+
+        invoke<MqttTelemetry>("get_mqtt_telemetry")
+            .then((tel) => {
+                if (!disposed && tel?.last_message_ms) {
+                    setLastMessageMs(tel.last_message_ms);
+                }
+            })
+            .catch(() => {});
+
+        const unlisten = listen<number>("mqtt-message-received", (ev) => {
+            if (!disposed && typeof ev.payload === "number") {
+                setLastMessageMs(ev.payload);
+            }
+        });
+
+        return () => {
+            disposed = true;
+            unlisten.then((off) => off()).catch(() => {});
+        };
+    }, [mqttEnabled, mqttStatus]);
+
+    const handleSelfTest = async () => {
+        if (selfTestState === "sending") return;
+        setSelfTestState("sending");
+        try {
+            await invoke("send_mqtt_self_test");
+            setSelfTestState("ok");
+            setTimeout(() => setSelfTestState("idle"), 2600);
+        } catch (err) {
+            console.error("send_mqtt_self_test error:", err);
+            setSelfTestState("fail");
+            setTimeout(() => setSelfTestState("idle"), 2600);
+        }
+    };
+
+    const lastReceivedText = lastMessageMs > 0
+        ? new Date(lastMessageMs).toLocaleString()
+        : t("mqtt_last_received_never");
+
+    return (
     <div className={`settings-group ${collapsed ? 'collapsed' : ''}`}>
         <button type="button" className="group-header" aria-expanded={!collapsed} onClick={onToggle}>
             <div className="group-header-title">
@@ -202,11 +268,85 @@ const SyncSettingsGroup = ({
                                 placeholder="tiez/my_device"
                             />
                         </div>
+
+                        <h4 className="settings-section-title">{t('mqtt_sms_lifecycle_section')}</h4>
+                        <div className="setting-item">
+                            <LabelWithHint
+                                label={t('mqtt_sms_ttl_label')}
+                                hint={t('mqtt_sms_ttl_hint')}
+                                hintKey="mqtt_sms_ttl"
+                            />
+                            <select
+                                className="search-input settings-field"
+                                value={smsTtlMinutes}
+                                onChange={(e) => {
+                                    const next = e.target.value;
+                                    setSmsTtlMinutes(next);
+                                    invoke('save_setting', {
+                                        key: 'app.mqtt_sms_ttl_minutes',
+                                        value: next
+                                    }).catch(console.error);
+                                }}
+                            >
+                                <option value="0">{t('mqtt_sms_ttl_off')}</option>
+                                <option value="15">{t('mqtt_sms_ttl_15m')}</option>
+                                <option value="30">{t('mqtt_sms_ttl_30m')}</option>
+                                <option value="120">{t('mqtt_sms_ttl_2h')}</option>
+                                <option value="1440">{t('mqtt_sms_ttl_24h')}</option>
+                            </select>
+                        </div>
+
+                        <div className="setting-item">
+                            <LabelWithHint
+                                label={t('mqtt_sms_delete_after_paste')}
+                                hint={t('mqtt_sms_delete_after_paste_hint')}
+                                hintKey="mqtt_sms_delete_after_paste"
+                            />
+                            <SettingSwitch
+                                checked={smsDeleteAfterPaste}
+                                onChange={(e) => {
+                                    const next = e.target.checked;
+                                    setSmsDeleteAfterPaste(next);
+                                    invoke('save_setting', {
+                                        key: 'app.mqtt_sms_delete_after_paste',
+                                        value: String(next)
+                                    }).catch(console.error);
+                                }}
+                            />
+                        </div>
+
+                        <div className="setting-item">
+                            <div className="item-label-group">
+                                <span className="item-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <Activity size={13} />
+                                    {t('mqtt_last_received_label')}
+                                </span>
+                                <span className="item-desc">{lastReceivedText}</span>
+                            </div>
+                            <button
+                                type="button"
+                                className="btn-secondary settings-self-test-btn"
+                                disabled={mqttStatus !== 'connected' || selfTestState === 'sending'}
+                                onClick={() => void handleSelfTest()}
+                            >
+                                <Send size={12} />
+                                <span>
+                                    {selfTestState === 'sending'
+                                        ? t('mqtt_self_test_sending')
+                                        : selfTestState === 'ok'
+                                            ? t('mqtt_self_test_ok')
+                                            : selfTestState === 'fail'
+                                                ? t('mqtt_self_test_fail')
+                                                : t('mqtt_self_test_btn')}
+                                </span>
+                            </button>
+                        </div>
                     </>
                 )}
             </div>
         )}
     </div>
-);
+    );
+};
 
 export default SyncSettingsGroup;

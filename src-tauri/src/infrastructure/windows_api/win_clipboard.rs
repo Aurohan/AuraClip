@@ -654,6 +654,7 @@ pub fn is_clipboard_marked_private() -> bool {
         for name in [
             "ExcludeClipboardContentFromMonitorProcessing",
             "Clipboard Viewer Ignore",
+            "ClipboardViewerIgnore",
         ] {
             let name_w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
             let format_id = RegisterClipboardFormatW(windows::core::PCWSTR(name_w.as_ptr()));

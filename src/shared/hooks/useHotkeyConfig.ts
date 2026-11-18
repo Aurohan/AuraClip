@@ -1,13 +1,14 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "../lib/tauriRuntime";
 import { isTypingHotkey } from "../lib/hotkeyKey";
-import { findHotkeyConflict, hotkeyAction, type HotkeyActionId, type Hotkeys } from "../lib/hotkeyActions";
+import { findHotkeyConflict, HOTKEY_ACTIONS, hotkeyAction, type HotkeyActionId, type Hotkeys } from "../lib/hotkeyActions";
 
 interface UseHotkeyConfigOptions {
   hotkeys: Hotkeys;
   setHotkeys: (update: (prev: Hotkeys) => Hotkeys) => void;
+  setAppSettings?: (update: (prev: Record<string, string>) => Record<string, string>) => void;
   recordingHotkey: HotkeyActionId | null;
   setRecordingHotkey: (action: HotkeyActionId | null) => void;
   saveAppSetting: (type: string, value: string) => void;
@@ -15,10 +16,11 @@ interface UseHotkeyConfigOptions {
   pushToast: (msg: string, duration?: number) => number;
 }
 
-/** Checks, registers and stores the configurable global hotkeys (see hotkeyActions.ts). */
+/** Checks, registers and stores the configurable hotkeys (see hotkeyActions.ts). */
 export const useHotkeyConfig = ({
   hotkeys,
   setHotkeys,
+  setAppSettings,
   recordingHotkey,
   setRecordingHotkey,
   saveAppSetting,
@@ -26,6 +28,7 @@ export const useHotkeyConfig = ({
   pushToast
 }: UseHotkeyConfigOptions) => {
   const tauriReady = isTauriRuntime();
+  const [recordingPreview, setRecordingPreview] = useState("");
 
   /** True (and a toast) when `newHotkey` can't be used for `action`. */
   const checkHotkeyConflict = useCallback(
@@ -47,50 +50,83 @@ export const useHotkeyConfig = ({
 
   const updateHotkey = useCallback(
     async (action: HotkeyActionId, newHotkey: string) => {
-      const store = () => {
-        setHotkeys((prev) => ({ ...prev, [action]: newHotkey }));
-        saveAppSetting(hotkeyAction(action).setting, newHotkey);
-      };
+      const settingKey = hotkeyAction(action).setting;
+      setRecordingPreview("");
       setRecordingHotkey(null);
+
       if (!tauriReady) {
-        store();
+        setHotkeys((prev) => ({ ...prev, [action]: newHotkey }));
+        saveAppSetting(settingKey, newHotkey);
         return;
       }
-      if (checkHotkeyConflict(newHotkey, action)) return;
-      if (newHotkey) {
-        try {
-          await invoke<boolean>("test_hotkey_available", { hotkey: newHotkey });
-        } catch (err) {
-          pushToast(`❌ ${newHotkey}: ${err || t("hotkey_occupied")}`, 5000);
-          return;
-        }
+
+      if (isTypingHotkey(newHotkey)) {
+        pushToast(t("hotkey_needs_modifier"), 5000);
+        return;
       }
+
+      const conflicting = newHotkey ? findHotkeyConflict(hotkeys, action, newHotkey) : null;
+
       try {
-        await invoke("set_hotkey", { action, hotkey: newHotkey });
-        store();
+        const snapshot = await invoke<Record<string, string>>("set_hotkey", {
+          action,
+          hotkey: newHotkey,
+        });
+        if (snapshot && typeof snapshot === "object") {
+          setHotkeys((prev) => ({
+            ...prev,
+            ...(snapshot as Partial<Hotkeys>),
+          }));
+          setAppSettings?.((prev) => {
+            const next = { ...prev };
+            for (const spec of HOTKEY_ACTIONS) {
+              if (spec.id in snapshot) {
+                next[`app.${spec.setting}`] = snapshot[spec.id];
+              }
+            }
+            return next;
+          });
+          if (conflicting && snapshot[conflicting.id] !== undefined) {
+            const swappedTo = snapshot[conflicting.id] || t("disabled");
+            pushToast(`${t(conflicting.labelKey)} → ${swappedTo}`, 2600);
+          }
+        } else {
+          setHotkeys((prev) => ({ ...prev, [action]: newHotkey }));
+          setAppSettings?.((prev) => ({ ...prev, [`app.${settingKey}`]: newHotkey }));
+        }
       } catch (err) {
         console.error(err);
-        pushToast(t("hotkey_register_failed") + String(err), 3000);
+        const msg = String(err || "").replace(/^Error:\s*/i, "");
+        pushToast(msg || `${t("hotkey_register_failed")}${String(err)}`, 4000);
       }
     },
-    [checkHotkeyConflict, pushToast, saveAppSetting, setHotkeys, setRecordingHotkey, t, tauriReady]
+    [hotkeys, pushToast, saveAppSetting, setAppSettings, setHotkeys, setRecordingHotkey, t, tauriReady]
   );
 
-  // While recording, the keyboard hook pauses hotkeys and sends the combo.
+  // While recording, the native keyboard hook pauses AuraClip's global hotkeys
+  // on the main thread, streams held modifiers, and delivers the final combo.
   useEffect(() => {
     if (!tauriReady) return;
+    setRecordingPreview("");
     invoke("set_recording_mode", { enabled: recordingHotkey !== null }).catch(console.error);
     if (recordingHotkey === null) return;
 
     const unlisten = listen<string>("hotkey-recorded", (event) => {
-      updateHotkey(recordingHotkey, event.payload);
+      void updateHotkey(recordingHotkey, event.payload);
     });
-    const unlistenCancel = listen("recording-cancelled", () => setRecordingHotkey(null));
+    const unlistenPreview = listen<string>("hotkey-recording-preview", (event) => {
+      setRecordingPreview(event.payload || "");
+    });
+    const unlistenCancel = listen("recording-cancelled", () => {
+      setRecordingPreview("");
+      setRecordingHotkey(null);
+    });
     return () => {
       unlisten.then((f) => f());
+      unlistenPreview.then((f) => f());
       unlistenCancel.then((f) => f());
     };
   }, [recordingHotkey, setRecordingHotkey, updateHotkey, tauriReady]);
 
-  return { checkHotkeyConflict, updateHotkey };
+  return { checkHotkeyConflict, updateHotkey, recordingPreview };
 };

@@ -41,6 +41,21 @@ static MQTT_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Unix ms of the last packet received from the broker (PingResp included).
 static MQTT_LAST_INBOUND_MS: AtomicU64 = AtomicU64::new(0);
+/// Unix ms of the last application message received on our subscribed topic.
+static MQTT_LAST_MESSAGE_MS: AtomicU64 = AtomicU64::new(0);
+static ACTIVE_MQTT_CLIENT: OnceLock<Mutex<Option<(AsyncClient, String)>>> = OnceLock::new();
+
+fn active_client_slot() -> &'static Mutex<Option<(AsyncClient, String)>> {
+    ACTIVE_MQTT_CLIENT.get_or_init(|| Mutex::new(None))
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct MqttTelemetry {
+    pub connected: bool,
+    pub running: bool,
+    pub last_inbound_ms: u64,
+    pub last_message_ms: u64,
+}
 const KEEP_ALIVE: Duration = Duration::from_secs(30);
 /// rumqttc's 5 s default was too short for the TLS handshake to the broker
 /// ("Network timeout" / "tls handshake eof" in the logs).
@@ -159,6 +174,9 @@ impl Drop for MqttTaskGuard {
     fn drop(&mut self) {
         MQTT_CONNECTED.store(false, Ordering::Relaxed);
         MQTT_TASK_ACTIVE.store(false, Ordering::Relaxed);
+        if let Ok(mut slot) = active_client_slot().lock() {
+            *slot = None;
+        }
     }
 }
 
@@ -168,6 +186,139 @@ pub fn get_mqtt_status() -> bool {
 
 pub fn get_mqtt_running() -> bool {
     MQTT_RUNNING.load(Ordering::Relaxed)
+}
+
+pub fn get_mqtt_telemetry(app: &AppHandle) -> MqttTelemetry {
+    let mut last_msg = MQTT_LAST_MESSAGE_MS.load(Ordering::Relaxed);
+    if last_msg == 0 {
+        if let Some(db) = app.try_state::<DbState>() {
+            if let Some(saved) = db
+                .settings_repo
+                .get("mqtt_last_message_ms")
+                .ok()
+                .flatten()
+                .and_then(|s| s.parse::<u64>().ok())
+            {
+                MQTT_LAST_MESSAGE_MS.store(saved, Ordering::Relaxed);
+                last_msg = saved;
+            }
+        }
+    }
+    MqttTelemetry {
+        connected: MQTT_CONNECTED.load(Ordering::Relaxed),
+        running: MQTT_RUNNING.load(Ordering::Relaxed),
+        last_inbound_ms: MQTT_LAST_INBOUND_MS.load(Ordering::Relaxed),
+        last_message_ms: last_msg,
+    }
+}
+
+pub async fn send_mqtt_self_test(_app: AppHandle) -> crate::error::AppResult<()> {
+    let client_and_topic = active_client_slot()
+        .lock()
+        .map_err(|_| crate::error::AppError::Internal("MQTT 锁异常".into()))?
+        .clone();
+    let Some((client, topic)) = client_and_topic else {
+        return Err(crate::error::AppError::Validation(
+            "MQTT 当前未连接，请先开启并确认连接成功".into(),
+        ));
+    };
+    if !MQTT_CONNECTED.load(Ordering::Relaxed) {
+        return Err(crate::error::AppError::Validation(
+            "MQTT 当前处于未连接状态".into(),
+        ));
+    }
+    let test_topic = format!("{}/selftest", topic.trim_end_matches('/'));
+    let code = 100_000 + (now_ms() % 900_000);
+    let payload = serde_json::json!({
+        "msg": format!("【AuraClip 回路自检】验证码 {}，链路收发正常（测试消息）。", code)
+    })
+    .to_string();
+    client
+        .publish(test_topic, QoS::AtLeastOnce, false, payload.into_bytes())
+        .await
+        .map_err(|e| crate::error::AppError::Network(format!("自检消息发送失败: {e}")))?;
+    Ok(())
+}
+
+/// Periodically sweeps expired unpinned/untagged `source_app = 'mqtt'` entries
+/// when `app.mqtt_sms_ttl_minutes` > 0.
+pub fn start_sms_ttl_sweeper(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(60));
+        let Some(db) = app.try_state::<DbState>() else {
+            continue;
+        };
+        let ttl_minutes = db
+            .settings_repo
+            .get("app.mqtt_sms_ttl_minutes")
+            .ok()
+            .flatten()
+            .and_then(|v| v.trim().parse::<i64>().ok())
+            .unwrap_or(0);
+        if ttl_minutes <= 0 {
+            continue;
+        }
+        let cutoff_ms = (now_ms() as i64).saturating_sub(ttl_minutes.saturating_mul(60_000));
+
+        // 1. Sweep session items
+        if let Some(session) = app.try_state::<crate::app_state::SessionHistory>() {
+            let mut removed_session_ids = Vec::new();
+            {
+                let mut items = session.0.lock().unwrap();
+                items.retain(|item| {
+                    let expired = item.source_app == "mqtt"
+                        && !item.is_pinned
+                        && item.tags.is_empty()
+                        && item.sort_at > 0
+                        && item.sort_at < cutoff_ms;
+                    if expired {
+                        removed_session_ids.push(item.id);
+                    }
+                    !expired
+                });
+            }
+            for rid in removed_session_ids {
+                let _ = app.emit("clipboard-removed", rid);
+            }
+        }
+
+        // 2. Sweep SQLite items
+        let expired_ids: Vec<i64> = {
+            let Ok(conn) = db.conn.lock() else {
+                continue;
+            };
+            let Ok(mut stmt) = conn.prepare(
+                "SELECT ch.id
+                 FROM clipboard_history ch
+                 WHERE ch.source_app = 'mqtt'
+                   AND ch.is_pinned = 0
+                   AND ch.sort_at < ?1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM entry_tags et WHERE et.entry_id = ch.id
+                   )
+                 LIMIT 100",
+            ) else {
+                continue;
+            };
+            let rows = stmt
+                .query_map([cutoff_ms], |r| r.get::<_, i64>(0))
+                .ok()
+                .map(|it| it.flatten().collect::<Vec<_>>())
+                .unwrap_or_default();
+            rows
+        };
+
+        if !expired_ids.is_empty() {
+            let data_dir = app
+                .try_state::<crate::app_state::AppDataDir>()
+                .map(|d| d.0.lock().unwrap().clone());
+            for id in expired_ids {
+                if db.repo.delete_after_paste(id, data_dir.as_deref()).is_ok() {
+                    let _ = app.emit("clipboard-removed", id);
+                }
+            }
+        }
+    });
 }
 
 // Force restart MQTT client by setting running flag to false
@@ -565,6 +716,9 @@ pub fn start_mqtt_client(app: AppHandle) {
                     continue;
                 }
                 info!(">>> [MQTT] Subscribed to {}", sub_topic);
+                if let Ok(mut slot) = active_client_slot().lock() {
+                    *slot = Some((client.clone(), cfg.topic.clone()));
+                }
 
                 let connected_at = Instant::now();
 
@@ -628,6 +782,14 @@ pub fn start_mqtt_client(app: AppHandle) {
                                             payload_trimmed.to_string()
                                         };
 
+                                        let msg_ts = now_ms();
+                                        MQTT_LAST_MESSAGE_MS.store(msg_ts, Ordering::Relaxed);
+                                        if let Some(db) = app.try_state::<DbState>() {
+                                            let _ = db
+                                                .settings_repo
+                                                .set("mqtt_last_message_ms", &msg_ts.to_string());
+                                        }
+                                        let _ = app.emit("mqtt-message-received", msg_ts);
                                         apply_incoming_text(&app, final_content.clone());
                                         notify_incoming_message(&app, &final_content);
                                     }

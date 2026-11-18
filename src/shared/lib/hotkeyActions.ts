@@ -1,4 +1,4 @@
-// Configurable global hotkeys. Mirrors HOTKEY_ACTIONS in
+// Configurable hotkeys. Mirrors HOTKEY_ACTIONS in
 // src-tauri/src/app/commands/hotkey_cmd.rs: add a hotkey there and here.
 
 export type HotkeyActionId = "clipboard" | "phrases" | "sequential" | "plain" | "search";
@@ -8,16 +8,17 @@ export interface HotkeyActionDescriptor {
   /** Settings key without the "app." prefix (saveAppSetting adds it). */
   setting: string;
   defaultValue: string;
+  scope: "global" | "window";
   labelKey: string;
   hintKey?: string;
 }
 
 export const HOTKEY_ACTIONS: HotkeyActionDescriptor[] = [
-  { id: "clipboard", setting: "hotkey", defaultValue: "Alt+V", labelKey: "global_hotkey", hintKey: "main_hotkey_hint" },
-  { id: "phrases", setting: "phrases_hotkey", defaultValue: "Alt+C", labelKey: "phrases_hotkey_label", hintKey: "phrases_hotkey_hint" },
-  { id: "sequential", setting: "sequential_hotkey", defaultValue: "Alt+Shift+S", labelKey: "sequential_paste_hotkey_label" },
-  { id: "plain", setting: "plain_paste_hotkey", defaultValue: "Alt+Shift+V", labelKey: "plain_paste_hotkey_label", hintKey: "plain_paste_hotkey_hint" },
-  { id: "search", setting: "search_hotkey", defaultValue: "Alt+F", labelKey: "search_hotkey_label" }
+  { id: "clipboard", setting: "hotkey", defaultValue: "Alt+C", scope: "global", labelKey: "global_hotkey", hintKey: "main_hotkey_hint" },
+  { id: "phrases", setting: "phrases_hotkey", defaultValue: "Alt+V", scope: "global", labelKey: "phrases_hotkey_label", hintKey: "phrases_hotkey_hint" },
+  { id: "sequential", setting: "sequential_hotkey", defaultValue: "Alt+Shift+S", scope: "global", labelKey: "sequential_paste_hotkey_label" },
+  { id: "plain", setting: "plain_paste_hotkey", defaultValue: "Alt+Shift+V", scope: "global", labelKey: "plain_paste_hotkey_label", hintKey: "plain_paste_hotkey_hint" },
+  { id: "search", setting: "search_hotkey", defaultValue: "Alt+F", scope: "window", labelKey: "search_hotkey_label" }
 ];
 
 export type Hotkeys = Record<HotkeyActionId, string>;
@@ -58,6 +59,7 @@ export const findHotkeyConflict = (
 export interface HotkeySettings {
   hotkeys: Hotkeys;
   recordingHotkey: HotkeyActionId | null;
+  recordingPreview?: string;
   setRecordingHotkey: (action: HotkeyActionId | null) => void;
   updateHotkey: (action: HotkeyActionId, hotkey: string) => void;
   checkHotkeyConflict: (hotkey: string, action: HotkeyActionId) => boolean;

@@ -59,6 +59,7 @@ try {
         catch { throw 'AuraClip runs as administrator. Quit it from the tray menu (退出应用), then rerun with -SkipBuild.' }
         $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
     }
+    Start-Sleep -Milliseconds 500
 
     Step "Installing to $installed and $latest"
     New-Item -ItemType Directory -Force -Path $InstallDir, $latestDir | Out-Null

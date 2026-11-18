@@ -35,8 +35,6 @@ interface GeneralSettingsGroupProps {
     setScrollTopButtonEnabled: (val: boolean) => void;
     tagManagerEnabled: boolean;
     setTagManagerEnabled: (val: boolean) => void;
-    arrowKeySelection: boolean;
-    setArrowKeySelection: (val: boolean) => void;
     lightModeEnabled: boolean;
     setLightModeEnabled: (val: boolean) => void;
     lightModeIdleMinutes: number;
@@ -92,8 +90,6 @@ const GeneralSettingsGroup = ({
     setScrollTopButtonEnabled,
     tagManagerEnabled,
     setTagManagerEnabled,
-    arrowKeySelection,
-    setArrowKeySelection,
     lightModeEnabled,
     setLightModeEnabled,
     lightModeIdleMinutes,
@@ -295,21 +291,6 @@ const GeneralSettingsGroup = ({
                             const enabled = e.target.checked;
                             setTagManagerEnabled(enabled);
                             saveAppSetting('tag_manager_enabled', String(enabled));
-                        }}
-                    />
-                </div>
-                <div className="setting-item">
-                    <LabelWithHint
-                        label={t('arrow_key_selection')}
-                        hint={t('arrow_key_selection_hint')}
-                        hintKey="arrow_key_selection"
-                    />
-                    <SettingSwitch
-                        checked={arrowKeySelection}
-                        onChange={(e) => {
-                            const enabled = e.target.checked;
-                            setArrowKeySelection(enabled);
-                            saveAppSetting('arrow_key_selection', String(enabled));
                         }}
                     />
                 </div>

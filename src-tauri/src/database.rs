@@ -298,7 +298,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         // Existing installs get it from hotkey_cmd::migrate_hotkey_defaults,
         // which also moves old defaults out of its way.
         conn.execute(
-            "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.phrases_hotkey', 'Alt+C')",
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.phrases_hotkey', 'Alt+V')",
             [],
         )?;
     }
@@ -409,7 +409,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         [],
     );
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hotkey', 'Alt+V')",
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hotkey', 'Alt+C')",
         [],
     );
 

@@ -12,25 +12,31 @@ import {
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import {
+  BookmarkPlus,
+  Check,
   ClipboardPaste,
+  Copy,
   ExternalLink,
   Eye,
   EyeOff,
   MoreHorizontal,
   PictureInPicture2,
-  Pin,
-  PinOff,
+  ScanText,
   StickyNote,
   Tag,
   Trash2,
+  Wand2,
   ImageOff,
   X,
 } from "lucide-react";
+import PinGlyph from "../../../shared/components/PinGlyph";
 import type { ClipboardEntry } from "../../../shared/types";
 import HtmlContent from "../../../shared/components/HtmlContent";
 import { toTauriLocalImageSrc } from "../../../shared/lib/localImageSrc";
 import { getSourceAppIcon, peekSourceAppIcon } from "../../../shared/lib/sourceAppIcon";
 import { isTauriRuntime } from "../../../shared/lib/tauriRuntime";
+import { extractImageOcrText } from "../../../shared/lib/searchMatch";
+import { canTransformClipboardEntry } from "../lib/cardSemantics";
 import { openPinStickerWindow } from "../lib/pinStickerControls";
 import TextFilePreview, { isTextPreviewable } from "./TextFilePreview";
 import DetailAnnotationEditor from "./DetailAnnotationEditor";
@@ -65,6 +71,9 @@ interface ClipboardDetailPaneProps {
   onTagInput: (value: string) => void;
   noteDraft?: string;
   onNoteDraftChange: (value: string) => void;
+  onOpenTransform?: (item: ClipboardEntry) => void;
+  onExtractOcr?: (item: ClipboardEntry) => void;
+  onSaveAsPhrase?: (item: ClipboardEntry) => void;
 }
 
 // The list receives at most ~2000 characters per entry; the pane fetches the
@@ -158,7 +167,10 @@ const DetailActionBar = ({
   canReveal,
   isRevealed,
   isEditingTags,
-  isEditingNote
+  isEditingNote,
+  onOpenTransform,
+  onExtractOcr,
+  onSaveAsPhrase,
 }: DetailActionBarProps) => {
   const [popover, setPopover] = useState<{ id: number; type: "more" } | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -192,7 +204,7 @@ const DetailActionBar = ({
       label: item.is_pinned ? t("unpin") : t("pin"),
       active: item.is_pinned,
       "aria-pressed": item.is_pinned,
-      icon: item.is_pinned ? <PinOff size={14} /> : <Pin size={14} />,
+      icon: <PinGlyph pinned={item.is_pinned} size={14} />,
       onClick: (e) => closeAndRun(() => actions.togglePin(e, item))
     },
     {
@@ -217,6 +229,24 @@ const DetailActionBar = ({
       icon: <ExternalLink size={14} />,
       onClick: () => closeAndRun(() => actions.open(item))
     },
+    ...(item.content_type === "image" && onExtractOcr ? [{
+      id: "ocr",
+      label: t("ocr_extract"),
+      icon: <ScanText size={14} />,
+      onClick: () => closeAndRun(() => onExtractOcr(item))
+    }] : []),
+    ...(onOpenTransform && canTransformClipboardEntry(item) ? [{
+      id: "transform",
+      label: t("transform_action"),
+      icon: <Wand2 size={14} />,
+      onClick: () => closeAndRun(() => onOpenTransform(item))
+    }] : []),
+    ...(onSaveAsPhrase && canTransformClipboardEntry(item) ? [{
+      id: "save-phrase",
+      label: t("save_as_phrase"),
+      icon: <BookmarkPlus size={14} />,
+      onClick: () => closeAndRun(() => onSaveAsPhrase(item))
+    }] : []),
     ...(item.content_type === "image" ? [{
       id: "sticker",
       label: t("pin_sticker"),
@@ -348,6 +378,9 @@ const ClipboardDetailPane = ({
   onTagInput,
   noteDraft,
   onNoteDraftChange,
+  onOpenTransform,
+  onExtractOcr,
+  onSaveAsPhrase,
   onClose
 }: ClipboardDetailPaneProps) => {
   const text = useFullContent(item, !isSensitiveHidden);
@@ -382,6 +415,7 @@ const ClipboardDetailPane = ({
   );
   // The file shown below the list; the first previewable one until another is picked.
   const [pickedFile, setPickedFile] = useState<{ id: number; path: string } | null>(null);
+  const [ocrCopiedId, setOcrCopiedId] = useState<number | null>(null);
   const previewPath = (pickedFile?.id === item?.id ? pickedFile?.path : undefined)
     ?? filePaths.find(isTextPreviewable);
 
@@ -539,6 +573,47 @@ const ClipboardDetailPane = ({
       {/* Keyed by id so switching entries resets scroll. */}
       <div className="detail-preview" key={`preview-${item.id}`}>
         {preview}
+        {item.content_type === "image" && !isSensitiveHidden && extractImageOcrText(item) && (() => {
+          const ocrText = extractImageOcrText(item);
+          const isCopied = ocrCopiedId === item.id;
+          return (
+            <div className="detail-ocr-box">
+              <div className="detail-ocr-head-row">
+                <div className="detail-ocr-head">
+                  <ScanText size={13} />
+                  <span>{t("ocr_section_title")}</span>
+                </div>
+                <div className="ocr-inline-actions">
+                  <button
+                    type="button"
+                    className={`ocr-inline-btn${isCopied ? " is-copied" : ""}`}
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(ocrText);
+                        setOcrCopiedId(item.id);
+                        setTimeout(() => setOcrCopiedId((cur) => (cur === item.id ? null : cur)), 1800);
+                      } catch (err) {
+                        console.error("Failed to copy OCR text:", err);
+                      }
+                    }}
+                  >
+                    {isCopied ? <Check size={11} /> : <Copy size={11} />}
+                    <span>{isCopied ? t("copied") : t("ocr_copy_text")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ocr-inline-btn is-paste"
+                    onClick={() => void invoke("paste_text_directly", { content: ocrText })}
+                  >
+                    <ClipboardPaste size={11} />
+                    <span>{t("ocr_paste_text")}</span>
+                  </button>
+                </div>
+              </div>
+              <pre className="detail-ocr-body">{ocrText}</pre>
+            </div>
+          );
+        })()}
         {!!(item.tags?.length || item.note || isEditingTags || isEditingNote) && (
           <section className="detail-annotations" aria-label={t("detail_information")}>
             {!!item.tags?.length && !isEditingTags && (
@@ -577,6 +652,9 @@ const ClipboardDetailPane = ({
         isRevealed={isRevealed}
         isEditingTags={isEditingTags}
         isEditingNote={isEditingNote}
+        onOpenTransform={onOpenTransform}
+        onExtractOcr={onExtractOcr}
+        onSaveAsPhrase={onSaveAsPhrase}
       />
     </>
   );

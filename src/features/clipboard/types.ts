@@ -36,6 +36,11 @@ export interface ClipboardItemProps {
   sensitiveMaskSuffixVisible?: number;
   sensitiveMaskEmailDomain?: boolean;
   quickPasteHint?: QuickPasteHint;
+  batchOrder?: number;
+  onBatchToggle?: (id: number, shiftKey: boolean) => void;
+  onOpenTransform?: (item: ClipboardEntry) => void;
+  onExtractOcr?: (item: ClipboardEntry) => void;
+  onSaveAsPhrase?: (item: ClipboardEntry) => void;
 
   onSelect: () => void;
   onCopy: (withFormat?: boolean) => void;

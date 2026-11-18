@@ -1,4 +1,4 @@
-# AuraClip · notes for coding agents
+﻿# AuraClip · notes for coding agents
 
 AuraClip (极光剪贴板) is a **Windows-only** clipboard manager: clipboard history
 (text, image, file, path), quick phrases, tags, at-rest encryption, privacy
@@ -29,7 +29,10 @@ src-tauri/src/
     clipboard_listener.rs Windows clipboard change listener
     clipboard_ops.rs      copy / paste into the previous app
     paste_queue.rs        sequential paste
-    mqtt_sub.rs           SMS sync: MQTT client → clipboard + history + notification
+    ocr.rs                Windows 11 native offline OCR (Windows.Media.Ocr) + startup backfill
+    phrase_template.rs    dynamic placeholder expansion ({{clipboard}}, {{date}}, {{time}}, {{uuid}})
+    pinyin_table.rs       20,902-char CJK full Pinyin + initials matcher (zero external deps)
+    mqtt_sub.rs           SMS sync: MQTT client → clipboard + history + notification + TTL sweeper + self-test
     network_recovery.rs   reconnect MQTT after wake / network change
     encryption_queue.rs   background encrypt/decrypt of sensitive entries
     importers/            Ditto import
@@ -44,16 +47,20 @@ src-tauri/src/
 src/
   App.tsx                 shell: tabs (clipboard / phrases), overlays, event listeners
   features/
-    clipboard/            history list, item, detail pane, compact preview
-    quick-phrases/        phrases view, tag manager, modal
-    settings/             SettingsPanel + groups/*SettingsGroup.tsx
+    clipboard/            history list, item, detail pane, compact preview, TransformMenuModal, BatchSelectionBar, SequentialQueueBar, hooks/useBatchAndQueue, lib/cardSemantics
+    quick-phrases/        phrases workbench (QuickPhrasesView, PhraseVaultCard, PhraseComposerModal, PhraseDetailPane, PhraseFillModal, PhraseTagManager, lib/phraseVaultGroups, lib/phraseTemplateClient)
+    settings/             SettingsPanel + groups/*SettingsGroup.tsx (incl. ShortcutsSettingsGroup, SyncSettingsGroup)
     tag/                  tag manager
-    app/                  header, main content, app-level hooks
-  shared/hooks/           settings init/sync, hotkeys, keyboard navigation, history fetch
+    app/                  AppHeader, AppMainContent (React.lazy code-split), AppFooter, app-level hooks
+  shared/
+    components/           PinGlyph, ScrollToTopButton, HtmlContent, CustomColorPicker
+    hooks/                settings init/sync, hotkeys, keyboard navigation, history fetch
+    lib/                  pinyinMatch, searchMatch, textTransforms, pasteFeedback, hotkeyActions
   locales.ts              zh / en / zh-TW strings (tests check keys stay aligned)
   styles/                 tokens, themes, components (rules: docs/DESIGN-SYSTEM.md)
+                          components/buttons.css, components/phrase-tagbar.css, components/phrase-workbench.css, components/transform-and-queue.css
                           themes/refined.css: the acrylic/mica look (loaded last, glass themes only);
-                          clipboard entry tile + hover action pill, phrase cards and tag bar
+                          clipboard entry tile + hover action pill, refined phrase cards
 ```
 
 ## Key flows
@@ -68,11 +75,15 @@ src/
   `{"msg":"..."}` to Mosquitto `mqtt.arvor.me:8883` (TLS, per-device account,
   topic ACL) → `mqtt_sub.rs` → clipboard + history (`source_app = "mqtt"`) +
   system notification. Server notes:
-  `D:\!DATA\技术资料\项目交接与运维\12-腾讯云服务器\04-Mosquitto短信同步服务`.
-- **Hotkeys**: `hotkey_cmd.rs` holds one table of actions (clipboard Alt+V,
-  phrases Alt+C, sequential Alt+Shift+S, plain Alt+Shift+V, search Alt+F);
-  registration, conflict checks and dispatch all read it. Tab hotkeys emit
-  `open-main-tab` (handled in `App.tsx`); mind the light-mode window rebuild.
+  `D:\!DATA\技术资料\项目交接与运维\14-腾讯云服务器\04-Mosquitto短信同步服务`.
+- **Hotkeys**: `hotkey_cmd.rs` holds one table of actions (`HOTKEY_ACTIONS`,
+  mirrored in `src/shared/lib/hotkeyActions.ts`: clipboard `Alt+C`, phrases
+  `Alt+V`, sequential `Alt+Shift+S`, plain `Alt+Shift+V` with `global: true`;
+  search `Alt+F` with `global: false` in-window only). Recording an internal
+  key already bound to another AuraClip action atomically swaps the two slots.
+  Every `global_shortcut()` registration/unregistration MUST run on the main
+  thread via `run_on_main_thread_async` / `sync_registered_hotkeys_on_main_thread`
+  to prevent AB-BA deadlocks with `GlobalHotKeyEvent`.
 
 ## How to add
 
@@ -116,7 +127,7 @@ loads `http://localhost:1420`. The version lives in `versions.json`
   `attachments\`, `master.key.dpapi`, `auraclip.log` (check `[HOTKEY]`, `[MQTT]`).
 - Source backup: `D:\!SOFTWARE\AuraClip\maintenance\backup_source.py`
   → `maintenance\backups\AuraClip-最新源码.zip`.
-- Handoff docs: `D:\!DATA\技术资料\项目交接与运维\14-AuraClip极光剪贴板`.
+- Handoff docs: `D:\!DATA\技术资料\项目交接与运维\16-AuraClip极光剪贴板`.
 
 ## Rules
 

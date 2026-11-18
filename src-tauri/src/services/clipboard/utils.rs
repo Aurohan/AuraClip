@@ -1092,6 +1092,12 @@ pub fn build_entry_preview(
 
 /// Plain text used for search — matches what the list shows (`preview`), not file paths or raw HTML.
 pub fn entry_searchable_text(entry: &ClipboardEntry) -> String {
+    if entry.content_type == "image" {
+        return crate::services::ocr::extract_ocr_text_from_preview(&entry.preview)
+            .unwrap_or("")
+            .to_string();
+    }
+
     if !is_text_type(&entry.content_type) {
         return String::new();
     }
@@ -1133,26 +1139,31 @@ pub fn entry_matches_search(
         if term.is_empty() {
             return true;
         }
-        return note.to_lowercase().contains(&term);
+        return crate::services::pinyin_table::matches_text_or_pinyin(note, &term);
     }
 
     if term.is_empty() {
         return false;
     }
 
-    if entry.tags.iter().any(|t| t.to_lowercase().contains(&term)) {
+    if entry
+        .tags
+        .iter()
+        .any(|t| crate::services::pinyin_table::matches_text_or_pinyin(t, &term))
+    {
         return true;
     }
 
-    if entry.source_app.to_lowercase().contains(&term) {
+    if crate::services::pinyin_table::matches_text_or_pinyin(&entry.source_app, &term) {
         return true;
     }
 
-    if entry.note.to_lowercase().contains(&term) {
+    if crate::services::pinyin_table::matches_text_or_pinyin(&entry.note, &term) {
         return true;
     }
 
-    entry_searchable_text(entry).to_lowercase().contains(&term)
+    let searchable = entry_searchable_text(entry);
+    crate::services::pinyin_table::matches_text_or_pinyin(&searchable, &term)
 }
 
 pub fn rtf_bytes_from_named_formats(
