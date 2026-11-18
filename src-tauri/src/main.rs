@@ -252,6 +252,7 @@ fn main() -> AppResult<()> {
             app::commands::get_app_arch,
             app::commands::get_platform_info,
             app::commands::configure_compact_preview_window,
+            app::commands::ui_cmd::set_settings_view_active,
             app::commands::set_windows_clipboard_history,
             app::commands::get_windows_clipboard_history,
             app::commands::set_win_clipboard_disabled,

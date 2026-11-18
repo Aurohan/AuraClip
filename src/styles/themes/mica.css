@@ -60,16 +60,16 @@ body.theme-mica {
   --menu-background: rgba(255, 255, 255, 0.94);
   --popover-backdrop-filter: blur(24px) saturate(160%);
 
-  --card-border: 1px solid rgba(15, 23, 42, 0.11);
+  --card-border: 1px solid rgba(15, 23, 42, 0.12);
   --card-radius: 10px;
-  --card-shadow: 0 1px 4px rgba(15, 23, 42, 0.07), 0 1px 0 rgba(255, 255, 255, 0.78) inset;
+  --card-shadow: 0 1px 4px rgba(15, 23, 42, 0.08), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
   --card-selected-background: rgba(0, 120, 212, 0.07);
   --card-selected-border-color: var(--accent-color);
   --card-selected-shadow: 0 2px 8px rgba(0, 120, 212, 0.12);
   --card-selected-outline: 2px solid var(--card-selected-border-color);
 
   --layout-item-background: rgba(255, 255, 255, 0.88);
-  --layout-item-margin-bottom: 8px;
+  --layout-item-margin-bottom: 10px;
 
   --panel-border: 1px solid rgba(0, 0, 0, 0.08);
   --panel-radius: 8px;
@@ -179,15 +179,15 @@ body.theme-mica #root > * {
     --menu-border: 1px solid rgba(255, 255, 255, 0.1);
     --input-border: 1px solid rgba(255, 255, 255, 0.12);
     --button-border: 1px solid rgba(255, 255, 255, 0.11);
-    --card-border: 1px solid rgba(255, 255, 255, 0.14);
-    --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+    --card-border: 1px solid rgba(255, 255, 255, 0.15);
+    --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.42), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
     --card-selected-background: rgba(0, 120, 212, 0.16);
     --card-selected-border-color: var(--accent-color);
     --card-selected-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
     --data-panel-border: 1px solid rgba(255, 255, 255, 0.12);
     --data-panel-hover-background: rgba(255, 255, 255, 0.07);
     --segment-active-background: rgba(255, 255, 255, 0.14);
-    --layout-item-background: rgba(33, 37, 45, 0.86);
+    --layout-item-background: rgba(33, 37, 45, 0.88);
     --scrollbar-thumb-color: rgba(255, 255, 255, 0.28);
   }
 
@@ -228,15 +228,15 @@ body.dark-mode.theme-mica {
   --menu-border: 1px solid rgba(255, 255, 255, 0.1);
   --input-border: 1px solid rgba(255, 255, 255, 0.12);
   --button-border: 1px solid rgba(255, 255, 255, 0.11);
-  --card-border: 1px solid rgba(255, 255, 255, 0.14);
-  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  --card-border: 1px solid rgba(255, 255, 255, 0.15);
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.42), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
   --card-selected-background: rgba(0, 120, 212, 0.16);
   --card-selected-border-color: var(--accent-color);
   --card-selected-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   --data-panel-border: 1px solid rgba(255, 255, 255, 0.12);
   --data-panel-hover-background: rgba(255, 255, 255, 0.07);
   --segment-active-background: rgba(255, 255, 255, 0.14);
-  --layout-item-background: rgba(33, 37, 45, 0.86);
+  --layout-item-background: rgba(33, 37, 45, 0.88);
   --scrollbar-thumb-color: rgba(255, 255, 255, 0.28);
 
   --popover-background: rgba(30, 33, 41, 0.96);

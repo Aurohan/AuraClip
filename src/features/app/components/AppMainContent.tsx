@@ -97,7 +97,7 @@ const SortableItem = memo(({
         paddingTop: isFirst ? "4px" : undefined
       }}
     >
-      <div style={{ paddingBottom: compactMode ? "2px" : "4px" }}>
+      <div style={{ paddingBottom: compactMode ? "2px" : "0px" }}>
         {renderItem(item, index, controls, true)}
       </div>
     </Reorder.Item>

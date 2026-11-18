@@ -71,7 +71,7 @@ import {
   warmupCompactPreviewWindow
 } from "./features/clipboard/lib/compactPreviewControls";
 import { isTauriRuntime } from "./shared/lib/tauriRuntime";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 import ClipboardDetailPane from "./features/clipboard/components/ClipboardDetailPane";
 import { useSplitView } from "./features/app/hooks/useSplitView";
 import { notePointerPick } from "./shared/lib/pointerPick";
@@ -155,8 +155,8 @@ const App = () => {
 
   const appState = useAppState();
   const {
-    showSettings,
-    setShowSettings,
+    showSettings: rawShowSettings,
+    setShowSettings: rawSetShowSettings,
     settingsSubpage,
     setSettingsSubpage,
     showTagManager,
@@ -313,6 +313,18 @@ const App = () => {
 
   const effectiveShowTagManager = showTagManager && tagManagerEnabled;
 
+  const saveSetting = useCallback((key: string, val: string) => {
+    setAppSettings(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
+    invoke("save_setting", { key, value: val })
+      .catch(console.error);
+  }, [setAppSettings]);
+
+  const updateMainTab = useCallback((next: MainTab) => {
+    mainTabDirtyRef.current = true;
+    setMainTab(next);
+    persistUiSetting("mainTab", next, saveSetting);
+  }, [saveSetting]);
+
   const debouncedSearch = useDebounce(search, 200);
   const deferredSearch = useDeferredValue(search);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -326,6 +338,82 @@ const App = () => {
       searchInputRef.current.blur();
     }
   }, [setShowTagFilter, setSearchIsFocused, searchInputRef]);
+
+  const clipboardWindowSizeRef = useRef<{ w: number; h: number } | null>(null);
+
+  const openSettings = useCallback(async () => {
+    try {
+      if (isTauriRuntime()) {
+        const win = getCurrentWindow();
+        const factor = await win.scaleFactor().catch(() => 1);
+        const innerPhysical = await win.innerSize().catch(() => ({ width: 420, height: 600 }));
+        const currentLogicalW = Math.round(innerPhysical.width / factor);
+        const currentLogicalH = Math.round(innerPhysical.height / factor);
+        clipboardWindowSizeRef.current = { w: currentLogicalW, h: currentLogicalH };
+
+        await invoke("set_settings_view_active", { active: true }).catch(() => {});
+
+        const savedSettingsW = parseInt(appSettings["app.settings_window_width"] || "860", 10);
+        const savedSettingsH = parseInt(appSettings["app.settings_window_height"] || "640", 10);
+        const targetW = Math.max(savedSettingsW || 860, 800);
+        const targetH = Math.max(savedSettingsH || 640, 560);
+
+        const mon = await currentMonitor().catch(() => null);
+        const pos = await win.outerPosition().catch(() => null);
+        if (mon && pos) {
+          const monX = mon.position.x / factor;
+          const monY = mon.position.y / factor;
+          const monW = mon.size.width / factor;
+          const monH = mon.size.height / factor;
+
+          let curX = pos.x / factor;
+          let curY = pos.y / factor;
+
+          if (curX + targetW > monX + monW) {
+            curX = Math.max(monX, monX + monW - targetW - 20);
+          }
+          if (curY + targetH > monY + monH) {
+            curY = Math.max(monY, monY + monH - targetH - 20);
+          }
+
+          await win.setPosition(new LogicalPosition(Math.round(curX), Math.round(curY))).catch(() => {});
+        }
+
+        await win.setSize(new LogicalSize(targetW, targetH)).catch(() => {});
+      }
+    } catch (err) {
+      console.error("Failed to resize for settings:", err);
+    }
+    rawSetShowSettings(true);
+  }, [appSettings, rawSetShowSettings]);
+
+  const closeSettings = useCallback(async () => {
+    try {
+      if (isTauriRuntime()) {
+        const win = getCurrentWindow();
+        const savedClipW = parseInt(appSettings["app.window_width"] || "420", 10);
+        const savedClipH = parseInt(appSettings["app.window_height"] || "600", 10);
+        const targetW = clipboardWindowSizeRef.current?.w || savedClipW || 420;
+        const targetH = clipboardWindowSizeRef.current?.h || savedClipH || 600;
+
+        await win.setSize(new LogicalSize(targetW, targetH)).catch(() => {});
+        await invoke("set_settings_view_active", { active: false }).catch(() => {});
+      }
+    } catch (err) {
+      console.error("Failed to restore clipboard size:", err);
+    }
+    rawSetShowSettings(false);
+    setSettingsSubpage("home");
+  }, [appSettings, rawSetShowSettings, setSettingsSubpage]);
+
+  const showSettings = rawShowSettings;
+  const setShowSettings = useCallback((val: boolean) => {
+    if (val) {
+      void openSettings();
+    } else {
+      void closeSettings();
+    }
+  }, [openSettings, closeSettings]);
 
   useEffect(() => {
     if (!showSearchBox) {
@@ -686,6 +774,11 @@ const App = () => {
     return () => clearTimeout(timer);
   }, [compactMode]);
 
+  const showSettingsRef = useRef(showSettings);
+  showSettingsRef.current = showSettings;
+  const isWindowPinnedRef = useRef(isWindowPinned);
+  isWindowPinnedRef.current = isWindowPinned;
+
   useEffect(() => {
     if (!isTauriRuntime()) return;
     const unlistenForceHide = listen("force-hide-compact-preview", () => {
@@ -702,10 +795,13 @@ const App = () => {
     const onClipboardShown = () => {
       onShown();
       setTypeFilter(null);
+      if (showSettingsRef.current && !isWindowPinnedRef.current) {
+        closeSettings();
+      }
     };
     const unlistenMainTab = listen<string>("open-main-tab", ({ payload }) => {
       if (payload !== "clipboard" && payload !== "phrases") return;
-      setShowSettings(false);
+      closeSettings();
       setShowTagManager(false);
       updateMainTab(payload);
     });
@@ -717,7 +813,7 @@ const App = () => {
       unlistenClipboardShown.then((off) => off());
       unlistenShow.then((off) => off()).catch(() => {});
     };
-  }, [setTypeFilter]);
+  }, [setTypeFilter, closeSettings, setShowTagManager, updateMainTab]);
 
   useCustomBackground({ customBackground, customBackgroundOpacity, theme });
 
@@ -773,18 +869,6 @@ const App = () => {
       console.error("保存设置失败", err);
     }
   }, [setAppSettings]);
-
-  const saveSetting = useCallback((key: string, val: string) => {
-    setAppSettings(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
-    invoke("save_setting", { key, value: val })
-      .catch(console.error);
-  }, [setAppSettings]);
-
-  const updateMainTab = useCallback((next: MainTab) => {
-    mainTabDirtyRef.current = true;
-    setMainTab(next);
-    persistUiSetting("mainTab", next, saveSetting);
-  }, [saveSetting]);
 
   const updatePhraseSortMode = useCallback((mode: ClipboardSortMode) => {
     phraseSortDirtyRef.current = true;
@@ -998,6 +1082,12 @@ const App = () => {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showSettings) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleHeaderBack();
+        return;
+      }
       if (e.key === "Escape" && selectedBatchIds.length > 0 && !transformTarget) {
         e.preventDefault();
         e.stopPropagation();
@@ -1032,6 +1122,7 @@ const App = () => {
     transformTarget,
     mainTab,
     showSettings,
+    handleHeaderBack,
     effectiveShowTagManager,
     navigableHistory,
     selectedItemId,

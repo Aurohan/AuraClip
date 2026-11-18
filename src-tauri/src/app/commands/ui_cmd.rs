@@ -39,6 +39,11 @@ pub fn configure_compact_preview_window(app: AppHandle) -> bool {
 }
 
 #[tauri::command]
+pub fn set_settings_view_active(active: bool) {
+    crate::app::setup::SETTINGS_VIEW_ACTIVE.store(active, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[tauri::command]
 pub fn send_system_notification(app: AppHandle, title: String, body: String) -> AppResult<()> {
     app.notification()
         .builder()

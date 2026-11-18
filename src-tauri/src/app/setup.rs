@@ -44,6 +44,7 @@ pub fn take_should_show_on_ready() -> bool {
 static WINDOW_SIZE_SAVE_PENDING: AtomicBool = AtomicBool::new(false);
 static LAST_WINDOW_SIZE_EVENT_MS: AtomicU64 = AtomicU64::new(0);
 static LAST_WINDOW_SIZE: OnceLock<Mutex<(u32, u32)>> = OnceLock::new();
+pub static SETTINGS_VIEW_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 
 pub fn init(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
@@ -1473,12 +1474,21 @@ fn persist_window_size(window: &tauri::Window, width: u32, height: u32) {
         };
 
         if let Some(db_state) = app_handle.try_state::<DbState>() {
-            let _ = db_state
-                .settings_repo
-                .set("app.window_width", &w.to_string());
-            let _ = db_state
-                .settings_repo
-                .set("app.window_height", &h.to_string());
+            if SETTINGS_VIEW_ACTIVE.load(Ordering::Relaxed) {
+                let _ = db_state
+                    .settings_repo
+                    .set("app.settings_window_width", &w.to_string());
+                let _ = db_state
+                    .settings_repo
+                    .set("app.settings_window_height", &h.to_string());
+            } else {
+                let _ = db_state
+                    .settings_repo
+                    .set("app.window_width", &w.to_string());
+                let _ = db_state
+                    .settings_repo
+                    .set("app.window_height", &h.to_string());
+            }
         }
 
         WINDOW_SIZE_SAVE_PENDING.store(false, Ordering::SeqCst);

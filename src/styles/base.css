@@ -101,7 +101,7 @@
   --layout-main-gap: 6px;
   --layout-list-padding-x: 8px;
   --layout-item-margin-x: 8px;
-  --layout-item-margin-bottom: 2px;
+  --layout-item-margin-bottom: 10px;
   --layout-item-padding: 10px 12px 5px 12px;
   --layout-item-padding-compact: 4px 4px 4px 10px;
   --layout-item-background: var(--bg-element);
