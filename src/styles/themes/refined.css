@@ -154,8 +154,8 @@
 :is(body.theme-acrylic, body.theme-mica) .history-item:not(.compact) {
   border: var(--card-border);
   border-radius: var(--card-radius);
-  padding: 10px 12px 10px;
-  margin-bottom: 10px;
+  padding: 11px 14px 11px;
+  margin-bottom: 12px;
   outline: none;
   box-shadow: var(--card-shadow);
 }

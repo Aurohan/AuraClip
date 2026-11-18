@@ -353,10 +353,12 @@ const App = () => {
 
         await invoke("set_settings_view_active", { active: true }).catch(() => {});
 
-        const savedSettingsW = parseInt(appSettings["app.settings_window_width"] || "860", 10);
-        const savedSettingsH = parseInt(appSettings["app.settings_window_height"] || "640", 10);
-        const targetW = Math.max(savedSettingsW || 860, 800);
-        const targetH = Math.max(savedSettingsH || 640, 560);
+        const rawSavedW = parseInt(appSettings["app.settings_window_width"] || "0", 10);
+        const rawSavedH = parseInt(appSettings["app.settings_window_height"] || "0", 10);
+        const savedSettingsLogicalW = rawSavedW > 1000 ? Math.round(rawSavedW / factor) : rawSavedW;
+        const savedSettingsLogicalH = rawSavedH > 800 ? Math.round(rawSavedH / factor) : rawSavedH;
+        const targetW = Math.max(savedSettingsLogicalW || 980, 960);
+        const targetH = Math.max(savedSettingsLogicalH || 660, 600);
 
         const mon = await currentMonitor().catch(() => null);
         const pos = await win.outerPosition().catch(() => null);
@@ -391,10 +393,14 @@ const App = () => {
     try {
       if (isTauriRuntime()) {
         const win = getCurrentWindow();
-        const savedClipW = parseInt(appSettings["app.window_width"] || "420", 10);
-        const savedClipH = parseInt(appSettings["app.window_height"] || "600", 10);
-        const targetW = clipboardWindowSizeRef.current?.w || savedClipW || 420;
-        const targetH = clipboardWindowSizeRef.current?.h || savedClipH || 600;
+        const factor = await win.scaleFactor().catch(() => 1);
+        const rawSavedClipW = parseInt(appSettings["app.window_width"] || "0", 10);
+        const rawSavedClipH = parseInt(appSettings["app.window_height"] || "0", 10);
+        const savedClipLogicalW = rawSavedClipW > 800 ? Math.round(rawSavedClipW / factor) : rawSavedClipW;
+        const savedClipLogicalH = rawSavedClipH > 700 ? Math.round(rawSavedClipH / factor) : rawSavedClipH;
+
+        const targetW = clipboardWindowSizeRef.current?.w || savedClipLogicalW || 440;
+        const targetH = clipboardWindowSizeRef.current?.h || savedClipLogicalH || 600;
 
         await win.setSize(new LogicalSize(targetW, targetH)).catch(() => {});
         await invoke("set_settings_view_active", { active: false }).catch(() => {});

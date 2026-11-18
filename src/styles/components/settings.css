@@ -2324,7 +2324,8 @@
 }
 
 .settings-wide-inner {
-  max-width: 640px;
+  max-width: 860px;
+  width: 100%;
   margin: 0 auto;
 }
 
