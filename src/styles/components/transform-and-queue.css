@@ -3,16 +3,15 @@
 .transform-modal-overlay {
   z-index: var(--z-modal);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding-top: 28px;
-  padding-inline: 12px;
+  padding: 12px;
 }
 
 .transform-modal-card {
   width: 100%;
   max-width: 460px;
-  max-height: calc(100vh - 56px);
+  max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
   background: var(--modal-background, var(--bg-window));
@@ -28,6 +27,7 @@
   justify-content: space-between;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
 }
 
 .transform-modal-title-group {

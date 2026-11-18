@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { Check, ClipboardPaste, Copy, Search, Wand2, X } from "lucide-react";
 import type { ClipboardEntry } from "../../../shared/types";
@@ -102,7 +103,7 @@ export default function TransformMenuModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="modal-overlay transform-modal-overlay"
       role="dialog"
@@ -219,6 +220,7 @@ export default function TransformMenuModal({
           <span>{t("transform_footer_hint")}</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

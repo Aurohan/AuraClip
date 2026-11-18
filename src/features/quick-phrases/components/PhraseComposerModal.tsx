@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Check,
   Clipboard,
@@ -198,7 +199,7 @@ export default function PhraseComposerModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="modal-overlay transform-modal-overlay"
       role="dialog"
@@ -473,6 +474,7 @@ export default function PhraseComposerModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

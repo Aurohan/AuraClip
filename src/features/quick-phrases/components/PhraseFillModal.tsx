@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ClipboardPaste, Copy, Sparkles, X } from "lucide-react";
 import type { QuickPhrase } from "../../../shared/types";
 import {
@@ -54,7 +55,7 @@ export default function PhraseFillModal({
 
   if (!phrase) return null;
 
-  return (
+  return createPortal(
     <div
       className="modal-overlay transform-modal-overlay"
       role="dialog"
@@ -145,6 +146,7 @@ export default function PhraseFillModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
