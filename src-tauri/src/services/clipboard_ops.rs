@@ -710,7 +710,7 @@ pub async fn paste_history_item_by_index(
     .await
 }
 
-async fn handle_window_focus_for_paste(app_handle: &tauri::AppHandle) -> AppResult<()> {
+pub(crate) async fn handle_window_focus_for_paste(app_handle: &tauri::AppHandle) -> AppResult<()> {
     let mut window_was_visible = false;
 
     // Explicit paste always dismisses the picker, including a pinned window.

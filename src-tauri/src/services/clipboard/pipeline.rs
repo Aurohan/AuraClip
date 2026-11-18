@@ -335,7 +335,8 @@ pub struct SequentialEchoStage;
 impl PipelineStage for SequentialEchoStage {
     fn process(&self, ctx: &mut PipelineContext) {
         let settings = ctx.app_handle.state::<SettingsState>();
-        if !settings.sequential_mode.load(Ordering::Relaxed) {
+        let is_streaming = crate::services::paste_queue::is_streaming_sequential_active();
+        if !settings.sequential_mode.load(Ordering::Relaxed) && !is_streaming {
             return;
         }
 
@@ -347,6 +348,14 @@ impl PipelineStage for SequentialEchoStage {
         {
             println!("Ignoring echo paste from queue");
             ctx.should_stop = true;
+            return;
+        }
+
+        if is_streaming && queue.last_pasted_content.as_deref() != Some(&entry.content) {
+            // User copied new external content while sequential paste was active;
+            // cancel sequential paste to avoid clobbering user's new copy!
+            drop(queue);
+            crate::services::paste_queue::cancel_streaming_sequential(&ctx.app_handle);
         }
     }
 }

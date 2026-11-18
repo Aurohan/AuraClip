@@ -258,6 +258,66 @@ pub unsafe extern "system" fn keyboard_proc(
                 }
             }
         }
+
+        // 3. Streaming Sequential Paste (Ctrl+V pipeline)
+        if crate::services::paste_queue::is_streaming_sequential_active() {
+            let ctrl_down = (GetAsyncKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
+            let alt_down = (GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000) != 0;
+            let win_down = (GetAsyncKeyState(VK_LWIN.0 as i32) as u16 & 0x8000 != 0)
+                || (GetAsyncKeyState(VK_RWIN.0 as i32) as u16 & 0x8000 != 0);
+
+            // Esc cancels streaming sequential paste when window is hidden
+            if vk == 0x1B && is_down && !ctrl_down && !alt_down && !win_down {
+                if IS_HIDDEN.load(Ordering::Relaxed) {
+                    if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                        let handle_clone = handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            crate::services::paste_queue::cancel_streaming_sequential(&handle_clone);
+                        });
+                    }
+                }
+            }
+
+            // Ctrl+C cancels streaming sequential paste so user's manual copy is preserved
+            if vk == 0x43 && is_down && ctrl_down && !alt_down && !win_down {
+                if IS_HIDDEN.load(Ordering::Relaxed) {
+                    if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                        let handle_clone = handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            crate::services::paste_queue::cancel_streaming_sequential(&handle_clone);
+                        });
+                    }
+                }
+            }
+
+            // Ctrl+V (0x56) detection for streaming sequential paste
+            if vk == 0x56 && ctrl_down && !alt_down && !win_down {
+                if is_down {
+                    crate::services::paste_queue::PENDING_CTRL_V.store(true, Ordering::SeqCst);
+                } else if is_up {
+                    if crate::services::paste_queue::PENDING_CTRL_V.swap(false, Ordering::SeqCst) {
+                        if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                            let handle_clone = handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+                                crate::services::paste_queue::advance_streaming_sequential(&handle_clone).await;
+                            });
+                        }
+                    }
+                }
+            } else if (vk == 0x11 || vk == 0xA2 || vk == 0xA3) && is_up {
+                // If Ctrl is released after 'V' was pressed down
+                if crate::services::paste_queue::PENDING_CTRL_V.swap(false, Ordering::SeqCst) {
+                    if let Some(handle) = GLOBAL_APP_HANDLE.get() {
+                        let handle_clone = handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+                            crate::services::paste_queue::advance_streaming_sequential(&handle_clone).await;
+                        });
+                    }
+                }
+            }
+        }
     }
     CallNextHookEx(None, n_code, w_param, l_param)
 }
